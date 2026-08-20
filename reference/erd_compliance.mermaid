@@ -1,0 +1,193 @@
+erDiagram
+    %% Documents scope to the OWNER: one vet invoice covers a household.
+    %% document_dog links each file to the dogs it concerns.
+    OWNER ||--o{ DOCUMENT : "uploads scoped to"
+    DOCUMENT ||--o{ DOCUMENT_DOG : "concerns"
+    DOG ||--o{ DOCUMENT_DOG : "referenced by"
+    DOG ||--o{ VACCINATION_RECORD : "has"
+    DOG ||--o| DOG_COMPLIANCE_STATUS : "projected into"
+
+    DOCUMENT_DOG {
+        uuid document_id PK "FK"
+        uuid dog_id PK "FK"
+    }
+
+    DOCUMENT ||--o{ DOCUMENT_PAGE : "has"
+    DOCUMENT ||--o{ EXTRACTION : "produced"
+    DOCUMENT {
+        uuid id PK
+        uuid owner_id FK "dedupe is per owner: unique (owner_id, sha256)"
+        text object_key "R2 private bucket, unique"
+        text mime_type "pdf | jpeg | png | heic"
+        bigint byte_size
+        text sha256 "dedupe and tamper evidence"
+        document_class doc_class "form51 | vet_invoice | handwritten_note | rabies_certificate | unknown"
+        document_source source "upload | email_reply | scan"
+        int page_count
+        bool exif_stripped
+        bool redacted
+        timestamptz uploaded_at
+        uuid uploaded_by FK
+    }
+
+    DOCUMENT_PAGE {
+        uuid id PK
+        uuid document_id FK "unique with page_number"
+        int page_number
+        text render_object_key "rasterized page for review UI"
+    }
+
+    EXTRACTION ||--o{ EXTRACTION_FIELD : "yields"
+    EXTRACTION {
+        uuid id PK
+        uuid document_id FK
+        text model_name
+        text model_version
+        text prompt_version "reproducibility"
+        jsonb raw_response "unmodified model output - replayable across model swaps"
+        numeric overall_confidence "0-1"
+        extraction_status status "pending | needs_review | accepted | rejected"
+        timestamptz extracted_at
+    }
+
+    EXTRACTION_FIELD {
+        uuid id PK
+        uuid extraction_id FK "unique with field_name"
+        text field_name "administered_on | lot_serial_number"
+        text extracted_value
+        numeric confidence "0-1"
+        text corrected_value "null unless edited"
+        correction_action correction_action "confirmed | edited | REMOVED (hallucination case)"
+        bool was_corrected "GENERATED from correction_action"
+        int page_number
+        jsonb bounding_box "provenance back to the pixels"
+    }
+
+    VACCINATION_RECORD }o--|| VACCINE_TYPE : "of"
+    VACCINATION_RECORD }o--o| DOCUMENT : "evidenced by"
+    VACCINATION_RECORD {
+        uuid id PK
+        uuid dog_id FK
+        uuid vaccine_type_id FK
+        uuid document_id FK "required when entry_method = extracted"
+        date administered_on
+        date expires_on "NOT NULL, NEVER DERIVED - no expiry on page, no record"
+        int implied_validity_months "GENERATED; feeds plausibility flag only"
+        bool validity_implausible "flag, never a block (inv 3.5)"
+        text vaccine_manufacturer "NASPHV Form 51 field"
+        text lot_serial_number "NASPHV Form 51 field"
+        text veterinarian_name
+        text veterinarian_license_no
+        text veterinarian_phone
+        entry_method entry_method "extracted | manual | migrated"
+        verification_status verification_status "unverified | verified | disputed"
+        uuid verified_by FK "paired with status and timestamp"
+        timestamptz verified_at
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    VACCINE_TYPE {
+        uuid id PK
+        text code "rabies | dhpp | bordetella | leptospirosis"
+        text name
+        bool regulatory_required "TRUE only for rabies in MD"
+        text authority "COMAR 10.06.02 | facility policy"
+        int plausible_validity_min_months "sanity RANGE - replaces typical_validity"
+        int plausible_validity_max_months
+        bool blocks_service_if_expired
+    }
+
+    DOG ||--o{ RECORD_REQUEST : "chased by"
+    OWNER ||--o{ RECORD_REQUEST : "addressed to"
+    RECORD_REQUEST ||--o{ RECORD_REQUEST_EVENT : "tracked by"
+    RECORD_REQUEST }o--o| DOCUMENT : "resolved by"
+    RECORD_REQUEST {
+        uuid id PK
+        uuid dog_id FK "one OPEN request per dog per vaccine"
+        uuid owner_id FK
+        uuid vaccine_type_id FK
+        request_channel channel "email | sms | verbal_at_counter"
+        text recipient_address
+        request_status status "queued | sent | bounced | responded | INSUFFICIENT | resolved | abandoned"
+        int reminder_count "capped by max_reminders (inv 3.6)"
+        int max_reminders
+        date next_reminder_on "null in terminal states"
+        uuid resolved_by_document_id FK
+        text unsubscribe_token "required for email channel"
+        timestamptz created_at
+        uuid created_by FK
+        timestamptz resolved_at
+    }
+
+    RECORD_REQUEST_EVENT {
+        uuid id PK
+        uuid record_request_id FK
+        request_event_type event_type "sent | delivered | bounced | opened | replied | attachment_received | unsubscribed"
+        text provider_message_id
+        jsonb provider_payload
+        timestamptz occurred_at
+    }
+
+    %% Projection: date-independent facts only. State computed at read time
+    %% by v_dog_compliance_status (disputed > expired > expiring_soon >
+    %% received_unverified > current > requested_pending > no_record).
+    DOG_COMPLIANCE_STATUS {
+        uuid dog_id PK "FK; every active dog gets a view row via LEFT JOIN"
+        uuid latest_record_id "deliberately NOT an FK - projection, rebuilt on write"
+        date rabies_expires_on "latest expires_on governs, not latest created_at"
+        verification_status record_verification
+        uuid open_request_id
+        int request_count
+        timestamptz last_refreshed_at
+    }
+
+    COMPLIANCE_STATE_META {
+        compliance_state state PK "attribute carrier for the enum"
+        int sort_order "urgency ranking for the dashboard"
+        text plain_language_label
+        bool blocks_service
+        bool actionable
+    }
+
+    COMPLIANCE_PACKET {
+        uuid id PK
+        text requested_by "MD Dept of Health, etc"
+        date coverage_start
+        date coverage_end
+        int dog_count
+        int dogs_missing_records "the honest number - never silently omitted"
+        text object_key "generated PDF bundle"
+        uuid generated_by FK
+        timestamptz generated_at
+    }
+
+    AUDIT_LOG {
+        uuid id PK
+        uuid actor_id "no FK - trail survives actor deletion"
+        text actor_label "snapshot of who they were"
+        audit_action action "view | create | update | delete | export | send_request"
+        text entity_type
+        uuid entity_id
+        jsonb changed_fields
+        inet ip_address
+        timestamptz occurred_at "append-only, trigger-enforced"
+    }
+
+    RETENTION_RULE ||--o{ RETENTION_RUN : "executed by"
+    RETENTION_RULE {
+        uuid id PK
+        text entity_type "owner | visit | document | audit_log | vaccination_record"
+        int retain_months
+        text anchor_field "last_activity_at | expires_on | uploaded_at | occurred_at"
+        retention_action action "purge | archive | retain_forever"
+        bool is_active
+    }
+
+    RETENTION_RUN {
+        uuid id PK
+        uuid retention_rule_id FK
+        int rows_affected
+        text outcome
+        timestamptz executed_at
+    }

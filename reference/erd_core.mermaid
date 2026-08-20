@@ -1,0 +1,161 @@
+erDiagram
+    OWNER ||--o{ DOG : "has"
+    OWNER {
+        uuid id PK
+        text first_name
+        text last_name
+        text phone "contactable: phone or email"
+        text email "unique, case-insensitive"
+        text address_line1
+        text city
+        text state
+        text postal_code
+        bool email_opted_out "gates record_request sends"
+        bool purge_requested
+        timestamptz created_at
+        timestamptz updated_at
+        timestamptz last_activity_at "retention anchor, app-touched"
+    }
+
+    DOG ||--o{ DOG_PHOTO : "has"
+    DOG ||--o{ VISIT : "attends"
+    DOG ||--o{ ALLERGY : "has"
+    DOG ||--o{ BEHAVIOR_NOTE : "accumulates"
+    DOG ||--o{ COAT_ASSESSMENT : "assessed at"
+    DOG }o--|| BREED : "labeled as"
+    DOG }o--|| COAT_TYPE : "actually is"
+    DOG {
+        uuid id PK
+        uuid owner_id FK
+        text name
+        uuid breed_id FK "label only, nullable"
+        uuid coat_type_id FK "drives recommendations, required"
+        date date_of_birth
+        dog_sex sex
+        bool is_altered
+        text vet_practice
+        text vet_phone
+        bool is_active
+        timestamptz created_at
+        timestamptz updated_at
+    }
+
+    BREED }o--|| COAT_TYPE : "defaults to"
+    BREED {
+        uuid id PK
+        text name
+        uuid default_coat_type_id FK "seeds dog at creation, never read after"
+        bool is_mixed "coat_type set directly"
+    }
+
+    COAT_TYPE {
+        uuid id PK
+        text code "curly | wiry | smooth | double | silky"
+        text name
+        text description
+    }
+
+    DOG_PHOTO {
+        uuid id PK
+        uuid dog_id FK
+        uuid photo_group_id "links 3 renditions of one upload"
+        text object_key "R2 path, unique"
+        photo_rendition rendition "original | display | thumb"
+        int width_px
+        int height_px
+        bool exif_stripped
+        timestamptz uploaded_at
+    }
+
+    ALLERGY }o--|| ALLERGEN : "references"
+    ALLERGY {
+        uuid id PK
+        uuid dog_id FK "unique with allergen_id"
+        uuid allergen_id FK
+        smallint severity_ordinal "1-4"
+        allergy_source source "owner_reported | observed | vet_documented"
+        text note
+        timestamptz recorded_at
+        uuid recorded_by FK
+    }
+
+    ALLERGEN {
+        uuid id PK
+        text name "oatmeal shampoo | tea tree | flea dip"
+        text category "shampoo | conditioner | topical | fragrance | other"
+    }
+
+    BEHAVIOR_NOTE }o--|| BODY_ZONE : "may localize to"
+    BEHAVIOR_NOTE {
+        uuid id PK
+        uuid dog_id FK
+        uuid visit_id FK "nullable, SET NULL on visit delete"
+        smallint handling_difficulty_ordinal "1-5"
+        uuid body_zone_id FK "nullable, e.g. hates feet"
+        text trigger_kind "dryer | clippers | nail_grinder | restraint | water | other"
+        text note
+        timestamptz observed_at
+        uuid observed_by FK
+    }
+
+    COAT_ASSESSMENT {
+        uuid id PK
+        uuid dog_id FK
+        uuid visit_id FK "UNIQUE - one assessment per visit"
+        smallint condition_ordinal "1-5, 5=pelted; gates remedial (inv 3.1)"
+        smallint density_ordinal "1-5"
+        text note
+        timestamptz assessed_at
+        uuid assessed_by FK
+    }
+
+    VISIT ||--o{ VISIT_SERVICE : "contains"
+    VISIT |o--o| CUT_SPECIFICATION : "may include (see styling ERD)"
+    VISIT }o--|| GROOMER : "performed by"
+    VISIT {
+        uuid id PK
+        uuid dog_id FK
+        uuid performed_by FK
+        date visit_date
+        time check_in
+        time check_out "must be >= check_in"
+        text overall_note
+        timestamptz created_at
+    }
+
+    VISIT_SERVICE }o--|| SERVICE_TYPE : "of type"
+    VISIT_SERVICE {
+        uuid id PK
+        uuid visit_id FK "unique with service_type_id"
+        uuid service_type_id FK
+        bool completed
+        text incomplete_reason "required when not completed"
+        text note "products used, quicked nail, etc"
+        timestamptz recorded_at
+    }
+
+    SERVICE_TYPE {
+        uuid id PK
+        text code "bath | nail_trim | ear_clean | teeth | deshed | full_groom"
+        text name
+        bool carries_cut_spec "true only for full_groom (inv 3.4)"
+        int display_order
+    }
+
+    GROOMER {
+        uuid id PK
+        text display_name
+        text email "unique, case-insensitive"
+        groomer_role role "groomer | manager"
+        bool is_active
+        timestamptz created_at
+    }
+
+    BODY_ZONE ||--o{ BODY_ZONE : "parent of"
+    BODY_ZONE {
+        uuid id PK
+        uuid parent_zone_id FK "nullable; no self-parent; no spec inheritance"
+        text code "ears -> ear_tips"
+        text plain_language_label
+        int display_order
+    }

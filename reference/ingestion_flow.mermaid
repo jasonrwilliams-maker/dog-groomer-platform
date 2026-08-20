@@ -1,0 +1,51 @@
+flowchart TD
+    A["Upload<br/>PDF / JPEG / PNG / HEIC"] --> B{"Validate<br/>MIME + size"}
+    B -->|reject| B1["Error to user<br/>no storage write"]
+    B -->|pass| C["Strip EXIF<br/>compute SHA-256"]
+    C --> D{"Duplicate hash<br/>for this owner?"}
+    D -->|yes| D1["Link to existing<br/>DOCUMENT (per-owner dedupe)"]
+    D -->|no| E["Write to R2 private bucket<br/>DOCUMENT scoped to OWNER<br/>+ DOCUMENT_DOG links"]
+    E --> F["Rasterize pages<br/>for review UI"]
+    F --> G["LLM extraction<br/>vision model<br/>doc_class: form51 | vet_invoice | ..."]
+
+    G --> H["EXTRACTION +<br/>EXTRACTION_FIELD rows<br/>with confidence + bbox"]
+    H --> I{"Overall<br/>confidence"}
+    I -->|high| J["Pre-filled review form"]
+    I -->|low| K["Flagged review form<br/>fields highlighted"]
+
+    J --> L["Human review<br/>side-by-side with page image"]
+    K --> L
+    L --> M{"Groomer decision<br/>per field"}
+    M -->|correct| N["confirmed"]
+    M -->|edit| O["edited<br/>corrected_value set"]
+    M -->|"model invented it"| N2["removed<br/>the hallucination case"]
+    M -->|unreadable| P["Reject extraction<br/>manual entry path"]
+
+    N --> Q0
+    O --> Q0
+    N2 --> Q0
+    P --> Q0
+
+    Q0{"Does the document<br/>state an expiry?"}
+    Q0 -->|yes| Q["VACCINATION_RECORD<br/>expires_on from the page, never derived<br/>verification_status = verified"]
+    Q0 -->|"no (e.g. the Jaddi invoice:<br/>rabies mentioned, no expiry)"| Q1["NO RECORD created<br/>document + extraction kept as evidence<br/>dog stays non-compliant<br/>open RECORD_REQUEST -> status = insufficient"]
+
+    Q --> R{"vaccine_type<br/>regulatory_required?"}
+    R -->|rabies| S["Compliance projection refresh<br/>state computed at read time<br/>(no nightly job)"]
+    R -->|other| T["Facility policy<br/>advisory only"]
+
+    Q1 --> S
+    S --> U["COMPLIANCE_PACKET<br/>PDF bundle on demand<br/>dogs_missing_records disclosed"]
+
+    Q -.-> V["AUDIT_LOG<br/>append-only"]
+    E -.-> V
+    L -.-> V
+
+    Q --> W["RETENTION_RULE<br/>anchor: expires_on + 36mo"]
+
+    style G fill:#dbeafe,stroke:#1e40af
+    style L fill:#fef3c7,stroke:#b45309
+    style Q fill:#dcfce7,stroke:#15803d
+    style Q1 fill:#fee2e2,stroke:#b91c1c
+    style V fill:#f3e8ff,stroke:#7e22ce
+    style U fill:#dcfce7,stroke:#15803d

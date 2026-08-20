@@ -1,0 +1,148 @@
+erDiagram
+    STYLE_TEMPLATE ||--o{ STYLE_TEMPLATE_ZONE_SPEC : "expands into"
+    STYLE_TEMPLATE ||--o{ STYLE_TEMPLATE_ZONE_CLAMP : "constrained by"
+    STYLE_TEMPLATE {
+        uuid id PK
+        text code "teddy_bear | poodle_kennel | lamb | kennel_puppy | shaved"
+        text name
+        text plain_language_description
+        bool is_remedial "shaved only"
+        bool supports_tiers "false for shaved (inv 3.7)"
+        bool requires_uniform_length "kennel_puppy (inv 3.2)"
+        int min_coat_ordinal_required "4 for shaved, null otherwise"
+    }
+
+    LENGTH_TIER ||--o{ STYLE_TEMPLATE_ZONE_SPEC : "modifies"
+    LENGTH_TIER {
+        uuid id PK
+        text code "short | medium | long"
+        int sort_order
+    }
+
+    STYLE_TEMPLATE_ZONE_SPEC }o--|| BODY_ZONE : "targets"
+    STYLE_TEMPLATE_ZONE_SPEC }o--o| BLADE : "uses"
+    STYLE_TEMPLATE_ZONE_SPEC }o--o| COMB : "over"
+    STYLE_TEMPLATE_ZONE_SPEC {
+        uuid id PK
+        uuid style_template_id FK
+        uuid length_tier_id FK "EXACTLY ONE AXIS: tier for styled..."
+        smallint min_coat_ordinal "...or coat severity for remedial (shaved L4/L5)"
+        uuid body_zone_id FK
+        cutting_tool tool "clipper | scissors | hand_strip"
+        uuid blade_id FK "null unless clipper (inv 3.3)"
+        uuid comb_id FK "requires blade"
+        numeric effective_length_in "VIEW COLUMN - derived live, config not history"
+    }
+
+    STYLE_TEMPLATE_ZONE_CLAMP }o--|| BODY_ZONE : "bounds"
+    STYLE_TEMPLATE_ZONE_CLAMP {
+        uuid id PK
+        uuid style_template_id FK "unique with body_zone_id"
+        uuid body_zone_id FK
+        numeric min_effective_length_in "inches, not blade numbers"
+        numeric max_effective_length_in "so a comb cannot sneak past"
+        text rationale "e.g. poodle face may not exceed number 10"
+    }
+
+    BLADE {
+        uuid id PK
+        int number "3,4,5,7,9,10,15,30 - INVERSE of length, never compare by number"
+        bool is_finish "the F suffix; unique with number"
+        numeric length_in
+        text plain_language_label "e.g. #7F (1/8 inch)"
+    }
+
+    COMB {
+        uuid id PK
+        numeric length_in "0.75 | 1.0 | 1.25 - comb always wins over blade"
+        text label "3/4 inch comb"
+    }
+
+    BODY_ZONE ||--o{ ZONE_DEFAULT : "may have"
+    ZONE_DEFAULT }o--|| BLADE : "always clipper"
+    ZONE_DEFAULT {
+        uuid id PK
+        uuid body_zone_id FK "unique - one default per zone"
+        uuid blade_id FK
+        text rationale "hygiene cut, invariant across styles; precedence level 3"
+    }
+
+    BODY_ZONE {
+        uuid id PK
+        uuid parent_zone_id FK
+        text code
+        text plain_language_label
+    }
+
+    DOG_STYLE_PROFILE }o--|| STYLE_TEMPLATE : "based on (never remedial, inv 3.7)"
+    DOG_STYLE_PROFILE }o--o| LENGTH_TIER : "at (required when tiered)"
+    DOG_STYLE_PROFILE ||--o{ PROFILE_ZONE_OVERRIDE : "adjusted by"
+    DOG_STYLE_PROFILE {
+        uuid id PK
+        uuid dog_id FK "unique with profile_name"
+        text profile_name "Luna's summer cut"
+        uuid style_template_id FK
+        uuid length_tier_id FK
+        bool is_default "at most one active default per dog"
+        bool is_active
+        timestamptz created_at
+        timestamptz updated_at
+        uuid created_by FK
+    }
+
+    PROFILE_ZONE_OVERRIDE }o--|| BODY_ZONE : "replaces spec for"
+    PROFILE_ZONE_OVERRIDE {
+        uuid id PK
+        uuid dog_style_profile_id FK "unique with body_zone_id"
+        uuid body_zone_id FK
+        cutting_tool tool
+        uuid blade_id FK "tool coherence CHECK (inv 3.3)"
+        uuid comb_id FK
+        text reason "sparse: only zones that deviate; precedence level 1"
+    }
+
+    CUT_SPECIFICATION }o--o| DOG_STYLE_PROFILE : "derived from (SET NULL)"
+    CUT_SPECIFICATION }o--|| STYLE_TEMPLATE : "resolved template"
+    CUT_SPECIFICATION ||--o{ CUT_SPEC_ZONE : "records"
+    CUT_SPECIFICATION {
+        uuid id PK
+        uuid visit_id FK "UNIQUE - 0..1 per visit"
+        uuid dog_style_profile_id FK "nullable, ad hoc allowed"
+        uuid style_template_id FK
+        uuid length_tier_id FK "required iff template tiered (inv 3.7)"
+        smallint coat_ordinal_applied "remedial axis; required on override path (inv 3.1)"
+        bool deviated_from_profile
+        text deviation_reason "required when deviated"
+        text remedial_override_reason "inv 3.1 escape hatch, on the record itself"
+        uuid approved_by FK "paired with override reason"
+        timestamptz approved_at
+        timestamptz created_at
+        uuid created_by FK
+    }
+
+    CUT_SPEC_ZONE }o--|| BODY_ZONE : "for"
+    CUT_SPEC_ZONE {
+        uuid id PK
+        uuid cut_specification_id FK "unique with body_zone_id"
+        uuid body_zone_id FK
+        cutting_tool tool
+        uuid blade_id FK
+        uuid comb_id FK
+        numeric effective_length_in "FROZEN SNAPSHOT at insert - history, not config"
+        text resolved_label "snapshot, e.g. #30 + 1 inch comb"
+        text resolved_from "profile_override | template | zone_default | ad_hoc"
+        bool was_override
+        bool clamp_violated "record it, flag it, do not block it"
+        text note
+    }
+
+    BREED_STANDARD }o--|| BODY_ZONE : "recommends for"
+    BREED_STANDARD {
+        uuid id PK
+        uuid breed_id FK
+        uuid body_zone_id FK
+        text trim_context "matted | puppy | short | natural"
+        int_array recommended_blade_numbers "advisory RANGE - nothing in the ladder reads this"
+        text tool_hint
+        text source
+    }
