@@ -1,5 +1,5 @@
 -- =============================================================================
--- 00_fixture.sql — the smallest shop that can exercise every rule.
+-- fixture.sql — the smallest shop that can exercise every rule.
 --
 -- Loaded ONCE into the test database, outside any test transaction. Every test
 -- file wraps itself in BEGIN/ROLLBACK, so tests can add to this and never
