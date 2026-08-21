@@ -1,6 +1,6 @@
 -- Remaining invariants: GR002, GR003, GR004, the audit log, the one-open-request
--- index, the flag-not-block plausibility rule, and a check that all 25 triggers
--- are actually attached.
+-- index, the flag-not-block plausibility rule, and a check that no trigger has
+-- gone missing.
 --
 -- SET CONSTRAINTS ALL IMMEDIATE is the key line. Two of these invariants are
 -- deferred constraint triggers that normally fire at COMMIT — and this file
@@ -150,9 +150,11 @@ SELECT is(
   'but it is flagged for a human to look at'
 );
 
--- --- Every trigger is still attached ----------------------------------------
+-- --- No expected trigger has gone missing -----------------------------------
 -- Catches the silent failure mode a future migration creates: recreating a
 -- table drops its triggers, and nothing looks wrong until a bad row appears.
+-- A name-presence canary, not proof of table binding — a trigger recreated on
+-- the wrong table under the same name would still pass.
 SELECT is_empty(
   $$ SELECT expected.name
        FROM (VALUES
@@ -171,7 +173,7 @@ SELECT is_empty(
        ) AS expected(name)
      EXCEPT
      SELECT tgname FROM pg_trigger WHERE NOT tgisinternal $$,
-  'All 25 triggers are attached'
+  'None of the 25 expected triggers is missing'
 );
 
 SELECT * FROM finish();
