@@ -95,7 +95,7 @@ SELECT throws_ok(
 -- --- The audit log is append-only -------------------------------------------
 INSERT INTO audit_log (id, actor_id, actor_label, action, entity_type, entity_id)
 VALUES ('00000000-0000-0000-0000-00000000aa01',
-        '00000000-0000-0000-0000-00000000b001', 'Riane', 'update',
+        '00000000-0000-0000-0000-00000000b001', 'Nadia', 'update',
         'vaccination_record', '00000000-0000-0000-0000-00000000f101');
 
 SELECT throws_ok(

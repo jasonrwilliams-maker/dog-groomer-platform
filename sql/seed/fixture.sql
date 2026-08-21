@@ -21,7 +21,7 @@ UPDATE owner SET email_opted_out = true
  WHERE id = '00000000-0000-0000-0000-00000000a002';
 
 INSERT INTO groomer (id, display_name, email, role) VALUES
-  ('00000000-0000-0000-0000-00000000b001', 'Riane', 'riane@example.test', 'manager'),
+  ('00000000-0000-0000-0000-00000000b001', 'Nadia', 'nadia@example.test', 'manager'),
   ('00000000-0000-0000-0000-00000000b002', 'Tanya', 'tanya@example.test', 'groomer');
 
 INSERT INTO breed (id, name, default_coat_type_id) VALUES
