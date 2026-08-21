@@ -12,7 +12,7 @@
 
 BEGIN;
 SET search_path = groom, public;
-SELECT plan(7);
+SELECT plan(8);
 
 INSERT INTO dog (id, owner_id, name, coat_type_id, date_of_birth) VALUES
   -- Ten weeks old: too young for rabies (16w), old enough for DHPP (8w)
@@ -102,6 +102,28 @@ SELECT lives_ok(
      VALUES ('00000000-0000-0000-0000-0000000e0202',
              (SELECT id FROM service_type WHERE code = 'bath')) $$,
   'A bath for a ten-week-old puppy is unaffected'
+);
+
+-- --- The threshold is data, not code ----------------------------------------
+-- Changing shop policy is an UPDATE, not a migration. The same ten-week-old
+-- puppy refused above now goes through, with no schema change and no deploy.
+UPDATE shop_policy SET int_value = 8 WHERE key = 'min_groom_age_weeks';
+
+INSERT INTO visit (id, dog_id, performed_by, visit_date) VALUES
+    ('00000000-0000-0000-0000-0000000e0203',
+     '00000000-0000-0000-0000-00000000d201',
+     '00000000-0000-0000-0000-00000000b001', CURRENT_DATE);
+
+INSERT INTO visit_service (visit_id, service_type_id) VALUES
+    ('00000000-0000-0000-0000-0000000e0203',
+     (SELECT id FROM service_type WHERE code = 'full_groom'));
+
+SELECT lives_ok(
+  $$ INSERT INTO cut_specification (visit_id, style_template_id, length_tier_id)
+     VALUES ('00000000-0000-0000-0000-0000000e0203',
+             (SELECT id FROM style_template WHERE code = 'teddy_bear'),
+             (SELECT id FROM length_tier    WHERE code = 'medium')) $$,
+  'Lowering the policy to eight weeks lets the same haircut through'
 );
 
 SELECT * FROM finish();

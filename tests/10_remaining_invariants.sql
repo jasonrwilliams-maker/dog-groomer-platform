@@ -1,5 +1,5 @@
 -- Remaining invariants: GR002, GR003, GR004, the audit log, the one-open-request
--- index, the flag-not-block plausibility rule, and a check that all 18 triggers
+-- index, the flag-not-block plausibility rule, and a check that all 25 triggers
 -- are actually attached.
 --
 -- SET CONSTRAINTS ALL IMMEDIATE is the key line. Two of these invariants are
@@ -164,11 +164,14 @@ SELECT is_empty(
          ('profile_tier_shape_guard'), ('audit_log_immutable'),
          ('cut_spec_min_age_guard'),
          ('vaccination_record_compliance'), ('record_request_compliance'),
-         ('dog_seed_compliance')
+         ('dog_seed_compliance'),
+         ('shop_policy_touch'), ('policy_enforcement_touch'),
+         ('shop_policy_audit'), ('policy_enforcement_audit'),
+         ('shop_policy_no_delete'), ('vaccine_type_regulatory_guard')
        ) AS expected(name)
      EXCEPT
      SELECT tgname FROM pg_trigger WHERE NOT tgisinternal $$,
-  'All 19 triggers are attached'
+  'All 25 triggers are attached'
 );
 
 SELECT * FROM finish();
