@@ -66,27 +66,101 @@ CREATE TYPE compliance_state     AS ENUM ('no_record', 'not_yet_due', 'requested
                                           'received_unverified', 'disputed_record',
                                           'current', 'expiring_soon', 'expired');
 
+-- 'policy_warning' is written by an invariant trigger when its
+-- policy_enforcement level is 'warn': the refusal becomes a logged fact.
 CREATE TYPE audit_action         AS ENUM ('view', 'create', 'update', 'delete',
-                                          'export', 'send_request');
+                                          'export', 'send_request', 'policy_warning');
 CREATE TYPE retention_action     AS ENUM ('purge', 'archive', 'retain_forever');
 
 -- -----------------------------------------------------------------------------
 -- 1. Configuration constants
 --
--- The 30-day warning window lives in exactly one place so the view, the
--- dashboard and the tests cannot drift apart.
+-- Three tiers, and which tier a value belongs to determines where it lives:
+--
+--   STRUCTURAL  -- the data is incoherent otherwise. Hardcoded in a CHECK.
+--                  "tool = 'scissors' implies no blade" is not a preference.
+--
+--   LEGAL       -- law or liability. Lives in reference data (for example
+--                  vaccine_type.min_age_weeks under regulatory_required), but
+--                  guarded: changing it requires a stated reason and writes a
+--                  dated audit_log entry (GR012, section 11a). The friction is
+--                  the feature — that record is exactly what you want when
+--                  someone asks why a shave-down was allowed last March.
+--
+--   PREFERENCE  -- the shop decides. A row in shop_policy, changeable from a
+--                  settings screen with no deploy — and every change lands in
+--                  audit_log, so the migration trail is not lost by moving
+--                  the value into a mutable row.
+--
+-- Most per-template and per-vaccine thresholds are already data by another
+-- route: style_template.min_coat_ordinal_required, style_template_zone_clamp,
+-- vaccine_type.required_by_policy, vaccine_type.min_age_weeks. This table is
+-- for the handful of shop-wide numbers that have nowhere else to live.
 -- -----------------------------------------------------------------------------
 
+CREATE TABLE shop_policy (
+    key          text PRIMARY KEY,
+    -- One typed column per value shape, discriminated by value_type. The next
+    -- policy anyone wants is a boolean ("require photo before shave-down"),
+    -- and a one-type table would force that decision at the worst time.
+    -- Exactly one value column is non-null, enforced below.
+    value_type   text NOT NULL CHECK (value_type IN ('integer', 'boolean', 'text')),
+    int_value    integer,
+    bool_value   boolean,
+    text_value   text,
+    description  text NOT NULL,
+    updated_at   timestamptz NOT NULL DEFAULT now(),
+    -- No FK: a policy change should outlive the account that made it, and
+    -- groomer does not exist yet at this point in the load order.
+    updated_by   uuid,
+    CONSTRAINT value_matches_type CHECK (
+        (value_type = 'integer' AND int_value  IS NOT NULL AND bool_value IS NULL AND text_value IS NULL)
+     OR (value_type = 'boolean' AND bool_value IS NOT NULL AND int_value  IS NULL AND text_value IS NULL)
+     OR (value_type = 'text'    AND text_value IS NOT NULL AND int_value  IS NULL AND bool_value IS NULL)
+    )
+);
+-- Rows are updated, never deleted (GR014), and every update lands in
+-- audit_log — the dated record that the migration workflow used to provide.
+-- Both triggers live in section 11a, after audit_log exists.
+
+INSERT INTO shop_policy (key, value_type, int_value, description) VALUES
+  ('min_groom_age_weeks', 'integer', 16,
+   'Age below which a haircut needs a stated, approved reason (GR011).'),
+  ('expiry_warning_days', 'integer', 30,
+   'How far ahead a vaccination reads expiring_soon.');
+
+-- Reads RAISE on a missing or mistyped key rather than returning NULL. A NULL
+-- would not error downstream — it would quietly disable the expiring_soon
+-- branch of the compliance view and everything would read 'current' right up
+-- until it read 'expired'. That is exactly the failure a settings screen with
+-- a typo would produce, so it fails loudly instead.
+CREATE FUNCTION shop_policy_int(p_key text) RETURNS integer
+LANGUAGE plpgsql STABLE AS $$
+DECLARE
+    v_value integer;
+BEGIN
+    SELECT int_value INTO v_value
+    FROM shop_policy WHERE key = p_key AND value_type = 'integer';
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'shop_policy has no integer value for key %', p_key
+            USING ERRCODE = 'GR013',
+                  HINT = 'The key is missing or holds a different type. Restore the row; policy reads refuse to guess.';
+    END IF;
+    RETURN v_value;
+END $$;
+
+-- STABLE, not IMMUTABLE: these read a table, and mislabelling them would let
+-- the planner cache a stale value across a policy change.
 CREATE FUNCTION expiry_warning_days() RETURNS integer
-  LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$ SELECT 30 $$;
+  LANGUAGE sql STABLE AS $$ SELECT shop_policy_int('expiry_warning_days') $$;
 
-CREATE FUNCTION remedial_coat_ordinal() RETURNS integer
-  LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$ SELECT 4 $$;
-
--- Shop policy, not law and not style identity: the age below which a dog does
--- not get a haircut without an explicit, approved reason.
 CREATE FUNCTION min_groom_age_weeks() RETURNS integer
-  LANGUAGE sql IMMUTABLE PARALLEL SAFE AS $$ SELECT 16 $$;
+  LANGUAGE sql STABLE AS $$ SELECT shop_policy_int('min_groom_age_weeks') $$;
+
+-- Note: there is deliberately no remedial_coat_ordinal() function. The coat
+-- level that justifies a remedial cut is per template, not shop-wide, and lives
+-- in style_template.min_coat_ordinal_required. A shop-wide constant would have
+-- been a second copy of a number that already has a home.
 
 -- -----------------------------------------------------------------------------
 -- 2. Reference tables (configuration — live, editable, RESTRICT on delete)
@@ -164,7 +238,7 @@ CREATE TABLE vaccine_type (
     name                          text NOT NULL,
     -- Law says so (drives Form 51 and the health department).
     regulatory_required           boolean NOT NULL DEFAULT false,
-    -- The shop says so. Maryland does not require Bordetella; Riane might.
+    -- The shop says so. Maryland does not require Bordetella; a shop might.
     -- A vaccine that is neither is recorded but never sets compliance state.
     required_by_policy            boolean NOT NULL DEFAULT false,
     -- Age below which this vaccine is not yet due. NULL means always due.
@@ -701,7 +775,7 @@ CREATE TABLE record_request (
       CHECK (channel <> 'email' OR unsubscribe_token IS NOT NULL)
 );
 -- One open request per dog per vaccine, so "the open request" is well defined
--- and dog_compliance_status.open_request_id cannot be ambiguous.
+-- and dog_vaccine_compliance.open_request_id cannot be ambiguous.
 CREATE UNIQUE INDEX record_request_one_open
   ON record_request (dog_id, vaccine_type_id)
   WHERE status IN ('queued','sent');
@@ -875,7 +949,70 @@ CREATE TRIGGER cut_spec_zone_snapshot
 --   GR009  tiered template with no length tier
 --   GR010  length tier supplied to a non-tiered template
 --   GR011  haircut on a dog under the minimum grooming age, no approved reason
+--   GR012  regulatory vaccine rule changed without a stated reason
+--   GR013  shop_policy key missing or holding the wrong type
+--   GR014  attempt to delete a shop_policy row
 -- =============================================================================
+
+-- -----------------------------------------------------------------------------
+-- Enforcement registry. Block-versus-flag per invariant is DATA, not trigger
+-- prose: 'block' raises exactly as before, 'warn' writes a policy_warning to
+-- audit_log and lets the row land, 'off' lets it land silently. Changing how
+-- strictly a rule is enforced is an UPDATE here, not a migration.
+--
+-- Codes with relaxable = false are pinned to 'block' by CHECK. They are pinned
+-- because relaxing them breaks the expansion into a record of nothing
+-- (GR002, GR007-GR010), or because the rule is law rather than shop taste
+-- (GR005 email opt-out, GR012). Note that 'warn' on a relaxable code means
+-- rows exist that no invariant vouches for — the audit_log entry is the only
+-- trace, which is the trade being made.
+--
+-- GR013 and GR014 guard the policy machinery itself and deliberately do not
+-- live in the table they protect.
+-- -----------------------------------------------------------------------------
+
+CREATE TABLE policy_enforcement (
+    error_code   text PRIMARY KEY CHECK (error_code ~ '^GR[0-9]{3}$'),
+    level        text NOT NULL DEFAULT 'block' CHECK (level IN ('block', 'warn', 'off')),
+    relaxable    boolean NOT NULL,
+    description  text NOT NULL,
+    updated_at   timestamptz NOT NULL DEFAULT now(),
+    updated_by   uuid,
+    CONSTRAINT pinned_codes_stay_blocking CHECK (relaxable OR level = 'block')
+);
+
+INSERT INTO policy_enforcement (error_code, level, relaxable, description) VALUES
+  ('GR001', 'block', true,  'Remedial cut without a qualifying coat assessment'),
+  ('GR002', 'block', false, 'Approved remedial override with no coat level stated'),
+  ('GR003', 'block', true,  'Uniform-length template resolved to more than one length'),
+  ('GR004', 'block', true,  'Cut specification on a visit with no groom service'),
+  ('GR005', 'block', false, 'Email reminder to an owner who opted out'),
+  ('GR006', 'block', true,  'Template zone spec configured outside its clamp'),
+  ('GR007', 'block', false, 'Unknown style template'),
+  ('GR008', 'block', false, 'Remedial template saved as a standing style profile'),
+  ('GR009', 'block', false, 'Tiered template with no length tier'),
+  ('GR010', 'block', false, 'Length tier supplied to a non-tiered template'),
+  ('GR011', 'block', true,  'Haircut on an under-age dog with no approved reason'),
+  ('GR012', 'block', false, 'Regulatory vaccine rule changed without a stated reason');
+
+-- Fail closed: an unregistered code blocks, exactly as if this table did not
+-- exist. Deleting a row cannot switch an invariant off.
+CREATE FUNCTION enforcement_level(p_error_code text) RETURNS text
+LANGUAGE plpgsql STABLE AS $$
+DECLARE
+    v_level text;
+BEGIN
+    SELECT level INTO v_level FROM policy_enforcement WHERE error_code = p_error_code;
+    RETURN COALESCE(v_level, 'block');
+END $$;
+
+CREATE FUNCTION log_policy_warning(p_error_code text, p_entity_type text,
+                                   p_entity_id uuid, p_detail text) RETURNS void
+LANGUAGE sql AS $$
+    INSERT INTO audit_log (actor_label, action, entity_type, entity_id, changed_fields)
+    VALUES (current_user, 'policy_warning', p_entity_type, p_entity_id,
+            jsonb_build_object('error_code', p_error_code, 'detail', p_detail))
+$$;
 
 -- =============================================================================
 -- 11. Trigger-enforced invariants
@@ -889,6 +1026,7 @@ LANGUAGE plpgsql AS $$
 DECLARE
     v_required smallint;
     v_actual   smallint;
+    v_level    text;
 BEGIN
     SELECT t.min_coat_ordinal_required INTO v_required
     FROM style_template t WHERE t.id = NEW.style_template_id AND t.is_remedial;
@@ -917,18 +1055,34 @@ BEGIN
     -- this the expansion has nothing to key style_template_zone_spec on.
     NEW.coat_ordinal_applied := COALESCE(NEW.coat_ordinal_applied, v_actual);
 
+    v_level := enforcement_level('GR001');
+
     IF v_actual IS NULL THEN
-        RAISE EXCEPTION
-            'Remedial template requires a coat assessment on visit %', NEW.visit_id
-            USING ERRCODE = 'GR001',
-                  HINT = 'Record the coat assessment first, or supply remedial_override_reason with a manager approval.';
+        IF v_level = 'block' THEN
+            RAISE EXCEPTION
+                'Remedial template requires a coat assessment on visit %', NEW.visit_id
+                USING ERRCODE = 'GR001',
+                      HINT = 'Record the coat assessment first, or supply remedial_override_reason with a manager approval.';
+        ELSIF v_level = 'warn' THEN
+            PERFORM log_policy_warning('GR001', 'cut_specification', NEW.id,
+                format('Remedial template with no coat assessment on visit %s', NEW.visit_id));
+        END IF;
+        -- With no assessment and no override there is no coat level to key the
+        -- expansion on; the spec lands but expands to hygiene zones only.
+        RETURN NEW;
     END IF;
 
     IF v_actual < v_required THEN
-        RAISE EXCEPTION
-            'Coat assessment level % does not justify a remedial cut (requires %)',
-            v_actual, v_required
-            USING ERRCODE = 'GR001';
+        IF v_level = 'block' THEN
+            RAISE EXCEPTION
+                'Coat assessment level % does not justify a remedial cut (requires %)',
+                v_actual, v_required
+                USING ERRCODE = 'GR001';
+        ELSIF v_level = 'warn' THEN
+            PERFORM log_policy_warning('GR001', 'cut_specification', NEW.id,
+                format('Coat assessment level %s does not justify a remedial cut (requires %s)',
+                       v_actual, v_required));
+        END IF;
     END IF;
 
     RETURN NEW;
@@ -944,7 +1098,12 @@ CREATE FUNCTION enforce_uniform_length() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
     v_uniform  boolean;
     v_distinct integer;
+    v_level    text := enforcement_level('GR003');
 BEGIN
+    IF v_level = 'off' THEN
+        RETURN NULL;
+    END IF;
+
     SELECT t.requires_uniform_length INTO v_uniform
     FROM cut_specification cs
     JOIN style_template t ON t.id = cs.style_template_id
@@ -966,6 +1125,11 @@ BEGIN
       AND z.effective_length_in IS NOT NULL;
 
     IF v_distinct > 1 THEN
+        IF v_level = 'warn' THEN
+            PERFORM log_policy_warning('GR003', 'cut_specification', NEW.cut_specification_id,
+                format('Uniform-length template resolved to %s distinct lengths', v_distinct));
+            RETURN NULL;
+        END IF;
         RAISE EXCEPTION
             'Cut specification % uses a uniform-length template but resolved to % distinct lengths',
             NEW.cut_specification_id, v_distinct
@@ -985,16 +1149,24 @@ CREATE CONSTRAINT TRIGGER cut_spec_zone_uniform_guard
 --       transaction and the order is the application's business.
 CREATE FUNCTION enforce_cut_spec_requires_groom() RETURNS trigger
 LANGUAGE plpgsql AS $$
+DECLARE
+    v_level text;
 BEGIN
     IF NOT EXISTS (
         SELECT 1 FROM visit_service vs
         JOIN service_type st ON st.id = vs.service_type_id
         WHERE vs.visit_id = NEW.visit_id AND st.carries_cut_spec
     ) THEN
-        RAISE EXCEPTION
-            'Visit % has no service that carries a cut specification', NEW.visit_id
-            USING ERRCODE = 'GR004',
-                  HINT = 'A bath-only visit does not get a haircut record.';
+        v_level := enforcement_level('GR004');
+        IF v_level = 'block' THEN
+            RAISE EXCEPTION
+                'Visit % has no service that carries a cut specification', NEW.visit_id
+                USING ERRCODE = 'GR004',
+                      HINT = 'A bath-only visit does not get a haircut record.';
+        ELSIF v_level = 'warn' THEN
+            PERFORM log_policy_warning('GR004', 'cut_specification', NEW.id,
+                format('Cut specification on visit %s, which has no groom service', NEW.visit_id));
+        END IF;
     END IF;
     RETURN NULL;
 END $$;
@@ -1026,14 +1198,25 @@ CREATE TRIGGER vaccination_plausibility
     FOR EACH ROW EXECUTE FUNCTION flag_validity_plausibility();
 
 -- 3.6 — Opt-out clause. The cap itself is a CHECK on record_request.
+-- GR005 is pinned (relaxable = false): opting out of email is the owner's
+-- legal right, not shop taste. The consult is here so the registry is the
+-- single source of truth, but the CHECK keeps the level at 'block'.
 CREATE FUNCTION enforce_opt_out() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    v_level text;
 BEGIN
     IF NEW.channel = 'email' AND NEW.status = 'sent'
        AND EXISTS (SELECT 1 FROM owner o WHERE o.id = NEW.owner_id AND o.email_opted_out)
     THEN
-        RAISE EXCEPTION 'Owner % has opted out of email', NEW.owner_id
-            USING ERRCODE = 'GR005',
-                  HINT = 'Switch the channel to verbal_at_counter or sms.';
+        v_level := enforcement_level('GR005');
+        IF v_level = 'block' THEN
+            RAISE EXCEPTION 'Owner % has opted out of email', NEW.owner_id
+                USING ERRCODE = 'GR005',
+                      HINT = 'Switch the channel to verbal_at_counter or sms.';
+        ELSIF v_level = 'warn' THEN
+            PERFORM log_policy_warning('GR005', 'record_request', NEW.id,
+                format('Email reminder recorded for opted-out owner %s', NEW.owner_id));
+        END IF;
     END IF;
     RETURN NEW;
 END $$;
@@ -1047,8 +1230,9 @@ CREATE TRIGGER record_request_opt_out_guard
 -- what the groomer chose.
 CREATE FUNCTION enforce_template_clamp() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
-    v_len numeric;
-    v_c   style_template_zone_clamp;
+    v_len   numeric;
+    v_c     style_template_zone_clamp;
+    v_level text;
 BEGIN
     SELECT * INTO v_c FROM style_template_zone_clamp c
     WHERE c.style_template_id = NEW.style_template_id
@@ -1061,10 +1245,18 @@ BEGIN
 
     IF (v_c.max_effective_length_in IS NOT NULL AND v_len > v_c.max_effective_length_in)
     OR (v_c.min_effective_length_in IS NOT NULL AND v_len < v_c.min_effective_length_in) THEN
-        RAISE EXCEPTION
-            'Template zone spec violates clamp (%): % is outside [%, %]',
-            v_c.rationale, v_len, v_c.min_effective_length_in, v_c.max_effective_length_in
-            USING ERRCODE = 'GR006';
+        v_level := enforcement_level('GR006');
+        IF v_level = 'block' THEN
+            RAISE EXCEPTION
+                'Template zone spec violates clamp (%): % is outside [%, %]',
+                v_c.rationale, v_len, v_c.min_effective_length_in, v_c.max_effective_length_in
+                USING ERRCODE = 'GR006';
+        ELSIF v_level = 'warn' THEN
+            PERFORM log_policy_warning('GR006', 'style_template_zone_spec', NEW.id,
+                format('Zone spec at %s is outside clamp [%s, %s] (%s)',
+                       v_len, v_c.min_effective_length_in, v_c.max_effective_length_in,
+                       v_c.rationale));
+        END IF;
     END IF;
     RETURN NEW;
 END $$;
@@ -1082,8 +1274,9 @@ CREATE FUNCTION enforce_min_groom_age() RETURNS trigger LANGUAGE plpgsql AS $$
 DECLARE
     v_dob      date;
     v_weeks    integer;
+    v_level    text := enforcement_level('GR011');
 BEGIN
-    IF NEW.under_age_override_reason IS NOT NULL THEN
+    IF v_level = 'off' OR NEW.under_age_override_reason IS NOT NULL THEN
         RETURN NEW;                      -- approval already enforced by CHECK
     END IF;
 
@@ -1098,6 +1291,12 @@ BEGIN
     v_weeks := ((SELECT v.visit_date FROM visit v WHERE v.id = NEW.visit_id) - v_dob) / 7;
 
     IF v_weeks < min_groom_age_weeks() THEN
+        IF v_level = 'warn' THEN
+            PERFORM log_policy_warning('GR011', 'cut_specification', NEW.id,
+                format('Dog was %s weeks old at this visit; minimum grooming age is %s',
+                       v_weeks, min_groom_age_weeks()));
+            RETURN NEW;
+        END IF;
         RAISE EXCEPTION
             'Dog was % weeks old at this visit; minimum grooming age is %',
             v_weeks, min_groom_age_weeks()
@@ -1168,6 +1367,108 @@ END $$;
 CREATE TRIGGER audit_log_immutable
     BEFORE UPDATE OR DELETE ON audit_log
     FOR EACH STATEMENT EXECUTE FUNCTION reject_audit_mutation();
+
+-- -----------------------------------------------------------------------------
+-- 11a. The policy tables are themselves governed.
+--
+-- The argument for keeping rules in code was the migration trail: a reviewed,
+-- dated record of when the rule changed. Moving a rule into a mutable row
+-- loses that record unless something writes it back. These triggers write it
+-- back: every change to shop_policy or policy_enforcement lands in audit_log
+-- with the old and new values, at a fraction of the cost of a migration.
+-- -----------------------------------------------------------------------------
+
+-- Changed columns only, as {column: {old, new}}.
+CREATE FUNCTION jsonb_diff(p_old jsonb, p_new jsonb) RETURNS jsonb
+LANGUAGE sql IMMUTABLE AS $$
+    SELECT COALESCE(jsonb_object_agg(n.key, jsonb_build_object('old', o.value, 'new', n.value)),
+                    '{}'::jsonb)
+    FROM jsonb_each(p_new) n
+    JOIN jsonb_each(p_old) o USING (key)
+    WHERE n.value IS DISTINCT FROM o.value
+$$;
+
+CREATE FUNCTION log_config_change() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    INSERT INTO audit_log (actor_id, actor_label, action, entity_type, entity_id, changed_fields)
+    VALUES ((to_jsonb(NEW)->>'updated_by')::uuid, current_user, 'update', TG_TABLE_NAME, NULL,
+            jsonb_build_object(
+                'key', COALESCE(to_jsonb(NEW)->>'key', to_jsonb(NEW)->>'error_code'),
+                'changed', jsonb_diff(to_jsonb(OLD), to_jsonb(NEW)) - 'updated_at'));
+    RETURN NULL;
+END $$;
+
+CREATE TRIGGER shop_policy_touch BEFORE UPDATE ON shop_policy
+    FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+CREATE TRIGGER policy_enforcement_touch BEFORE UPDATE ON policy_enforcement
+    FOR EACH ROW EXECUTE FUNCTION touch_updated_at();
+
+CREATE TRIGGER shop_policy_audit AFTER UPDATE ON shop_policy
+    FOR EACH ROW EXECUTE FUNCTION log_config_change();
+CREATE TRIGGER policy_enforcement_audit AFTER UPDATE ON policy_enforcement
+    FOR EACH ROW EXECUTE FUNCTION log_config_change();
+
+-- GR014 — the read functions fail loudly on a missing key (GR013), so the
+-- cheapest way to keep them honest is to make the key impossible to remove.
+CREATE FUNCTION reject_shop_policy_delete() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+    RAISE EXCEPTION 'shop_policy rows are updated, never deleted'
+        USING ERRCODE = 'GR014',
+              HINT = 'Every policy read raises on a missing key; removing the row breaks them by design.';
+END $$;
+
+CREATE TRIGGER shop_policy_no_delete BEFORE DELETE ON shop_policy
+    FOR EACH STATEMENT EXECUTE FUNCTION reject_shop_policy_delete();
+
+-- GR012 — the LEGAL tier, made load-bearing. regulatory_required is the
+-- discriminator; authority is the citation that lands in the audit entry.
+-- vaccine_type is freely editable reference data, but a row the law dictates
+-- (rabies at 16 weeks is COMAR 10.06.02, not shop taste) does not change
+-- without a stated reason and a dated audit_log record — the same trail a
+-- migration would have provided.
+CREATE FUNCTION enforce_regulatory_change_reason() RETURNS trigger
+LANGUAGE plpgsql AS $$
+DECLARE
+    v_regulatory boolean;
+    v_reason     text;
+BEGIN
+    IF TG_OP = 'DELETE' THEN
+        v_regulatory := OLD.regulatory_required;
+    ELSE
+        v_regulatory := OLD.regulatory_required OR NEW.regulatory_required;
+    END IF;
+
+    IF NOT v_regulatory THEN
+        IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
+    END IF;
+
+    v_reason := NULLIF(current_setting('groom.change_reason', true), '');
+    IF v_reason IS NULL THEN
+        RAISE EXCEPTION
+            '% is a regulatory vaccine rule (%); changing it requires a stated reason',
+            OLD.code, OLD.authority
+            USING ERRCODE = 'GR012',
+                  HINT = 'SET LOCAL groom.change_reason = ''why'' in the same transaction; the reason lands in audit_log.';
+    END IF;
+
+    IF TG_OP = 'DELETE' THEN
+        INSERT INTO audit_log (actor_label, action, entity_type, entity_id, changed_fields)
+        VALUES (current_user, 'delete', 'vaccine_type', OLD.id,
+                jsonb_build_object('reason', v_reason, 'authority', OLD.authority,
+                                   'deleted', to_jsonb(OLD)));
+        RETURN OLD;
+    END IF;
+
+    INSERT INTO audit_log (actor_label, action, entity_type, entity_id, changed_fields)
+    VALUES (current_user, 'update', 'vaccine_type', NEW.id,
+            jsonb_build_object('reason', v_reason, 'authority', OLD.authority,
+                               'changed', jsonb_diff(to_jsonb(OLD), to_jsonb(NEW))));
+    RETURN NEW;
+END $$;
+
+CREATE TRIGGER vaccine_type_regulatory_guard
+    BEFORE UPDATE OR DELETE ON vaccine_type
+    FOR EACH ROW EXECUTE FUNCTION enforce_regulatory_change_reason();
 
 -- =============================================================================
 -- 12. Cut specification expansion — implements §1 precedence exactly
@@ -1397,8 +1698,15 @@ FROM v_dog_vaccine_compliance v
 JOIN compliance_state_meta m ON m.state = v.state
 GROUP BY v.dog_id, v.dog_name, v.owner_id;
 
+-- The expiring_soon label carries the live warning window. Baking "30 days"
+-- into the stored label would let a policy change make the dashboard lie.
 CREATE VIEW v_compliance_dashboard AS
-SELECT c.*, m.plain_language_label, m.actionable, m.sort_order
+SELECT c.*,
+       CASE WHEN c.state = 'expiring_soon'
+            THEN format('Expiring within %s days', expiry_warning_days())
+            ELSE m.plain_language_label
+       END AS plain_language_label,
+       m.actionable, m.sort_order
 FROM v_dog_compliance_status c
 JOIN compliance_state_meta m ON m.state = c.state
 ORDER BY m.sort_order, c.days_until_next_expiry NULLS LAST;
@@ -1526,7 +1834,9 @@ INSERT INTO compliance_state_meta
   ('disputed_record',     1, 'Disputed — needs review',       true,  true),
   ('expired',             2, 'Expired',                       true,  true),
   ('no_record',           3, 'No record on file',             true,  true),
-  ('expiring_soon',       4, 'Expiring within 30 days',       false, true),
+  -- No number in the stored label: the window is shop_policy data, and the
+  -- dashboard view templates it in at read time.
+  ('expiring_soon',       4, 'Expiring soon',                 false, true),
   ('received_unverified', 5, 'Received, awaiting verification', false, true),
   ('requested_pending',   6, 'Requested, awaiting response',  true,  false),
   -- Too young to have had it. Not compliant, not a problem, not chaseable.
@@ -1571,9 +1881,15 @@ INSERT INTO retention_rule (entity_type, retain_months, anchor_field, action) VA
 
 -- Pin search_path per function: trigger and helper functions otherwise
 -- inherit the caller's, and every table reference here is unqualified.
+ALTER FUNCTION shop_policy_int(text) SET search_path = groom, public;
 ALTER FUNCTION expiry_warning_days() SET search_path = groom, public;
-ALTER FUNCTION remedial_coat_ordinal() SET search_path = groom, public;
 ALTER FUNCTION min_groom_age_weeks() SET search_path = groom, public;
+ALTER FUNCTION enforcement_level(text) SET search_path = groom, public;
+ALTER FUNCTION log_policy_warning(text, text, uuid, text) SET search_path = groom, public;
+ALTER FUNCTION jsonb_diff(jsonb, jsonb) SET search_path = groom, public;
+ALTER FUNCTION log_config_change() SET search_path = groom, public;
+ALTER FUNCTION reject_shop_policy_delete() SET search_path = groom, public;
+ALTER FUNCTION enforce_regulatory_change_reason() SET search_path = groom, public;
 ALTER FUNCTION derive_effective_length(cutting_tool, uuid, uuid) SET search_path = groom, public;
 ALTER FUNCTION describe_tooling(cutting_tool, uuid, uuid) SET search_path = groom, public;
 ALTER FUNCTION touch_updated_at() SET search_path = groom, public;
