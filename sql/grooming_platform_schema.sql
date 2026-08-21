@@ -962,10 +962,17 @@ CREATE TRIGGER cut_spec_zone_snapshot
 --
 -- Codes with relaxable = false are pinned to 'block' by CHECK. They are pinned
 -- because relaxing them breaks the expansion into a record of nothing
--- (GR002, GR007-GR010), or because the rule is law rather than shop taste
--- (GR005 email opt-out, GR012). Note that 'warn' on a relaxable code means
--- rows exist that no invariant vouches for — the audit_log entry is the only
--- trace, which is the trade being made.
+-- (GR001-GR002, GR007-GR010), or because the rule is law rather than shop
+-- taste (GR005 email opt-out, GR012). Note that 'warn' on a relaxable code
+-- means rows exist that no invariant vouches for — the audit_log entry is the
+-- only trace, which is the trade being made.
+--
+-- The trap when adding a code: an invariant is only safely relaxable if the
+-- row it guards is still a TRUTHFUL record without it. Anything whose data
+-- feeds resolve_cut_spec_zones (the remedial and tier-shape rules) is coupled
+-- to the expansion — relax it and the visit history claims a haircut that
+-- resolved to nothing but hygiene zones. Those stay pinned, without a
+-- consult in their triggers.
 --
 -- GR013 and GR014 guard the policy machinery itself and deliberately do not
 -- live in the table they protect.
@@ -982,7 +989,7 @@ CREATE TABLE policy_enforcement (
 );
 
 INSERT INTO policy_enforcement (error_code, level, relaxable, description) VALUES
-  ('GR001', 'block', true,  'Remedial cut without a qualifying coat assessment'),
+  ('GR001', 'block', false, 'Remedial cut without a qualifying coat assessment'),
   ('GR002', 'block', false, 'Approved remedial override with no coat level stated'),
   ('GR003', 'block', true,  'Uniform-length template resolved to more than one length'),
   ('GR004', 'block', true,  'Cut specification on a visit with no groom service'),
@@ -1026,7 +1033,6 @@ LANGUAGE plpgsql AS $$
 DECLARE
     v_required smallint;
     v_actual   smallint;
-    v_level    text;
 BEGIN
     SELECT t.min_coat_ordinal_required INTO v_required
     FROM style_template t WHERE t.id = NEW.style_template_id AND t.is_remedial;
@@ -1055,34 +1061,24 @@ BEGIN
     -- this the expansion has nothing to key style_template_zone_spec on.
     NEW.coat_ordinal_applied := COALESCE(NEW.coat_ordinal_applied, v_actual);
 
-    v_level := enforcement_level('GR001');
-
+    -- No enforcement_level() consult here, and GR001 is pinned in
+    -- policy_enforcement: the expansion keys remedial templates on the coat
+    -- level this check validates. A 'warn' would land a spec that says
+    -- "Shaved" and expands to hygiene zones only — a falsified record, not a
+    -- softened rule. A shop that wants a laxer threshold already has the
+    -- right lever: style_template.min_coat_ordinal_required is data.
     IF v_actual IS NULL THEN
-        IF v_level = 'block' THEN
-            RAISE EXCEPTION
-                'Remedial template requires a coat assessment on visit %', NEW.visit_id
-                USING ERRCODE = 'GR001',
-                      HINT = 'Record the coat assessment first, or supply remedial_override_reason with a manager approval.';
-        ELSIF v_level = 'warn' THEN
-            PERFORM log_policy_warning('GR001', 'cut_specification', NEW.id,
-                format('Remedial template with no coat assessment on visit %s', NEW.visit_id));
-        END IF;
-        -- With no assessment and no override there is no coat level to key the
-        -- expansion on; the spec lands but expands to hygiene zones only.
-        RETURN NEW;
+        RAISE EXCEPTION
+            'Remedial template requires a coat assessment on visit %', NEW.visit_id
+            USING ERRCODE = 'GR001',
+                  HINT = 'Record the coat assessment first, or supply remedial_override_reason with a manager approval.';
     END IF;
 
     IF v_actual < v_required THEN
-        IF v_level = 'block' THEN
-            RAISE EXCEPTION
-                'Coat assessment level % does not justify a remedial cut (requires %)',
-                v_actual, v_required
-                USING ERRCODE = 'GR001';
-        ELSIF v_level = 'warn' THEN
-            PERFORM log_policy_warning('GR001', 'cut_specification', NEW.id,
-                format('Coat assessment level %s does not justify a remedial cut (requires %s)',
-                       v_actual, v_required));
-        END IF;
+        RAISE EXCEPTION
+            'Coat assessment level % does not justify a remedial cut (requires %)',
+            v_actual, v_required
+            USING ERRCODE = 'GR001';
     END IF;
 
     RETURN NEW;
@@ -1126,8 +1122,17 @@ BEGIN
 
     IF v_distinct > 1 THEN
         IF v_level = 'warn' THEN
-            PERFORM log_policy_warning('GR003', 'cut_specification', NEW.cut_specification_id,
-                format('Uniform-length template resolved to %s distinct lengths', v_distinct));
+            -- One warning per spec, not one per zone row: this AFTER trigger
+            -- fires for every row the expansion inserts.
+            IF NOT EXISTS (
+                SELECT 1 FROM audit_log
+                WHERE action = 'policy_warning'
+                  AND entity_id = NEW.cut_specification_id
+                  AND changed_fields->>'error_code' = 'GR003'
+            ) THEN
+                PERFORM log_policy_warning('GR003', 'cut_specification', NEW.cut_specification_id,
+                    format('Uniform-length template resolved to %s distinct lengths', v_distinct));
+            END IF;
             RETURN NULL;
         END IF;
         RAISE EXCEPTION
@@ -1410,6 +1415,8 @@ CREATE TRIGGER policy_enforcement_audit AFTER UPDATE ON policy_enforcement
 
 -- GR014 — the read functions fail loudly on a missing key (GR013), so the
 -- cheapest way to keep them honest is to make the key impossible to remove.
+-- Statement-level on purpose, matching audit_log_immutable: even a DELETE
+-- that matches nothing raises, because the statement itself is the mistake.
 CREATE FUNCTION reject_shop_policy_delete() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
     RAISE EXCEPTION 'shop_policy rows are updated, never deleted'
@@ -1426,29 +1433,66 @@ CREATE TRIGGER shop_policy_no_delete BEFORE DELETE ON shop_policy
 -- (rabies at 16 weeks is COMAR 10.06.02, not shop taste) does not change
 -- without a stated reason and a dated audit_log record — the same trail a
 -- migration would have provided.
+--
+-- Scoped to the LAW, not the row: only the legally-dictated columns demand
+-- ceremony. Renaming the vaccine or tuning the plausibility heuristic is shop
+-- data that happens to sit beside them. Creating or deleting the row adds or
+-- removes a legal rule entirely — a new regulatory_required vaccine starts
+-- driving every dog's compliance the moment it exists — so INSERT and DELETE
+-- are always guarded. (The schema's own seed sets the reason first; see
+-- section 14.)
+--
+-- The gate catches accidents, not intent — anyone can type a reason. The
+-- value is the dated audit_log entry. Applications MUST use SET LOCAL, never
+-- SET: on a pooled connection a plain SET leaks the reason into later
+-- transactions and silently attaches the wrong citation to the next change.
 CREATE FUNCTION enforce_regulatory_change_reason() RETURNS trigger
 LANGUAGE plpgsql AS $$
 DECLARE
     v_regulatory boolean;
     v_reason     text;
+    v_code       text;
+    v_authority  text;
 BEGIN
-    IF TG_OP = 'DELETE' THEN
+    IF TG_OP = 'INSERT' THEN
+        v_regulatory := NEW.regulatory_required;
+        v_code       := NEW.code;
+        v_authority  := NEW.authority;
+    ELSIF TG_OP = 'DELETE' THEN
         v_regulatory := OLD.regulatory_required;
+        v_code       := OLD.code;
+        v_authority  := OLD.authority;
     ELSE
         v_regulatory := OLD.regulatory_required OR NEW.regulatory_required;
+        v_code       := OLD.code;
+        v_authority  := OLD.authority;
     END IF;
 
     IF NOT v_regulatory THEN
         IF TG_OP = 'DELETE' THEN RETURN OLD; ELSE RETURN NEW; END IF;
     END IF;
 
+    IF TG_OP = 'UPDATE'
+       AND NOT (jsonb_diff(to_jsonb(OLD), to_jsonb(NEW))
+                ?| ARRAY['min_age_weeks', 'regulatory_required', 'authority']) THEN
+        RETURN NEW;
+    END IF;
+
     v_reason := NULLIF(current_setting('groom.change_reason', true), '');
     IF v_reason IS NULL THEN
         RAISE EXCEPTION
             '% is a regulatory vaccine rule (%); changing it requires a stated reason',
-            OLD.code, OLD.authority
+            v_code, v_authority
             USING ERRCODE = 'GR012',
                   HINT = 'SET LOCAL groom.change_reason = ''why'' in the same transaction; the reason lands in audit_log.';
+    END IF;
+
+    IF TG_OP = 'INSERT' THEN
+        INSERT INTO audit_log (actor_label, action, entity_type, entity_id, changed_fields)
+        VALUES (current_user, 'create', 'vaccine_type', NEW.id,
+                jsonb_build_object('reason', v_reason, 'authority', NEW.authority,
+                                   'created', to_jsonb(NEW)));
+        RETURN NEW;
     END IF;
 
     IF TG_OP = 'DELETE' THEN
@@ -1467,7 +1511,7 @@ BEGIN
 END $$;
 
 CREATE TRIGGER vaccine_type_regulatory_guard
-    BEFORE UPDATE OR DELETE ON vaccine_type
+    BEFORE INSERT OR UPDATE OR DELETE ON vaccine_type
     FOR EACH ROW EXECUTE FUNCTION enforce_regulatory_change_reason();
 
 -- =============================================================================
@@ -1819,6 +1863,13 @@ INSERT INTO service_type (code, name, carries_cut_spec, display_order) VALUES
 -- regulatory_required = the law says so.  required_by_policy = the shop says so.
 -- min_age_weeks = below this age the vaccine is not yet due, so the dog is not
 -- non-compliant and its owner should not be chased.
+--
+-- Creating a regulatory vaccine is itself a GR012 event, so the seed states
+-- its reason like everyone else. Plain SET, not SET LOCAL: this file is not
+-- wrapped in a transaction, where SET LOCAL would be a silent no-op. Safe
+-- here because schema load is a dedicated session, never a pooled one; the
+-- RESET below keeps the reason from leaking past the seed.
+SET groom.change_reason = 'Initial schema seed; rabies per COMAR 10.06.02';
 INSERT INTO vaccine_type
   (code, name, regulatory_required, required_by_policy, min_age_weeks, authority,
    plausible_validity_min_months, plausible_validity_max_months, blocks_service_if_expired)
@@ -1828,6 +1879,7 @@ VALUES
   ('bordetella',    'Bordetella',    false, true,   8, 'facility policy',  6, 12, false),
   -- Recorded if a document mentions it, but never sets compliance state.
   ('leptospirosis', 'Leptospirosis', false, false, 12, 'facility policy', 12, 12, false);
+RESET groom.change_reason;
 
 INSERT INTO compliance_state_meta
   (state, sort_order, plain_language_label, blocks_service, actionable) VALUES

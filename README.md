@@ -4,7 +4,7 @@ A system of record for a small grooming practice, with the business rules
 enforced **in the database** rather than in the application.
 
 Fourteen numbered rules, each with a dedicated error code, each proven by a test
-that asserts the *refusal* — not the happy path. 93 assertions, all passing.
+that asserts the *refusal* — not the happy path. 104 assertions, all passing.
 How strictly each groom-time rule is enforced (block, warn, or off) is itself a
 row of data, changed by `UPDATE` and recorded in the audit log — not a migration.
 
@@ -48,7 +48,7 @@ that extracts cleanly. Anyone can demo a clean extraction.
 |---|---|
 | Schema | Frozen — 43 tables, 17 enum types, 27 functions, 25 triggers, 5 views |
 | Business rules | 14, codes `GR001`–`GR014` |
-| Test suite | 12 files, 93 pgTAP assertions, passing |
+| Test suite | 12 files, 104 pgTAP assertions, passing |
 | Seed migration | Not started — ~150 template × tier × zone rows |
 | Document extraction | Not started |
 | API / frontend | Not started |
@@ -66,7 +66,7 @@ docker compose exec db psql -U postgres -d grooming_test -f sql/seed/fixture.sql
 docker compose exec db pg_prove -U postgres -d grooming_test tests/*.sql
 ```
 
-Expected: `Files=12, Tests=93, Result: PASS`.
+Expected: `Files=12, Tests=104, Result: PASS`.
 
 `--wait` blocks until Postgres reports healthy. Without it the schema load races
 container startup.
@@ -114,7 +114,7 @@ specification is [`reference/resolution_precedence.md`](reference/resolution_pre
 | `GR009` | A tiered template requires a length tier |
 | `GR010` | A non-tiered template must not carry one |
 | `GR011` | A haircut under the minimum grooming age needs an approved reason |
-| `GR012` | A regulatory vaccine rule does not change without a stated reason |
+| `GR012` | A regulatory vaccine rule does not appear, change, or disappear without a stated reason |
 | `GR013` | A missing or mistyped `shop_policy` key fails loudly, never as NULL |
 | `GR014` | `shop_policy` rows are updated, never deleted |
 
@@ -126,8 +126,8 @@ developer.
 Whether a groom-time rule blocks, warns, or is off is a row in
 `policy_enforcement`, keyed by error code. `warn` records the violation in the
 audit log and lets the row land. Codes whose relaxation would corrupt the data
-(the tier-shape rules) or break the law (the email opt-out) are pinned to
-`block` by a CHECK constraint.
+(the remedial and tier-shape rules, whose values feed the zone expansion) or
+break the law (the email opt-out) are pinned to `block` by a CHECK constraint.
 
 ---
 
@@ -153,7 +153,7 @@ stopped. Every rejection test is paired with the valid case — a rule that reje
 | `07` | History frozen against reference drift, not against correction |
 | `08` | The compliance projection equals a live recompute after every write |
 | `09` | Eight compliance states and their precedence; worst state wins per dog |
-| `10` | Remaining invariants, audit immutability, all 25 triggers attached |
+| `10` | Remaining invariants, audit immutability, no expected trigger missing |
 | `11` | Puppy rules — `not_yet_due` compliance and minimum grooming age |
 | `12` | Policy is data: loud failure on a missing key, labels that track the live window, block/warn/off per rule, and the regulatory-change audit trail |
 
