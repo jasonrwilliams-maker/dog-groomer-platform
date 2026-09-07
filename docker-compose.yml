@@ -1,7 +1,7 @@
 services:
   db:
     build:
-      context: ./sql
+      context: ./docker
       dockerfile: test.dockerfile
     container_name: groomer-db
     working_dir: /repo              # short relative paths from here on

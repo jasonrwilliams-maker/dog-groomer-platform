@@ -96,6 +96,8 @@ and a per-dog-per-vaccine projection of compliance state.
 
 Entity-relationship diagrams are in [`reference/`](reference/); the normative
 specification is [`reference/resolution_precedence.md`](reference/resolution_precedence.md).
+The extraction subsystem — its ingestion flow and the answer-key contract that
+governs its labelled evaluation set — is in [`extraction/`](extraction/).
 
 ---
 
@@ -208,7 +210,14 @@ measured accuracy.
 
 All owners, dogs, and visit data in this repository are synthetic. The real
 documents used to develop and test the extraction logic contain personal
-information and are deliberately excluded from version control.
+information and are deliberately excluded from version control: they live in
+`private/`, which is gitignored as a directory rather than by file extension.
+
+The answer keys in `extraction/answer_keys/` are anonymised at labelling time —
+owner names, addresses, phone numbers, patient names, microchip and tag numbers
+are substituted, while clinical facts (dates, lot numbers, product names) are
+kept verbatim so a key can still be checked against its page. Household
+structure is preserved: two households have two surnames.
 
 ---
 

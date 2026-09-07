@@ -1,9 +1,12 @@
+# Real client documents. Everything in here is gitignored wholesale — the
+# previous rules matched by file extension, which meant a .heic (an allowed
+# mime_type in the schema) or anything one directory deeper was NOT ignored.
+# Directory-level is the only version of this that stays true as the corpus grows.
+private/
+
 .env
+
 __pycache__/
 .venv/
 *.pyc
 .DS_Store
-reference/*.pdf
-reference/*.PDF
-reference/*.jpg
-reference/*.png
