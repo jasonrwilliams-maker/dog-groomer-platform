@@ -1,0 +1,14 @@
+{
+  "_what": "Copy to private/pii_map.json (gitignored with the documents) and fill in the real values. Each line undoes one substitution made when a key was anonymised: real value as printed on the page -> the pseudonym the key uses.",
+  "_how_it_is_applied": "To the MODEL'S OUTPUT, before it is compared with a key. Substring replacement, longest real value first, so 'Mr. Jane Doe' becomes 'Mr. Marcus Webb' and '1 Real St #5' becomes '88 Chesterfield Row #5'. Never applied to the keys.",
+  "_one_line_per_printed_form": "A value printed two ways on two pages needs two lines: '1 Real Street' and '1 Real St' are different strings.",
+  "replacements": {
+    "Jane Doe": "Marcus Webb",
+    "Rex": "Nutmeg",
+    "1 Real Street": "88 Chesterfield Row",
+    "1 Real St": "88 Chesterfield Row",
+    "410-555-9999": "443-555-0182",
+    "(410) 555-9999": "(443) 555-0182",
+    "jane@example.org": "marcus.webb@example.com"
+  }
+}

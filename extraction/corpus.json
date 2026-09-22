@@ -1,0 +1,34 @@
+{
+  "_what": "The labelled corpus: one entry per answer key, pointing at the real document in private/. private/ is gitignored; this manifest is not, and it carries no PII.",
+  "_owner_ids": "Fixture owners from sql/seed/fixture.sql. Loading a run into the test database attaches each document to the household the key describes.",
+  "documents": [
+    {
+      "document_id": "bettervet_rabies_2024-02-29",
+      "key": "answer_keys/bettervet_rabies_2024-02-29.key.json",
+      "file": "../private/Certificate___Rabies_50351.pdf",
+      "owner_id": "00000000-0000-0000-0000-00000000a001",
+      "dog_id": "00000000-0000-0000-0000-00000000d001"
+    },
+    {
+      "document_id": "docside_invoice_2025-04-04",
+      "key": "answer_keys/docside_invoice_2025-04-04.key.json",
+      "file": "../private/Jaddi_AVIEB9D1749.PDF",
+      "owner_id": "00000000-0000-0000-0000-00000000a001",
+      "dog_id": "00000000-0000-0000-0000-00000000d001"
+    },
+    {
+      "document_id": "docside_email_2026-06-09",
+      "key": "answer_keys/docside_email_2026-06-09.key.json",
+      "file": "../private/Yahoo Mail Document_ Vaccination Records for Jaddi _ Jason Williams(1).PDF",
+      "owner_id": "00000000-0000-0000-0000-00000000a001",
+      "dog_id": "00000000-0000-0000-0000-00000000d001"
+    },
+    {
+      "document_id": "family_pet_hosp_petly_2026-06-09",
+      "key": "answer_keys/family_pet_hosp_rabies_2026-06-09.key.json",
+      "file": "../private/IMG_20260818_164311.jpg",
+      "owner_id": "00000000-0000-0000-0000-00000000a002",
+      "dog_id": "00000000-0000-0000-0000-00000000d003"
+    }
+  ]
+}

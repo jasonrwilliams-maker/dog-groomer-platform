@@ -1,4 +1,4 @@
-# Answer Key Contract — v3
+# Answer Key Contract — v4.1
 
 Shared contract for every hand-labelled extraction answer key. Read this before
 writing a new key; keys are only comparable to each other if they agree on this.
@@ -7,7 +7,8 @@ writing a new key; keys are only comparable to each other if they agree on this.
 
 ## The one rule
 
-**`expected` is canonical and is compared. Everything else is documentation.**
+**`expected` is canonical and is compared. So is `also_accept`. Everything else
+is documentation.**
 
 Every key emits an identical `expected` shape — same keys, same nesting, `null`
 where the page carries nothing. The harness diffs a model run against `expected`
@@ -124,10 +125,15 @@ holds it.
     },
     "line_items": [               // ALWAYS an array, even for one vaccination
       {
-        "n": 1,
+        "n": 1,                   // 1-based position on the page
         "term": "verbatim from the page",
-        "administered_on": "YYYY-MM-DD | null",
+        "source_region": null,    // where on the page: services_billed, reminders, ...
+                                  // emitted for the reviewer, NOT compared
+        "administered_on_raw": null,  // as printed: "04-04-25", "Oct 15, 2025"
+        "administered_on": "YYYY-MM-DD | null",  // only when the printed form is a full date
+        "expires_on_raw": null,       // as printed: "03-28" is a month, and stays here
         "expires_on": "YYYY-MM-DD | null",
+        "status_raw": null,           // a status word printed on the row: "Active"
         "lot_serial_number": null,
         "vaccine_manufacturer": null,
         "veterinarian_name": null,
@@ -140,6 +146,13 @@ holds it.
 }
 ```
 
+**Raw and ISO are two slots on purpose.** The invoice's reminder column prints
+`03-28`. That is a month, and `expires_on` is a day. The model puts `03-28` in
+`expires_on_raw` and leaves `expires_on` null; nothing downstream is allowed to
+supply the 28th, or the 1st, or the last of the month. The `_raw` slot is what
+makes the null honest rather than lossy: the page's fact is retained, and the
+day it does not state is not invented.
+
 `tag_number` appears twice on purpose. A rabies tag sits in the vaccination block
 on a certificate and in the patient header on a portal summary. The same fact
 lives in different places in different formats, so the shape carries both slots
@@ -149,12 +162,51 @@ rather than forcing one layout's assumptions onto every other.
 
 ---
 
+## Transcription rules the shape alone does not settle
+
+Each of these was settled by a disagreement between a key and a model run, and
+each is decided in favour of what the page prints.
+
+**A fact printed twice in two forms.** The BetterVet certificate prints its
+phone as `(888) 788-1165` in the header and `888-788-1165` in the clinic block.
+Both are faithful. `expected` carries one; `also_accept` carries the others,
+keyed by the same dotted path:
+
+```jsonc
+"also_accept": {
+  "clinic.phone": ["(888) 788-1165"]
+}
+```
+
+`also_accept` is for *the same fact in another printed form* — never for a
+null, and never for a value the page does not print. It is not a tolerance
+setting.
+
+**An address printed over several lines** is joined into `address_raw` with a
+single space, and no punctuation the page does not print. `1705 Bank St.` /
+`Baltimore, MD 21231` becomes `1705 Bank St. Baltimore, MD 21231`.
+
+**The owner's address is always split.** The owner block has no `address_raw`
+slot, so there is nowhere to put an unsplit address. Street and number go in
+`address_line1`; a unit designator goes in `address_line2` exactly as printed
+(`#511`, `Apt 511`); city, state and postal code go in their own slots — even
+when the page prints them as one run-on line. Splitting a run-on line is a
+parse, and it is the only parse the contract asks the model to make.
+
+**A line item is a row of one of the page's lists** — billed services,
+vaccinations, reminders, records — clinical or not. A discount line is a row.
+A reference number beside a field (`Invoiced 751512`), a heading, a footer and
+a sentence of prose are not rows, however they are laid out.
+
+---
+
 ## The rest of a key
 
 | Block | Compared? | Purpose |
 |---|---|---|
 | `meta` | no | provenance, format family, capture quality, PII substitutions |
 | `expected` | **yes** | Layer 1. The canonical shape above |
+| `also_accept` | **yes** | equally faithful transcriptions of a fact printed more than once |
 | `absent` | **yes** | three categories of nothing — see below |
 | `must_not_produce` | **yes** | specific wrong values, each tagged with its layer |
 | `resolution` | yes, separately | Layer 2. term → `vaccine_type`, and compound-token splits |
@@ -185,11 +237,50 @@ that is the empirical argument for the human confirmation step.
 
 1. Copy the `expected` skeleton above verbatim. Do not prune keys the page lacks —
    `null` is the assertion.
-2. Transcribe every line on the page into `line_items`, including the ones that
-   are obviously irrelevant. Seven of eleven rows on the Petly page produce
-   nothing, and that ratio is the most useful thing that key measures.
-3. Fill the three `absent` categories.
-4. Write `must_not_produce` last, by asking what the *nearest wrong answer* is for
+2. Transcribe every row of the page's lists into `line_items`, including the
+   ones that are obviously irrelevant. Seven of eleven rows on the Petly page
+   produce nothing, and that ratio is the most useful thing that key measures.
+   A reference number or a footer is not a row — see the transcription rules.
+3. Where the page prints a fact twice in two forms, put one in `expected` and
+   the others in `also_accept`.
+4. Fill the three `absent` categories.
+5. Write `must_not_produce` last, by asking what the *nearest wrong answer* is for
    each field — the value a careful reader could reach for and be wrong.
-5. Anonymise as you go, and preserve the relationships you intend to test.
-   Two households need two surnames.
+6. Anonymise as you go, and preserve the relationships you intend to test.
+   Two households need two surnames. Every substitution you make gets a line
+   in `private/pii_map.json` (real value -> pseudonym), or the harness will
+   score the model's correct read of the real page as wrong. See
+   `pii_map.example.json`.
+
+---
+
+## Changes from v3
+
+- `line_items[]` gains `source_region`, `administered_on_raw`, `expires_on_raw`
+  and `status_raw`. The Doc Side keys already carried them; the contract now
+  says so. Fourteen fields per row including `n`.
+- `source_region` is emitted and not compared.
+- Every key now declares `"_contract": "answer_key_contract.md v4 …"` as its
+  first key, and the harness refuses a key that does not. The two pre-v4 keys
+  (BetterVet, Petly) were re-keyed to this shape on 2026-09-17 with no value
+  re-labelled; each carries a `meta._migration` note.
+- `must_not_produce.field` uses the same dotted paths as `absent`:
+  `line_items[8].expires_on`, `line_items[].administered_on`, `patient.age_raw`.
+  `any date field` is understood by the harness as every date slot except
+  `document.as_of_date`.
+- The database side of this contract is `sql/16_extraction_line_item.sql`:
+  document-level fields are `extraction_field` rows named by dotted path;
+  each line item is an `extraction_line_item` row with its fields beside it.
+
+---
+
+## Changes from v4
+
+- `also_accept` added as a compared block, for a fact the page prints in more
+  than one form.
+- The four transcription rules above: multi-form facts, multi-line addresses,
+  the owner address split, and what counts as a row. The first model run
+  (2026-09-22) disagreed with the keys on each of them, and in each case the
+  disagreement was the contract's silence, not the model's error.
+- The harness requires every key to declare the same contract version, and
+  refuses to compare a set that disagrees.

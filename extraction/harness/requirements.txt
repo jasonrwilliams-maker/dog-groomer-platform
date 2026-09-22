@@ -1,0 +1,4 @@
+# 1.x: messages.create() is unchanged, but sampling parameters were removed
+# from the message methods, which is why extract.py passes no temperature.
+anthropic>=1.0
+psycopg[binary]>=3.2
