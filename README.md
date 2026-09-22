@@ -4,7 +4,7 @@ A system of record for a small grooming practice, with the business rules
 enforced **in the database** rather than in the application.
 
 Fourteen numbered rules, each with a dedicated error code, each proven by a test
-that asserts the *refusal* — not the happy path. 104 assertions, all passing.
+that asserts the *refusal* — not the happy path. 135 assertions, all passing.
 How strictly each groom-time rule is enforced (block, warn, or off) is itself a
 row of data, changed by `UPDATE` and recorded in the audit log — not a migration.
 
@@ -46,11 +46,14 @@ that extracts cleanly. Anyone can demo a clean extraction.
 
 | Component | State |
 |---|---|
-| Schema | Frozen — 43 tables, 17 enum types, 27 functions, 25 triggers, 5 views |
+| Schema | Frozen — sections 0–14 in one file; sections 15–16 follow as separate files |
 | Business rules | 14, codes `GR001`–`GR014` |
-| Test suite | 12 files, 104 pgTAP assertions, passing |
+| Test suite | 14 files, 135 pgTAP assertions, passing |
+| Document vocabulary (§15) | 29 rulings seeded from the labelled corpus; `resolve_term()` fails closed |
+| Extraction line items (§16) | One row per printed line; review views; the shape the harness loads |
+| Extraction harness | Built — scores a model run against the answer keys; self-check passing |
+| First model run | Not yet made — needs an API key in `.env` |
 | Seed migration | Not started — ~150 template × tier × zone rows |
-| Document extraction | Not started |
 | API / frontend | Not started |
 
 ---
@@ -62,11 +65,26 @@ Requires Docker Desktop.
 ```bash
 docker compose up -d --build --wait
 docker compose exec db psql -U postgres -d grooming_test -v ON_ERROR_STOP=1 -f sql/grooming_platform_schema.sql
+docker compose exec db psql -U postgres -d grooming_test -v ON_ERROR_STOP=1 -f sql/15_document_term.sql
+docker compose exec db psql -U postgres -d grooming_test -v ON_ERROR_STOP=1 -f sql/16_extraction_line_item.sql
 docker compose exec db psql -U postgres -d grooming_test -f sql/seed/fixture.sql
 docker compose exec db pg_prove -U postgres -d grooming_test tests/*.sql
 ```
 
-Expected: `Files=12, Tests=104, Result: PASS`.
+Expected: `Files=14, Tests=135, Result: PASS`.
+
+The SQL loads in section order. `grooming_platform_schema.sql` is sections 0–14;
+each later section is its own numbered file, and a file's header carries the
+same number. Tests are numbered independently, one file per rule family.
+
+The extraction harness runs as a second container, on demand:
+
+```bash
+docker compose run --rm harness selfcheck
+```
+
+See [`extraction/harness/README.md`](extraction/harness/README.md) for the
+rest — a model run needs an API key in `.env`.
 
 `--wait` blocks until Postgres reports healthy. Without it the schema load races
 container startup.
@@ -89,15 +107,17 @@ overrides) and recorded in *long form* (one fully resolved row per body zone, wi
 lengths frozen at the moment of the cut). The step between them walks a four-level
 precedence ladder.
 
-**Compliance** — documents, LLM extractions, vaccination records, record requests,
-and a per-dog-per-vaccine projection of compliance state.
+**Compliance** — documents, LLM extractions and their line items, the document
+vocabulary that resolves a printed term to a vaccine, vaccination records, record
+requests, and a per-dog-per-vaccine projection of compliance state.
 
 **Governance** — an append-only audit log and retention rules.
 
 Entity-relationship diagrams are in [`reference/`](reference/); the normative
 specification is [`reference/resolution_precedence.md`](reference/resolution_precedence.md).
-The extraction subsystem — its ingestion flow and the answer-key contract that
-governs its labelled evaluation set — is in [`extraction/`](extraction/).
+The extraction subsystem — its ingestion flow, the answer-key contract that
+governs its labelled evaluation set, the four keys, and the harness that scores a
+model run against them — is in [`extraction/`](extraction/).
 
 ---
 
@@ -158,6 +178,8 @@ stopped. Every rejection test is paired with the valid case — a rule that reje
 | `10` | Remaining invariants, audit immutability, no expected trigger missing |
 | `11` | Puppy rules — `not_yet_due` compliance and minimum grooming age |
 | `12` | Policy is data: loud failure on a missing key, labels that track the live window, block/warn/off per rule, and the regulatory-change audit trail |
+| `13` | The vocabulary fails closed: typography collapses, cadence words do not; NULL is a ruling; tracking is configuration, not vocabulary |
+| `14` | A line item is a row and its fields stay fields; the review queue empties itself; a corrected term is looked up by its correction; a tracked vaccine with one date still creates nothing |
 
 ---
 
@@ -187,22 +209,45 @@ with no paperwork is a finding rather than a missing row.
 
 **`expires_on` is never derived.** See above.
 
+**The model transcribes; the database classifies.** The vision model emits every
+printed line verbatim and never sees the vocabulary. Mapping `DHPP 3YR W/ LEPTO`
+to a vaccine is a lookup against `document_term`, a table a human maintains one
+ruling at a time. A term with no row fails closed to a review queue; a term ruled
+"not a vaccine" is a row with a NULL, which is a different fact from no row at all.
+The alternative — a prompt that enumerates synonyms — is a parser that has to be
+re-edited for every practice, with no audit trail.
+
+**A line item is a row; its fields are still fields.** `extraction_line_item`
+holds position and provenance; the values live in `extraction_field` keyed by
+line item, so `correction_action` stays per field. The hallucination case on
+this corpus is one invented `expires_on` on one row, and a per-row review state
+would score that as a bad row and lose which field it was.
+
 ---
 
 ## Roadmap
 
-1. Seed migration — the template × tier × zone mapping
-2. Document extraction pipeline — LLM reads certificates and invoices; a human
-   confirms, edits, or removes each field before any record is created
-3. FastAPI backend
-4. Next.js / React / Tailwind / shadcn frontend
+1. **First model run.** Put an API key in `.env`, `docker compose run --rm
+   harness run`, and read the score. The prompt is `extraction/harness/prompt_v1.md`;
+   iterate on it against the four answer keys, not against vibes. Four
+   documents is a small evaluation set — the next most valuable labelling
+   work is a photographed page under bad light, which the corpus lacks.
+2. Layer 3 — the confirmation step. A function that takes a reviewed extraction
+   and writes `vaccination_record` rows for exactly the line items where
+   `v_extraction_line_item.can_create_record` is true, and opens a
+   `record_request` marked `insufficient` for a document that produced none.
+3. Seed migration — the template × tier × zone mapping
+4. FastAPI backend, with the review screen reading `v_extraction_line_item`
+5. Next.js / React / Tailwind / shadcn frontend
 
-The extraction schema is already shaped for honest measurement: raw model responses
+The extraction schema is shaped for honest measurement: raw model responses
 stored unmodified, model and prompt versions as columns, and a per-field
 `correction_action` that distinguishes *unreviewed* from *confirmed* and carves out
 *removed* for values the model produced that are not on the document. Without that
 last state, false positives disappear from error analysis and quietly inflate
-measured accuracy.
+measured accuracy. The harness scores the same three ways the keys assert —
+expected, absent, must-not-produce — and reports the hallucination class
+(*spurious*) as its own column rather than folding it into accuracy.
 
 ---
 

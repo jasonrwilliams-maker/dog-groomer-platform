@@ -15,6 +15,27 @@ services:
       - ./:/repo                    # your repo, visible inside the container
       - ./docker/postgres-init:/docker-entrypoint-initdb.d
       - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d grooming_test"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # The extraction harness. Not started by `docker compose up`; run it on demand
+  # with `docker compose run --rm harness <command>` (see extraction/harness/README.md).
+  harness:
+    build:
+      context: ./extraction/harness
+    profiles: ["harness"]
+    working_dir: /repo/extraction/harness
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/grooming_test
+    volumes:
+      - ./:/repo
+    depends_on:
+      db:
+        condition: service_healthy
 
 volumes:
   pgdata:

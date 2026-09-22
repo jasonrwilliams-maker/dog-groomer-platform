@@ -10,3 +10,7 @@ __pycache__/
 .venv/
 *.pyc
 .DS_Store
+
+# Model runs on private documents: raw responses contain PII, so the whole
+# directory stays out of version control, same reasoning as private/.
+extraction/runs/
