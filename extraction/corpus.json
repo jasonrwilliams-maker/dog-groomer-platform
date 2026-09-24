@@ -29,6 +29,13 @@
       "file": "../private/IMG_20260818_164311.jpg",
       "owner_id": "00000000-0000-0000-0000-00000000a002",
       "dog_id": "00000000-0000-0000-0000-00000000d003"
+    },
+    {
+      "document_id": "family_pet_hosp_petly_photo_2026-06-09",
+      "key": "answer_keys/family_pet_hosp_petly_photo_2026-06-09.key.json",
+      "file": "../private/20260923_114334.jpg",
+      "owner_id": "00000000-0000-0000-0000-00000000a002",
+      "dog_id": "00000000-0000-0000-0000-00000000d003"
     }
   ]
 }

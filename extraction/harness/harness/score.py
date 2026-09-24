@@ -131,7 +131,7 @@ def score_document(key: dict, output: dict | None, document_id: str,
 
     # --- 2. absent ----------------------------------------------------------------
     absent = key.get("absent") or {}
-    for category in ("labeled_but_blank", "unfilled_form_fields", "not_present"):
+    for category in K.ABSENT_CATEGORIES:
         for entry in absent.get(category) or []:
             path = entry.get("field")
             if not path:

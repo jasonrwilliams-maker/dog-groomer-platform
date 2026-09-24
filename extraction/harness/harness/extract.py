@@ -41,14 +41,23 @@ def new_run_dir() -> Path:
     return d
 
 
-def content_block(path: Path) -> dict:
+def content_block(path: Path) -> tuple[dict, dict | None]:
+    """The block sent to the API, and what was done to get it there. A photo
+    goes through prep.prepare_image first: turned upright, EXIF and GPS
+    stripped, downscaled. A PDF goes as it is."""
     media = MEDIA_TYPES.get(path.suffix.lower())
     if media is None:
         raise ValueError(f"{path.name}: unsupported type {path.suffix!r}. "
                          "HEIC needs converting to JPEG first (the schema allows it; the API does not).")
-    data = base64.standard_b64encode(path.read_bytes()).decode("ascii")
+    if media == "application/pdf":
+        raw, prep_notes = path.read_bytes(), None
+    else:
+        from .prep import prepare_image
+        prepared = prepare_image(path)
+        raw, media, prep_notes = prepared.data, prepared.media_type, prepared.notes
+    data = base64.standard_b64encode(raw).decode("ascii")
     kind = "document" if media == "application/pdf" else "image"
-    return {"type": kind, "source": {"type": "base64", "media_type": media, "data": data}}
+    return {"type": kind, "source": {"type": "base64", "media_type": media, "data": data}}, prep_notes
 
 
 def parse_json(text: str) -> tuple[dict | None, str | None]:
@@ -76,6 +85,7 @@ def extract_one(doc: CorpusDoc, prompt_path: Path, model: str, run_dir: Path, ma
     client = anthropic.Anthropic()
     system = prompt_path.read_text()
     pv = prompt_version(prompt_path)
+    block, prep_notes = content_block(doc.file_path)
 
     resp = client.messages.create(
         model=model,
@@ -89,7 +99,7 @@ def extract_one(doc: CorpusDoc, prompt_path: Path, model: str, run_dir: Path, ma
         messages=[{
             "role": "user",
             "content": [
-                content_block(doc.file_path),
+                block,
                 {"type": "text", "text": "Transcribe this document into the JSON shape. Return the JSON object only."},
             ],
         }],
@@ -103,6 +113,7 @@ def extract_one(doc: CorpusDoc, prompt_path: Path, model: str, run_dir: Path, ma
         "sha256": hashlib.sha256(doc.file_path.read_bytes()).hexdigest(),
         "byte_size": doc.file_path.stat().st_size,
         "mime_type": MEDIA_TYPES[doc.file_path.suffix.lower()],
+        "prepared": prep_notes,            # None for a PDF; what prep.py did to a photo
         "model_requested": model,
         "model_name": resp.model,          # what actually answered
         "prompt_version": pv,

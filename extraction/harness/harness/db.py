@@ -46,7 +46,7 @@ class LineItemPlan:
 @dataclass
 class DocumentPlan:
     document_id: str                              # the corpus id, for reporting
-    owner_id: str
+    owner_id: str | None
     dog_id: str | None
     document: dict                                # columns for `document`
     extraction: dict                              # columns for `extraction`
@@ -132,7 +132,13 @@ def load_run(run_dir: Path, corpus: dict[str, K.CorpusDoc], keys: dict[str, dict
              scores: dict[str, S.DocScore], ruler: str, pii_entries: int) -> list[str]:
     """Returns one line per document, and one for the evaluation."""
     plans = plan_run(run_dir, corpus, keys)
-    lines = []
+    # A document can be labelled and scored before its household exists in the
+    # fixture; it cannot be loaded, because document.owner_id is NOT NULL.
+    lines = [f"{p.document_id:<38} skipped — no household in the fixture (corpus.json owner_id is null)"
+             for p in plans if not p.owner_id]
+    plans = [p for p in plans if p.owner_id]
+    if not plans:
+        return lines + ["nothing to load"]
     with connect() as conn, conn.cursor() as cur:
         cur.execute("SET search_path = groom, public")
         extraction_ids = {}

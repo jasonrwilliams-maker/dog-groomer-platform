@@ -49,7 +49,7 @@ class CorpusDoc:
     document_id: str
     key_path: Path
     file_path: Path
-    owner_id: str
+    owner_id: str | None   # None: labelled and scorable, but not loadable until the fixture has the household
     dog_id: str | None
 
 
@@ -61,14 +61,20 @@ def load_corpus() -> list[CorpusDoc]:
             document_id=d["document_id"],
             key_path=(EXTRACTION_DIR / d["key"]).resolve(),
             file_path=(EXTRACTION_DIR / d["file"]).resolve(),
-            owner_id=d["owner_id"],
+            owner_id=d.get("owner_id"),
             dog_id=d.get("dog_id"),
         ))
     return docs
 
 
-CONTRACT_VERSION = "v4.1"
+CONTRACT_VERSION = "v4.2"
 _CONTRACT_RE = re.compile(r"answer_key_contract\.md (v4(?:\.\d+)?)\b")
+
+# The four kinds of nothing (contract, "Four kinds of absence"). Every one is
+# scored the same way — the model must emit null there — and reported by name,
+# because inventing a value the clinic left blank is a different mistake from
+# guessing at one the photo made unreadable.
+ABSENT_CATEGORIES = ("labeled_but_blank", "unfilled_form_fields", "not_present", "illegible")
 
 # The blocks the harness compares. Everything else in a key is documentation,
 # and editing documentation must not change the ruler.

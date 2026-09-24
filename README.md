@@ -4,7 +4,7 @@ A system of record for a small grooming practice, with the business rules
 enforced **in the database** rather than in the application.
 
 Fourteen numbered rules, each with a dedicated error code, each proven by a test
-that asserts the *refusal* — not the happy path. 135 assertions, all passing.
+that asserts the *refusal* — not the happy path. 163 assertions, all passing.
 How strictly each groom-time rule is enforced (block, warn, or off) is itself a
 row of data, changed by `UPDATE` and recorded in the audit log — not a migration.
 
@@ -48,11 +48,13 @@ that extracts cleanly. Anyone can demo a clean extraction.
 |---|---|
 | Schema | Frozen — sections 0–14 in one file; sections 15–16 follow as separate files |
 | Business rules | 14, codes `GR001`–`GR014` |
-| Test suite | 14 files, 135 pgTAP assertions, passing |
+| Test suite | 15 files, 163 pgTAP assertions, passing |
 | Document vocabulary (§15) | 29 rulings seeded from the labelled corpus; `resolve_term()` fails closed |
 | Extraction line items (§16) | One row per printed line; review views; the shape the harness loads |
 | Extraction harness | Built — scores a model run against the answer keys; self-check passing |
-| First model run | Not yet made — needs an API key in `.env` |
+| Photo preparation | Built — a photo is turned upright, stripped of EXIF and GPS, and downscaled before it is sent |
+| Labelling & review tool | Built — Streamlit; writes answer keys from a form, and reconciles a run against its key |
+| Model runs | Two runs of the four-document corpus, 2026-09-22 |
 | Seed migration | Not started — ~150 template × tier × zone rows |
 | API / frontend | Not started |
 
@@ -60,24 +62,43 @@ that extracts cleanly. Anyone can demo a clean extraction.
 
 ## Running it
 
-Requires Docker Desktop.
+Requires Docker Desktop, and a `.env` copied from `.env.example`.
 
 ```bash
 docker compose up -d --build --wait
+```
+
+That starts two containers: the database, and the labelling and review tool at
+http://localhost:8501. Everything else is on that page:
+
+- **Instructions** — the whole workflow, step by step.
+- **Documents** — what is in `private/`, and where each one stands.
+- **Label** — write a document's answer key from a form beside the page.
+- **Review** — a model run against its key, one disagreement at a time.
+- **Run & test** — set up or reset the database, run the pgTAP suite, send
+  documents to the model, re-score a run, load a run into the database.
+
+On a fresh database, open **Run & test → Database → Set up the database**
+first. The tool listens on this machine only, because it shows the real pages.
+
+### The same thing from a terminal
+
+```bash
 docker compose exec db psql -U postgres -d grooming_test -v ON_ERROR_STOP=1 -f sql/grooming_platform_schema.sql
 docker compose exec db psql -U postgres -d grooming_test -v ON_ERROR_STOP=1 -f sql/15_document_term.sql
 docker compose exec db psql -U postgres -d grooming_test -v ON_ERROR_STOP=1 -f sql/16_extraction_line_item.sql
+docker compose exec db psql -U postgres -d grooming_test -v ON_ERROR_STOP=1 -f sql/17_extraction_evaluation.sql
 docker compose exec db psql -U postgres -d grooming_test -f sql/seed/fixture.sql
 docker compose exec db pg_prove -U postgres -d grooming_test tests/*.sql
 ```
 
-Expected: `Files=14, Tests=135, Result: PASS`.
+Expected: `Files=15, Tests=163, Result: PASS`.
 
 The SQL loads in section order. `grooming_platform_schema.sql` is sections 0–14;
 each later section is its own numbered file, and a file's header carries the
 same number. Tests are numbered independently, one file per rule family.
 
-The extraction harness runs as a second container, on demand:
+The extraction harness also runs as its own container, on demand:
 
 ```bash
 docker compose run --rm harness selfcheck
@@ -227,11 +248,10 @@ would score that as a bad row and lose which field it was.
 
 ## Roadmap
 
-1. **First model run.** Put an API key in `.env`, `docker compose run --rm
-   harness run`, and read the score. The prompt is `extraction/harness/prompt_v1.md`;
-   iterate on it against the four answer keys, not against vibes. Four
-   documents is a small evaluation set — the next most valuable labelling
-   work is a photographed page under bad light, which the corpus lacks.
+1. **The held-out photo.** A phone photo of a certificate, taken before the
+   tool or prompt v2 had been seen, is in `private/`. Label it in the tool
+   *before* running the model on it, so it stays a test rather than one more
+   document tuned against. Then run it and reconcile on the Review screen.
 2. Layer 3 — the confirmation step. A function that takes a reviewed extraction
    and writes `vaccination_record` rows for exactly the line items where
    `v_extraction_line_item.can_create_record` is true, and opens a

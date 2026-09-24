@@ -16,6 +16,18 @@ docker compose run --rm harness load  runs/<stamp>   # load a run into the datab
 `run` needs `ANTHROPIC_API_KEY` and `EXTRACTION_MODEL` in `.env` (see
 `.env.example`). The other three need nothing.
 
+## Photos are prepared before they are sent
+
+A PDF is sent as it is. A photo goes through `harness/prep.py` first:
+turned upright (a phone stores the pixels sideways and records the turn as a
+flag the API does not read), stripped of EXIF — including GPS, which puts the
+shop's or the owner's location in every counter photo — and downscaled to
+2576 px on the long edge, the most Sonnet 5 reads. A 4000 × 3000 phone JPEG is
+over the API's per-image limit without this. A clean image with nothing to
+fix is sent byte for byte, so older runs stay comparable. What was done is
+recorded in the run file as `prepared`, and the labelling tool shows the page
+through the same function, so the human labels the image the model was sent.
+
 ## What a run produces
 
 `../runs/<UTC stamp>/<document_id>.json`, one per document: the raw response
@@ -95,7 +107,11 @@ household it belongs to.
 ## Adding a document
 
 1. Put the file in `private/`.
-2. Write its key per `../answer_key_contract.md` (copy the `expected`
-   skeleton verbatim; `null` is the assertion).
-3. Add an entry to `../corpus.json`.
-4. `selfcheck` — the new key must score perfectly against itself.
+2. Label it on the **Label** screen of the review tool (`../review/`) — before
+   any run, so it is a real test. The tool writes the key per
+   `../answer_key_contract.md` and the `../corpus.json` entry, and refuses to
+   publish a key that does not score perfectly against itself. Writing the
+   JSON by hand still works.
+3. `selfcheck` — the new key must score perfectly against itself, and every
+   key must survive the labelling tool byte for byte (check 6).
+4. `run --doc <document_id>`, then reconcile it on the **Review** screen.

@@ -2,3 +2,5 @@
 # from the message methods, which is why extract.py passes no temperature.
 anthropic>=1.0
 psycopg[binary]>=3.2
+# prep.py: turns a photo upright, strips EXIF and GPS, downscales it before it is sent.
+pillow>=11

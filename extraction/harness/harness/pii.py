@@ -10,8 +10,8 @@ The map lives beside the documents in private/pii_map.json, gitignored with
 them. It is applied to the MODEL'S OUTPUT, never to the keys, as plain
 substring replacement, longest real value first:
 
-    'Mr. Jason Williams'       -> 'Mr. Marcus Webb'
-    '410 W Lombard St #511'    -> '88 Chesterfield Row #511'
+    'Mr. Jane Doe'             -> 'Mr. Marcus Webb'
+    '1 Real St #5'             -> '88 Chesterfield Row #5'
 
 The second line is the point of substring replacement over whole-value
 replacement. The model left the unit on the street line; after mapping it
@@ -35,7 +35,7 @@ class PiiMap:
         bad = [k for k, v in replacements.items() if not k or not isinstance(v, str)]
         if bad:
             raise ValueError(f"pii_map: empty key or non-string value for {bad!r}")
-        # Longest first, so 'Mr. Jason Williams' is not pre-empted by 'Jason'.
+        # Longest first, so 'Mr. Jane Doe' is not pre-empted by 'Jane'.
         self._pairs = sorted(replacements.items(), key=lambda kv: len(kv[0]), reverse=True)
         self.source = source
 

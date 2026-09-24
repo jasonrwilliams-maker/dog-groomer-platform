@@ -1,4 +1,4 @@
-# Answer Key Contract — v4.1
+# Answer Key Contract — v4.2
 
 Shared contract for every hand-labelled extraction answer key. Read this before
 writing a new key; keys are only comparable to each other if they agree on this.
@@ -207,13 +207,13 @@ a sentence of prose are not rows, however they are laid out.
 | `meta` | no | provenance, format family, capture quality, PII substitutions |
 | `expected` | **yes** | Layer 1. The canonical shape above |
 | `also_accept` | **yes** | equally faithful transcriptions of a fact printed more than once |
-| `absent` | **yes** | three categories of nothing — see below |
+| `absent` | **yes** | four categories of nothing — see below |
 | `must_not_produce` | **yes** | specific wrong values, each tagged with its layer |
 | `resolution` | yes, separately | Layer 2. term → `vaccine_type`, and compound-token splits |
 | `schema_outcome` | yes, separately | Layer 3. rows that should exist once confirmed |
 | `annotations` | no | anything a future reader needs and a diff does not |
 
-### Three kinds of absence
+### Four kinds of absence
 
 - **`labeled_but_blank`** — the format prints the label and the clinic left it
   empty. Says something about the dog: they were asked and had no answer.
@@ -223,6 +223,14 @@ a sentence of prose are not rows, however they are laid out.
   the trap, not a licence.
 - **`not_present`** — the format does not carry the field at all. Says nothing
   about the dog, only about the layout.
+- **`illegible`** — the page prints something here and the labeller cannot read
+  it: glare, blur, a fold, a stamp over the ink. Says nothing about the dog or
+  the layout, only about this capture. `expected` is `null`, and a value from
+  the model is a violation like any other absence — a reading no human can
+  check is a guess, and a guessed vaccination date is the failure this system
+  exists to refuse. Record what *is* visible in the entry's `_note`
+  (`"03/1_/2025 — second digit of the day under glare"`), so a better copy of
+  the page can settle it.
 
 ### `must_not_produce`
 
@@ -284,3 +292,15 @@ that is the empirical argument for the human confirmation step.
   disagreement was the contract's silence, not the model's error.
 - The harness requires every key to declare the same contract version, and
   refuses to compare a set that disagrees.
+
+---
+
+## Changes from v4.1
+
+- `absent` gains a fourth category, `illegible`, for the first photographed
+  page in the corpus. The other three describe the document; this one
+  describes the capture, and a rescan can clear it.
+- Keys are now written by the labelling tool (`extraction/review/`), which
+  saves the same bytes Python's `json.dumps(indent=2, ensure_ascii=False)`
+  produces, so a key edited in the tool diffs only where it changed. Hand
+  editing still works; the self-check is the arbiter either way.

@@ -50,6 +50,10 @@ def cmd_selfcheck(args) -> int:
     4. also_accept: a listed alternate is correct; an unlisted one is wrong.
     5. The ruler version moves when a compared block or the map moves, and
        does not move when only an annotation does.
+    6. The labelling tool: every key survives a pass through every editor
+       byte for byte; a moved row takes its traps and absences with it; an
+       invented day next to a printed month is flagged; an illegible slot
+       with a model value is a violation.
     """
     corpus, keys = _corpus_and_keys()
     ok = True
@@ -135,11 +139,69 @@ def cmd_selfcheck(args) -> int:
         "an edited annotation is the same ruler":            base == K.ruler_version(noted, "map-a"),
     })
 
+    print("6. The labelling tool (keyform)")
+    from . import keyform as F
+    for doc_id, key in keys.items():
+        original = F.dumps(key)
+        k = copy.deepcopy(key)
+        for path in F.DOC_PATHS + [f"line_items[{r['n']}].{f}" for r in F.rows(k) for f in K.LINE_ITEM_FIELDS]:
+            F.set_value(k, path, F.get(k, path))
+            F.set_absence(k, path, F.absence_of(k, path)[0])
+        F.set_row_rules(k, F.row_rules(k))
+        F.set_traps(k, F.trap_table(k))
+        F.set_also_accept(k, F.also_accept_table(k))
+        errs, _ = F.validate(k)
+        ok &= _check({f"{doc_id}: unchanged through every editor, and valid": F.dumps(k) == original and not errs})
+    k = copy.deepcopy(inv)
+    term8 = F.get(k, "line_items[8].term")
+    F.move_row(k, 8, -1)
+    term7_after_move = F.get(k, "line_items[7].term")
+    moved_trap_field = next(t for t in k["must_not_produce"] if t["id"] == 1)["field"]
+    F.move_row(k, 7, +1)
+    k2 = copy.deepcopy(inv)
+    F.insert_row(k2, 3)
+    F.set_value(k2, "line_items[4].term", "a new printed line")
+    ill = copy.deepcopy(inv)
+    F.set_absence(ill, "patient.weight_raw", "illegible")
+    ill_ds = S.score_document(ill, inv_exp, "invoice, weight marked illegible")
+    vocab = F.load_vocabulary()
+    ok &= _check({
+        "moving row 8 up carries its term and trap 1 to row 7":
+            term7_after_move == term8 and moved_trap_field == "line_items[7].expires_on",
+        "moving it back restores the key byte for byte":   F.dumps(k) == F.dumps(inv),
+        "inserting a row renumbers the traps below it":
+            next(t for t in k2["must_not_produce"] if t["id"] == 1)["field"] == "line_items[9].expires_on",
+        "'03-28' does not support 2028-03-28 (an invented day)": F.raw_supports_iso("03-28", "2028-03-28") is False,
+        "'04-04-25' supports 2025-04-04":                         F.raw_supports_iso("04-04-25", "2025-04-04") is True,
+        "'Oct 15, 2025' supports 2025-10-15":                     F.raw_supports_iso("Oct 15, 2025", "2025-10-15") is True,
+        "an illegible slot the model filled is an absent violation":
+            any(a.path == "patient.weight_raw" and a.outcome == "illegible" for a in ill_ds.absent_violations),
+        "review priority reads the database's own rulings: rabies tracked, lepto and a Lyme test lower":
+            (F.row_priority("Rabies Vaccination 3 Yr.", vocab), F.row_priority("Leptospirosis 4- Way Vaccine", vocab),
+             F.row_priority("Canine Lyme Test", vocab)) == (F.PRIORITY_TRACKED, F.PRIORITY_OTHER, F.PRIORITY_OTHER),
+        "a term with no ruling fails closed to one-by-one checking":
+            F.row_priority("Client Info: Rabies Vaccine", vocab) == F.PRIORITY_UNKNOWN,
+        "the normaliser matches sql/15: spacing round '-' and '/', a trailing '.'":
+            F.normalize_term("  Leptospirosis 4 - Way  Vaccine. ") == "leptospirosis 4-way vaccine",
+        "a trap whose wrong value is the key's own value is refused":
+            any("trap 9" in e or "which is the key's own value" in e
+                for e in F.validate(_trap_on_own_value(inv))[0]),
+    })
+
     print()
     print(S.render([damaged]))
     print()
     print("SELFCHECK", "PASSED" if ok else "FAILED")
     return 0 if ok else 1
+
+
+def _trap_on_own_value(key: dict) -> dict:
+    """The mistake the self-check caught twice in the invoice key: a trap
+    pointing at a row whose expected value already IS the wrong value."""
+    k = copy.deepcopy(key)
+    k["must_not_produce"].append({"id": 99, "layer": "extraction", "field": "line_items[2].term",
+                                  "wrong_value": K.strip_annotations(key["expected"])["line_items"][1]["term"]})
+    return k
 
 
 # ------------------------------------------------------------------------ run

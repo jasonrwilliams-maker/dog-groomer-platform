@@ -1,0 +1,8 @@
+# The labelling and review tool. It imports the harness package from
+# ../harness (mounted, not installed), so only the screen's own needs are here.
+streamlit>=1.50
+pandas>=2.2
+# Renders PDF pages to images for the page viewer.
+pymupdf>=1.24
+# prep.py — the same upright / EXIF-stripped / downscaled image the model is sent.
+pillow>=11

@@ -37,5 +37,31 @@ services:
       db:
         condition: service_healthy
 
+  # The labelling and review tool (extraction/review/), and the web front for
+  # every command above: its Run & test screen runs the harness, the schema
+  # load and the pgTAP suite. Starts with `docker compose up -d`; open
+  # http://localhost:8501. It shows the real pages in private/, so it listens
+  # on this machine only.
+  review:
+    build:
+      context: ./extraction
+      dockerfile: review/Dockerfile
+    working_dir: /repo/extraction/review
+    env_file: .env                  # ANTHROPIC_API_KEY and EXTRACTION_MODEL, for model runs
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/grooming_test
+      PGHOST: db                    # psql and pg_prove read these
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: grooming_test
+    ports:
+      - "127.0.0.1:8501:8501"
+    volumes:
+      - ./:/repo
+    depends_on:
+      db:
+        condition: service_healthy
+
 volumes:
   pgdata:
