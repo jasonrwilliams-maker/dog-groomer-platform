@@ -69,7 +69,11 @@ CREATE FUNCTION review_min_observations() RETURNS integer
 -- Evaluation results
 -- -----------------------------------------------------------------------------
 
-CREATE TYPE eval_field_outcome AS ENUM ('correct', 'wrong', 'missed', 'spurious', 'unscored');
+-- 'overconfident': the key reads part of a value — 'Jan 2?, 2027', where ? is
+-- a character printed but not readable — and the model supplied a character
+-- the page does not show. A guessed digit that happens to be right looks
+-- exactly like one that is wrong, so it is its own outcome, not 'correct'.
+CREATE TYPE eval_field_outcome AS ENUM ('correct', 'wrong', 'missed', 'spurious', 'overconfident', 'unscored');
 
 -- 'other_layer': a must_not_produce entry about Layer 2 or 3 — two DHPP
 -- records from one injection — which is the database's score, not the
@@ -133,7 +137,11 @@ CREATE TABLE eval_field_result (
     -- contradicts its own definition cannot be stored — however it was made.
     CONSTRAINT outcome_coherent CHECK (
         (outcome = 'spurious' AND expected_value IS NULL     AND got_value IS NOT NULL)
-     OR (outcome = 'missed'   AND expected_value IS NOT NULL AND got_value IS NULL)
+     -- missed also covers a model more cautious than the page: '?' where the
+     -- key reads a character ('Jan ??, 2027' against 'Jan 2?, 2027').
+     OR (outcome = 'missed'   AND expected_value IS NOT NULL
+                              AND (got_value IS NULL
+                                   OR (position('?' IN got_value) > 0 AND got_value <> expected_value)))
      OR (outcome = 'wrong'    AND expected_value IS NOT NULL AND got_value IS NOT NULL
                               AND expected_value <> got_value AND NOT accepted_alternate)
      OR (outcome = 'correct'  AND NOT accepted_alternate
@@ -141,6 +149,9 @@ CREATE TABLE eval_field_result (
      OR (outcome = 'correct'  AND accepted_alternate
                               AND expected_value IS NOT NULL AND got_value IS NOT NULL
                               AND expected_value <> got_value)
+     OR (outcome = 'overconfident' AND got_value IS NOT NULL AND NOT accepted_alternate
+                              AND (expected_value IS NULL      -- an ISO date beside a partly-read print
+                                   OR (position('?' IN expected_value) > 0 AND expected_value <> got_value)))
      OR (outcome = 'unscored' AND NOT accepted_alternate)
     )
 );
@@ -266,6 +277,7 @@ f AS (
            count(*) FILTER (WHERE f.outcome =  'wrong')     AS wrong,
            count(*) FILTER (WHERE f.outcome =  'missed')    AS missed,
            count(*) FILTER (WHERE f.outcome =  'spurious')  AS spurious,
+           count(*) FILTER (WHERE f.outcome =  'overconfident') AS overconfident,
            count(*) FILTER (WHERE f.outcome <> 'unscored'
                               AND (f.expected_value IS NOT NULL OR f.got_value IS NOT NULL)) AS informative,
            count(*) FILTER (WHERE f.outcome = 'correct'
@@ -296,7 +308,8 @@ SELECT r.id AS eval_run_id,
        coalesce(t.traps_hit, 0)         AS traps_hit,
        coalesce(t.traps_scorable, 0)    AS traps_scorable,
        coalesce(t.traps_other_layer, 0) AS traps_other_layer,
-       f.pii_mapped, f.accepted_alternates
+       f.pii_mapped, f.accepted_alternates,
+       f.overconfident
 FROM eval_run r
 LEFT JOIN d ON d.eval_run_id = r.id
 LEFT JOIN f ON f.eval_run_id = r.id
@@ -320,11 +333,12 @@ SELECT l.model_name,
        l.prompt_version,
        f.field_key,
        count(*) FILTER (WHERE f.expected_value IS NOT NULL OR f.got_value IS NOT NULL) AS observations,
-       count(*) FILTER (WHERE f.outcome IN ('wrong', 'missed', 'spurious'))             AS errors,
+       count(*) FILTER (WHERE f.outcome IN ('wrong', 'missed', 'spurious', 'overconfident')) AS errors,
        count(*) FILTER (WHERE f.outcome = 'spurious')                                  AS spurious,
-       round(count(*) FILTER (WHERE f.outcome IN ('wrong', 'missed', 'spurious'))::numeric
+       round(count(*) FILTER (WHERE f.outcome IN ('wrong', 'missed', 'spurious', 'overconfident'))::numeric
              / NULLIF(count(*) FILTER (WHERE f.expected_value IS NOT NULL OR f.got_value IS NOT NULL), 0),
-             3) AS error_rate
+             3) AS error_rate,
+       count(*) FILTER (WHERE f.outcome = 'overconfident')                             AS overconfident
 FROM latest l
 JOIN eval_document_result d ON d.eval_run_id = l.id
 JOIN eval_field_result    f ON f.eval_document_result_id = d.id
