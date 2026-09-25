@@ -1,9 +1,10 @@
 -- Evaluation is stored honestly, and the review report says why.
 --
 -- The fixture is the invoice's worst case: a tracked rabies reminder where the
--- model supplied a day to '03-28'. can_create_record says yes — both dates are
--- present — and nothing in sections 7, 15 or 16 can tell an invented day from a
--- printed one. This file proves the review report can.
+-- model supplied a day to '03-28'. Both dates are present, so the row is a
+-- record candidate — and nothing in sections 7, 15 or 16 can tell an invented
+-- day from a printed one. Section 16 holds it back until a human has reviewed
+-- it; this file proves the review report says which date to look at first.
 --
 -- Eight things are proven:
 --   1. field_key is one derivation on both sides, and generated.
@@ -12,8 +13,8 @@
 --      a term nobody has ruled on. Each is high. A field with none is low —
 --      including every field on a tracked row that cannot become a record.
 --   3. The review summary counts what a groomer needs first: rows, tracked
---      rows, records ready, how many of those rest on a suspect date, records
---      blocked, unmapped terms.
+--      rows, records ready, records waiting on review and how many of those
+--      rest on a suspect date, records blocked, unmapped terms.
 --   4. An evaluation result that contradicts the scorer's own vocabulary
 --      cannot be stored, nor can a duplicate scoring, nor an evaluation of an
 --      extraction some other prompt produced.
@@ -122,11 +123,11 @@ SELECT results_eq(
 
 -- --- 3. The report header ------------------------------------------------------------
 SELECT results_eq(
-  $$ SELECT line_items, tracked_rows, records_ready, records_on_suspect_dates, tracked_rows_blocked,
-            unmapped_terms, high
+  $$ SELECT line_items, tracked_rows, records_ready, records_awaiting_review, records_on_suspect_dates,
+            tracked_rows_blocked, unmapped_terms, high
        FROM v_extraction_review_summary WHERE extraction_id = '00000000-0000-0000-0000-0000000f2002' $$,
-  $$ VALUES (4::bigint, 2::bigint, 1::bigint, 1::bigint, 1::bigint, 1::bigint, 5::bigint) $$,
-  'One record ready, and the header says it rests on a suspect date; one tracked row blocked');
+  $$ VALUES (4::bigint, 2::bigint, 0::bigint, 1::bigint, 1::bigint, 1::bigint, 1::bigint, 5::bigint) $$,
+  'Nothing ready before review; one record waiting, and the header says it rests on a suspect date; one tracked row blocked');
 
 -- --- 4. Storing an evaluation, and what it refuses -------------------------------------
 INSERT INTO eval_run (id, run_label, model_name, model_version, prompt_version,

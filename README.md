@@ -4,7 +4,7 @@ A system of record for a small grooming practice, with the business rules
 enforced **in the database** rather than in the application.
 
 Fourteen numbered rules, each with a dedicated error code, each proven by a test
-that asserts the *refusal* — not the happy path. 163 assertions, all passing.
+that asserts the *refusal* — not the happy path. 171 assertions, all passing.
 How strictly each groom-time rule is enforced (block, warn, or off) is itself a
 row of data, changed by `UPDATE` and recorded in the audit log — not a migration.
 
@@ -48,7 +48,7 @@ that extracts cleanly. Anyone can demo a clean extraction.
 |---|---|
 | Schema | Frozen — sections 0–14 in one file; sections 15–16 follow as separate files |
 | Business rules | 14, codes `GR001`–`GR014` |
-| Test suite | 15 files, 163 pgTAP assertions, passing |
+| Test suite | 15 files, 171 pgTAP assertions, passing |
 | Document vocabulary (§15) | 29 rulings seeded from the labelled corpus; `resolve_term()` fails closed |
 | Extraction line items (§16) | One row per printed line; review views; the shape the harness loads |
 | Extraction harness | Built — scores a model run against the answer keys; self-check passing |
@@ -92,7 +92,7 @@ docker compose exec db psql -U postgres -d grooming_test -f sql/seed/fixture.sql
 docker compose exec db pg_prove -U postgres -d grooming_test tests/*.sql
 ```
 
-Expected: `Files=15, Tests=163, Result: PASS`.
+Expected: `Files=15, Tests=171, Result: PASS`.
 
 The SQL loads in section order. `grooming_platform_schema.sql` is sections 0–14;
 each later section is its own numbered file, and a file's header carries the
@@ -200,7 +200,8 @@ stopped. Every rejection test is paired with the valid case — a rule that reje
 | `11` | Puppy rules — `not_yet_due` compliance and minimum grooming age |
 | `12` | Policy is data: loud failure on a missing key, labels that track the live window, block/warn/off per rule, and the regulatory-change audit trail |
 | `13` | The vocabulary fails closed: typography collapses, cadence words do not; NULL is a ruling; tracking is configuration, not vocabulary |
-| `14` | A line item is a row and its fields stay fields; the review queue empties itself; a corrected term is looked up by its correction; a tracked vaccine with one date still creates nothing |
+| `14` | A line item is a row and its fields stay fields; the review queue empties itself; a corrected term is looked up by its correction; a tracked vaccine with one date still creates nothing; two dates create nothing either until a human has reviewed every field the record carries |
+| `15` | The review work order names why each field needs a look; nothing is ready before review; evaluation results that contradict the scorer are refused |
 
 ---
 
@@ -254,7 +255,8 @@ would score that as a bad row and lose which field it was.
    document tuned against. Then run it and reconcile on the Review screen.
 2. Layer 3 — the confirmation step. A function that takes a reviewed extraction
    and writes `vaccination_record` rows for exactly the line items where
-   `v_extraction_line_item.can_create_record` is true, and opens a
+   `v_extraction_line_item.can_create_record` is true — both dates present *and*
+   every field the record carries reviewed by a human — and opens a
    `record_request` marked `insufficient` for a document that produced none.
 3. Seed migration — the template × tier × zone mapping
 4. FastAPI backend, with the review screen reading `v_extraction_line_item`

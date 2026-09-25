@@ -15,12 +15,15 @@
 --      'removed' yields NULL, 'edited' yields the human's value.
 --   5. can_create_record is false on every row of this document, for the same
 --      reason test 04 creates no record from the invoice: a tracked vaccine
---      with one date is evidence, not a record.
+--      with one date is evidence, not a record. And two dates are not enough
+--      either: the held-out photo's rabies line, where the model invented an
+--      expiry the page does not print, creates nothing until a human has
+--      reviewed every field the record would carry.
 --   6. Deleting an extraction takes its line items and their fields with it.
 
 BEGIN;
 SET search_path = groom, public;
-SELECT plan(17);
+SELECT plan(22);
 
 -- --- Fixture: the Doc Side email, transcribed ---------------------------------
 INSERT INTO document (id, owner_id, object_key, mime_type, byte_size, sha256,
@@ -172,10 +175,58 @@ INSERT INTO extraction_field (extraction_id, line_item_id, field_name, extracted
   ('00000000-0000-0000-0000-0000000f1002', '00000000-0000-0000-0000-0000000f1102', 'administered_on', '2025-03-08', 'confirmed');
 
 SELECT results_eq(
+  $$ SELECT record_candidate, can_create_record, unreviewed_record_fields FROM v_extraction_line_item
+      WHERE line_item_id = '00000000-0000-0000-0000-0000000f1102' $$,
+  $$ VALUES (true, false, 2::bigint) $$,
+  'Supply the missing date and the row is a candidate — but its term and expiry are still the model''s word');
+
+-- The held-out photo's rabies line, replayed: the page prints when the shot was
+-- given and no expiry at all. The model supplied one anyway, cleanly formatted.
+INSERT INTO extraction_line_item (id, extraction_id, n, page_number, source_region) VALUES
+  ('00000000-0000-0000-0000-0000000f1106', '00000000-0000-0000-0000-0000000f1002', 6, 1, 'vaccinations_table');
+INSERT INTO extraction_field (extraction_id, line_item_id, field_name, extracted_value) VALUES
+  ('00000000-0000-0000-0000-0000000f1002', '00000000-0000-0000-0000-0000000f1106', 'term',                'Rabies Vaccine 3 Yr Canine'),
+  ('00000000-0000-0000-0000-0000000f1002', '00000000-0000-0000-0000-0000000f1106', 'administered_on_raw', 'Oct 15, 2025'),
+  ('00000000-0000-0000-0000-0000000f1002', '00000000-0000-0000-0000-0000000f1106', 'administered_on',     '2025-10-15'),
+  ('00000000-0000-0000-0000-0000000f1002', '00000000-0000-0000-0000-0000000f1106', 'expires_on_raw',      'Oct 15, 2028'),
+  ('00000000-0000-0000-0000-0000000f1002', '00000000-0000-0000-0000-0000000f1106', 'expires_on',          '2028-10-15');
+
+SELECT results_eq(
+  $$ SELECT record_candidate, can_create_record FROM v_extraction_line_item
+      WHERE line_item_id = '00000000-0000-0000-0000-0000000f1106' $$,
+  $$ VALUES (true, false) $$,
+  'An invented expiry looks exactly like a printed one, so an unreviewed row creates nothing');
+
+-- The reviewer checks the page, agrees with the term and the shot date, and
+-- strikes the expiry the model made up.
+UPDATE extraction_field SET correction_action = 'confirmed'
+ WHERE line_item_id = '00000000-0000-0000-0000-0000000f1106' AND field_name IN ('term', 'administered_on');
+UPDATE extraction_field SET correction_action = 'removed'
+ WHERE line_item_id = '00000000-0000-0000-0000-0000000f1106' AND field_name = 'expires_on';
+
+SELECT results_eq(
+  $$ SELECT record_candidate, can_create_record FROM v_extraction_line_item
+      WHERE line_item_id = '00000000-0000-0000-0000-0000000f1106' $$,
+  $$ VALUES (false, false) $$,
+  'With the invented expiry removed, the row is the Jaddi invoice again: evidence, no record');
+
+-- On row 2 the reviewer confirms what the page does print.
+UPDATE extraction_field SET correction_action = 'confirmed'
+ WHERE line_item_id = '00000000-0000-0000-0000-0000000f1102' AND field_name IN ('term', 'expires_on');
+
+SELECT results_eq(
   $$ SELECT n FROM v_extraction_line_item
       WHERE extraction_id = '00000000-0000-0000-0000-0000000f1002' AND can_create_record $$,
   $$ VALUES (2) $$,
-  'Supply the missing date on one row and exactly that row becomes eligible');
+  'Review every field the record carries and exactly that row becomes eligible');
+
+SELECT is((SELECT correction_action::text FROM extraction_field
+            WHERE line_item_id = '00000000-0000-0000-0000-0000000f1102' AND field_name = 'tag_number'),
+  'unreviewed',
+  '...while its tag number is still unreviewed: a field the record does not carry does not hold it back');
+
+SELECT is(is_record_field('expires_on_raw'), false,
+  'The printed form is checked on the page, not copied into the record');
 
 -- --- 6. Cascade ----------------------------------------------------------------
 DELETE FROM extraction WHERE id = '00000000-0000-0000-0000-0000000f1002';

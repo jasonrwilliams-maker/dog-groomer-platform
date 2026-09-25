@@ -151,6 +151,27 @@ LANGUAGE sql IMMUTABLE STRICT AS $$
 $$;
 
 -- -----------------------------------------------------------------------------
+-- The fields that will be copied into a vaccination_record
+--
+-- A row becomes a record only after a human has looked at every one of these.
+-- The held-out photo is why: every smudged expiry on it ('Jan 2?, 2027') came
+-- back from the model as a clean, confident date ('Jan 29, 2027'), and a
+-- confident date is still a date. Presence cannot tell a printed date from an
+-- invented one; only review can.
+--
+-- One list, so the record rule here and the review work order in section 17
+-- cannot disagree about what "feeds a record" means.
+-- -----------------------------------------------------------------------------
+
+CREATE FUNCTION is_record_field(field_name text) RETURNS boolean
+LANGUAGE sql IMMUTABLE STRICT AS $$
+    SELECT field_name IN ('term', 'administered_on', 'expires_on',
+                          'vaccine_manufacturer', 'lot_serial_number',
+                          'veterinarian_name', 'veterinarian_license_no',
+                          'veterinarian_phone')
+$$;
+
+-- -----------------------------------------------------------------------------
 -- The review queue (moved here from section 15, where it was a placeholder)
 --
 -- A view, not a table. Rule on a term and it leaves the queue on the next read.
@@ -222,7 +243,9 @@ pivot AS (
            max(value) FILTER (WHERE field_name = 'tag_number')              AS tag_number,
            count(*)                                                         AS field_count,
            count(*) FILTER (WHERE correction_action = 'unreviewed')         AS unreviewed_count,
-           count(*) FILTER (WHERE correction_action = 'removed')            AS removed_count
+           count(*) FILTER (WHERE correction_action = 'removed')            AS removed_count,
+           count(*) FILTER (WHERE correction_action = 'unreviewed'
+                              AND is_record_field(field_name))              AS unreviewed_record_fields
     FROM f
     GROUP BY line_item_id
 )
@@ -242,16 +265,24 @@ SELECT li.id                    AS line_item_id,
        p.field_count,
        p.unreviewed_count,
        p.removed_count,
+       p.unreviewed_record_fields,
        -- Layer 2 begins here.
        r.disposition,
        r.vaccine_code,
        r.confidence             AS ruling_confidence,
-       -- Layer 3's precondition, stated as a fact rather than inferred later:
-       -- a tracked vaccine with both dates on the page. Everything else is
-       -- evidence only.
+       -- Layer 3's precondition, stated as a fact rather than inferred later.
+       -- record_candidate: a tracked vaccine with both dates present. Everything
+       -- else is evidence only.
+       -- can_create_record: a candidate on which a human has also looked at
+       -- every field the record will carry. A model-supplied date is present
+       -- whether or not it was printed, so presence alone is not enough.
        (r.disposition = 'tracked'
         AND p.administered_on IS NOT NULL
-        AND p.expires_on      IS NOT NULL)  AS can_create_record
+        AND p.expires_on      IS NOT NULL)  AS record_candidate,
+       (r.disposition = 'tracked'
+        AND p.administered_on IS NOT NULL
+        AND p.expires_on      IS NOT NULL
+        AND p.unreviewed_record_fields = 0) AS can_create_record
 FROM extraction_line_item li
 JOIN extraction e ON e.id = li.extraction_id
 LEFT JOIN pivot p ON p.line_item_id = li.id
@@ -261,6 +292,8 @@ ORDER BY li.extraction_id, li.n;
 COMMENT ON VIEW v_extraction_line_item IS
   'What the review screen shows. Text in, text out; the date cast happens at '
   'Layer 3. can_create_record is the Jaddi rule made visible per row: a '
-  'tracked vaccine still creates nothing without both dates on the page.';
+  'tracked vaccine still creates nothing without both dates on the page, and '
+  'nothing until a human has reviewed every field the record will carry.';
 
 ALTER FUNCTION effective_value(extraction_field) SET search_path = groom, public;
+ALTER FUNCTION is_record_field(text)             SET search_path = groom, public;
