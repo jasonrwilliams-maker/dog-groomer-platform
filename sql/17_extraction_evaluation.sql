@@ -354,11 +354,11 @@ CREATE VIEW v_field_correction_rate AS
 SELECT e.model_name,
        e.prompt_version,
        ef.field_key,
-       count(*) FILTER (WHERE ef.correction_action <> 'unreviewed'
+       count(*) FILTER (WHERE ef.correction_action NOT IN ('unreviewed', 'unreadable')
                           AND (ef.extracted_value IS NOT NULL OR ef.corrected_value IS NOT NULL)) AS reviewed,
        count(*) FILTER (WHERE ef.correction_action IN ('edited', 'removed'))                      AS corrected,
        round(count(*) FILTER (WHERE ef.correction_action IN ('edited', 'removed'))::numeric
-             / NULLIF(count(*) FILTER (WHERE ef.correction_action <> 'unreviewed'
+             / NULLIF(count(*) FILTER (WHERE ef.correction_action NOT IN ('unreviewed', 'unreadable')
                           AND (ef.extracted_value IS NOT NULL OR ef.corrected_value IS NOT NULL)), 0),
              3) AS correction_rate
 FROM extraction_field ef
@@ -370,6 +370,11 @@ GROUP BY e.model_name, e.prompt_version, ef.field_key;
 -- removal_rate is the production hallucination rate: of the values the model
 -- produced that a human checked, the share that were not on the page. It is
 -- the number section 7's 'removed' state exists to keep honest.
+--
+-- 'unreadable' is counted, and kept out of both rates' denominators: a value
+-- nobody could check against the page is neither right nor wrong. Counting it
+-- as removed would charge the model for the camera; counting it as confirmed
+-- would credit the model for a guess.
 CREATE VIEW v_model_review_outcomes AS
 SELECT e.model_name,
        e.model_version,
@@ -379,10 +384,11 @@ SELECT e.model_name,
        count(*) FILTER (WHERE ef.correction_action = 'confirmed')                AS confirmed,
        count(*) FILTER (WHERE ef.correction_action = 'edited')                   AS edited,
        count(*) FILTER (WHERE ef.correction_action = 'removed')                  AS removed,
+       count(*) FILTER (WHERE ef.correction_action = 'unreadable')               AS unreadable,
        round(count(*) FILTER (WHERE ef.correction_action = 'edited')::numeric
-             / NULLIF(count(*) FILTER (WHERE ef.correction_action <> 'unreviewed'), 0), 4) AS edit_rate,
+             / NULLIF(count(*) FILTER (WHERE ef.correction_action NOT IN ('unreviewed', 'unreadable')), 0), 4) AS edit_rate,
        round(count(*) FILTER (WHERE ef.correction_action = 'removed')::numeric
-             / NULLIF(count(*) FILTER (WHERE ef.correction_action <> 'unreviewed'
+             / NULLIF(count(*) FILTER (WHERE ef.correction_action NOT IN ('unreviewed', 'unreadable')
                                         AND ef.extracted_value IS NOT NULL), 0), 4)          AS removal_rate
 FROM extraction e
 JOIN extraction_field ef ON ef.extraction_id = e.id

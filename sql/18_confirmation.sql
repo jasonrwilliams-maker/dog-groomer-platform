@@ -16,12 +16,15 @@
 --   already_on_file         the dog already has this shot with these dates —
 --                           a re-upload, a re-run, or the same shot printed
 --                           twice on one page. Nothing new is written.
---   conflicts_with_record   the dog already has this shot given on this day
---                           with a DIFFERENT expiry. Two documents disagree,
---                           and choosing between them is a human's job. The
---                           existing record is left alone.
+--   conflicts_with_record   the dog already has this shot given within a few
+--                           days of this one (shop_policy
+--                           'duplicate_shot_window_days'), with any date that
+--                           differs. Two documents disagree, and choosing
+--                           between them is a human's job. The existing record
+--                           is left alone.
 --   missing_date            a tracked vaccine the page names without a date it
---                           needs. The Jaddi case: evidence, no record. If the
+--                           needs, or with one the reviewer marked unreadable.
+--                           The Jaddi case: evidence, no record. If the
 --                           dog has no current record for that vaccine, the
 --                           owner is asked for a proper certificate.
 --   not_tracked             not a vaccine, or one this shop does not track.
@@ -49,6 +52,27 @@ INSERT INTO policy_enforcement (error_code, level, relaxable, description) VALUE
   ('GR016', 'block', false, 'Confirmation before every tracked line and unfamiliar term is reviewed'),
   ('GR017', 'block', false, 'Confirmation for a dog the document is not filed under'),
   ('GR018', 'block', false, 'Confirmation with a date that cannot go on a vaccination record');
+
+-- -----------------------------------------------------------------------------
+-- How close two records of one shot have to be to be the same shot
+--
+-- Matching on the exact date misses a misread one. The held-out photo gives
+-- DHPP as given Oct 19; the screenshot of the same page says Oct 15. Both
+-- confirmed, that is two verified DHPP records for one shot, one of them wrong.
+-- Within this many days of a record already on file, a new reading is a
+-- conflict for a human, not a second record.
+--
+-- Seven, because the shortest real interval between two doses of the same
+-- vaccine is a puppy series at two to four weeks. A wider window would start
+-- calling genuine boosters conflicts; zero restores exact matching.
+-- -----------------------------------------------------------------------------
+
+INSERT INTO shop_policy (key, value_type, int_value, description) VALUES
+  ('duplicate_shot_window_days', 'integer', 7,
+   'A newly confirmed shot given within this many days of one already on file for the same dog and vaccine is flagged as a conflict instead of recorded. 0 matches exact dates only.');
+
+CREATE FUNCTION duplicate_shot_window_days() RETURNS integer
+  LANGUAGE sql STABLE AS $$ SELECT shop_policy_int('duplicate_shot_window_days') $$;
 
 -- -----------------------------------------------------------------------------
 -- What was decided, per printed line
@@ -209,17 +233,21 @@ BEGIN
         v_exp := iso_date_or_null(li.expires_on);
         SELECT vt.id INTO v_vaccine_id FROM vaccine_type vt WHERE vt.code = li.vaccine_code;
 
-        -- Same shot, same day. The matching expiry first, so a shot printed
-        -- twice on one page finds the record the first printing made.
+        -- The same shot: same vaccine, given within the window. An exact
+        -- match first, so a shot printed twice on one page finds the record
+        -- the first printing made; then the nearest date.
         SELECT vr.id,
-               CASE WHEN vr.expires_on = v_exp THEN 'already_on_file'
+               CASE WHEN vr.administered_on = v_adm AND vr.expires_on = v_exp
+                    THEN 'already_on_file'
                     ELSE 'conflicts_with_record' END::line_outcome
           INTO v_record_id, v_outcome
           FROM vaccination_record vr
          WHERE vr.dog_id = p_dog_id
            AND vr.vaccine_type_id = v_vaccine_id
-           AND vr.administered_on = v_adm
-         ORDER BY (vr.expires_on = v_exp) DESC, vr.created_at
+           AND vr.administered_on BETWEEN v_adm - duplicate_shot_window_days()
+                                      AND v_adm + duplicate_shot_window_days()
+         ORDER BY (vr.administered_on = v_adm AND vr.expires_on = v_exp) DESC,
+                  abs(vr.administered_on - v_adm), vr.created_at
          LIMIT 1;
 
         IF NOT FOUND THEN
@@ -348,9 +376,11 @@ END $$;
 COMMENT ON FUNCTION confirm_extraction(uuid, uuid, uuid) IS
   'Layer 3. Refuses an unfinished review (GR015-GR018); otherwise writes a '
   'verified vaccination_record for exactly the lines where can_create_record '
-  'is true and the dog does not already have that shot, records every line''s '
+  'is true and the dog has no record of that shot within '
+  'duplicate_shot_window_days, records every line''s '
   'outcome, and opens a record_request for a tracked vaccine the page names '
   'without the dates a record needs. All or nothing: one transaction.';
 
+ALTER FUNCTION duplicate_shot_window_days()          SET search_path = groom, public;
 ALTER FUNCTION iso_date_or_null(text)                SET search_path = groom, public;
 ALTER FUNCTION confirm_extraction(uuid, uuid, uuid)  SET search_path = groom, public;

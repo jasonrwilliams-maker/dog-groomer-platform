@@ -132,11 +132,38 @@ COMMENT ON COLUMN extraction_field.line_item_id IS
   'line item and the field agree about which extraction they belong to.';
 
 -- -----------------------------------------------------------------------------
+-- A fifth review action: 'unreadable'
+--
+-- The page prints something here and the reviewer cannot read it — the faint
+-- expiry column on the held-out photo. Until now the reviewer had two wrong
+-- answers: confirm the model's clean-looking date, and sign a record on a date
+-- nobody read; or remove it, and count a capture problem as a hallucination.
+--
+-- 'unreadable' is neither. The value is unusable, so it pivots to NULL and the
+-- line cannot become a record (Layer 3 asks the owner for a better copy). The
+-- model is not charged with inventing it, because the page may well say what
+-- it said. It is the production counterpart of the answer keys' 'illegible'.
+--
+-- corrected_value stays NULL: whatever the reviewer might type would be a guess.
+-- -----------------------------------------------------------------------------
+
+ALTER TYPE correction_action ADD VALUE 'unreadable' AFTER 'removed';
+
+ALTER TABLE extraction_field DROP CONSTRAINT correction_coherent;
+ALTER TABLE extraction_field ADD CONSTRAINT correction_coherent CHECK (
+        (correction_action IN ('unreviewed', 'confirmed', 'unreadable') AND corrected_value IS NULL)
+     OR (correction_action = 'edited'    AND corrected_value IS NOT NULL
+                                         AND corrected_value IS DISTINCT FROM extracted_value)
+     OR (correction_action = 'removed'   AND corrected_value IS NULL
+                                         AND extracted_value IS NOT NULL));
+
+-- -----------------------------------------------------------------------------
 -- The effective value of a field, after review
 --
 -- unreviewed / confirmed -> what the model said
 -- edited                 -> what the human typed
 -- removed                -> nothing. The model invented it.
+-- unreadable             -> nothing. The page has it; nobody can read it.
 --
 -- One function, so every reader agrees on what "the value" means.
 -- -----------------------------------------------------------------------------
@@ -144,8 +171,9 @@ COMMENT ON COLUMN extraction_field.line_item_id IS
 CREATE FUNCTION effective_value(f extraction_field) RETURNS text
 LANGUAGE sql IMMUTABLE STRICT AS $$
     SELECT CASE f.correction_action
-             WHEN 'removed' THEN NULL
-             WHEN 'edited'  THEN f.corrected_value
+             WHEN 'removed'    THEN NULL
+             WHEN 'unreadable' THEN NULL
+             WHEN 'edited'     THEN f.corrected_value
              ELSE                f.extracted_value
            END
 $$;
@@ -244,6 +272,7 @@ pivot AS (
            count(*)                                                         AS field_count,
            count(*) FILTER (WHERE correction_action = 'unreviewed')         AS unreviewed_count,
            count(*) FILTER (WHERE correction_action = 'removed')            AS removed_count,
+           count(*) FILTER (WHERE correction_action = 'unreadable')         AS unreadable_count,
            count(*) FILTER (WHERE correction_action = 'unreviewed'
                               AND is_record_field(field_name))              AS unreviewed_record_fields
     FROM f
@@ -265,6 +294,7 @@ SELECT li.id                    AS line_item_id,
        p.field_count,
        p.unreviewed_count,
        p.removed_count,
+       p.unreadable_count,
        p.unreviewed_record_fields,
        -- Layer 2 begins here.
        r.disposition,

@@ -3,15 +3,16 @@
 -- The fixture is one page for Jaddi carrying every kind of line Layer 3 has to
 -- decide on:
 --   1. Rabies, both dates printed — becomes a record.
---   2. DHPP, the held-out photo's case: the model supplied an expiry the page
---      does not print, and the reviewer struck it. Evidence, no record.
+--   2. DHPP, the held-out photo's case: the expiry is too faint to read, the
+--      model supplied a clean one anyway, and the reviewer marks it unreadable.
+--      Evidence, no record, and not a hallucination either.
 --   3. A Lyme test — not a vaccine.
 --   4. Rabies again, same shot printed a second time — must not become a
 --      second record.
 --   5. Bordetella from an old certificate, long expired — a true record that
 --      does not answer the shop's outstanding request for a current one.
 --
--- Nine things are proven:
+-- Ten things are proven:
 --   1. Four refusals, one per code: not awaiting review (GR015), review
 --      unfinished (GR016), wrong dog (GR017), unusable date (GR018). Each
 --      refusal writes nothing.
@@ -24,12 +25,16 @@
 --   6. A current record closes the open request for it; an expired one does not.
 --   7. The dashboard projection still equals a live recompute.
 --   8. A second reading of the same page adds nothing, and a reading that
---      disagrees with the record on file is flagged, not written.
+--      disagrees with the record on file is flagged, not written — including
+--      a misread day a few days off, the photo's actual error. A booster months
+--      later is a new shot. The window is the shop's setting.
 --   9. Confirmed evidence cannot be deleted.
+--  10. An unreadable date is counted as a capture problem, not charged to the
+--      model as an invented value.
 
 BEGIN;
 SET search_path = groom, public;
-SELECT plan(30);
+SELECT plan(36);
 
 -- --- Fixture -----------------------------------------------------------------
 -- Jaddi (d001) and Luna (d002) belong to owner a001; Biscuit (d003) to a002.
@@ -94,13 +99,13 @@ SELECT throws_ok(
   'GR016', NULL,
   'Nothing reviewed yet: the page cannot be confirmed');
 
--- The reviewer works the page. Line 2's expiry is the model's invention.
+-- The reviewer works the page. Line 2's expiry is too faint to read.
 UPDATE extraction_field SET correction_action = 'confirmed'
  WHERE extraction_id = '00000000-0000-0000-0000-0000000f3002'
    AND line_item_id IN ('00000000-0000-0000-0000-0000000f3101', '00000000-0000-0000-0000-0000000f3102',
                         '00000000-0000-0000-0000-0000000f3104')
    AND field_name IN ('term', 'administered_on', 'expires_on', 'lot_serial_number');
-UPDATE extraction_field SET correction_action = 'removed'
+UPDATE extraction_field SET correction_action = 'unreadable'
  WHERE line_item_id = '00000000-0000-0000-0000-0000000f3102' AND field_name = 'expires_on';
 
 SELECT throws_ok(
@@ -206,13 +211,18 @@ SELECT is((SELECT vaccination_record_id FROM t_result WHERE n = 4),
 SELECT is((SELECT count(*) FROM vaccination_record vr
              JOIN vaccine_type vt ON vt.id = vr.vaccine_type_id
             WHERE vr.dog_id = '00000000-0000-0000-0000-00000000d001' AND vt.code = 'dhpp'),
-  0::bigint, 'The DHPP line with its invented expiry struck creates no record');
+  0::bigint, 'The DHPP line with its unreadable expiry creates no record');
 
 SELECT results_eq(
   $$ SELECT rr.status::text, rr.channel::text, rr.created_by
        FROM record_request rr JOIN t_result r ON r.record_request_id = rr.id WHERE r.n = 2 $$,
   $$ VALUES ('insufficient', 'email', '00000000-0000-0000-0000-00000000b001'::uuid) $$,
-  'The owner is marked as owing a proper DHPP certificate, by email, which they allow');
+  'The owner is marked as owing a readable DHPP certificate, by email, which they allow');
+
+SELECT results_eq(
+  $$ SELECT removed, unreadable, removal_rate FROM v_model_review_outcomes WHERE prompt_version = 'p0' $$,
+  $$ VALUES (0::bigint, 1::bigint, 0.0000::numeric) $$,
+  'The faint date is counted as unreadable, and the model''s hallucination rate is untouched by it');
 
 SELECT is((SELECT state::text FROM v_dog_vaccine_compliance
             WHERE dog_id = '00000000-0000-0000-0000-00000000d001' AND vaccine_code = 'dhpp'),
@@ -296,6 +306,64 @@ SELECT results_eq(
       WHERE vr.dog_id = '00000000-0000-0000-0000-00000000d001' AND vt.code = 'rabies' $$,
   $$ SELECT 1::bigint, (SELECT rabies_exp FROM t_dates)::date $$,
   '...and the record on file is left exactly as it was');
+
+-- --- 8, continued: a misread day -------------------------------------------------------------------
+-- The photo's actual error: the model read 'Oct 15' as 'Oct 19', and a reviewer
+-- let it through. Jaddi's rabies shot on file was given Oct 15.
+INSERT INTO extraction (id, document_id, model_name, model_version, prompt_version,
+                        raw_response, status) VALUES
+  ('00000000-0000-0000-0000-0000000f3006', '00000000-0000-0000-0000-0000000f3001',
+   'test-model', 'test-model-1', 'p4', '{}'::jsonb, 'needs_review'),
+  ('00000000-0000-0000-0000-0000000f3007', '00000000-0000-0000-0000-0000000f3001',
+   'test-model', 'test-model-1', 'p5', '{}'::jsonb, 'needs_review'),
+  ('00000000-0000-0000-0000-0000000f3008', '00000000-0000-0000-0000-0000000f3001',
+   'test-model', 'test-model-1', 'p6', '{}'::jsonb, 'needs_review');
+INSERT INTO extraction_line_item (id, extraction_id, n) VALUES
+  ('00000000-0000-0000-0000-0000000f3601', '00000000-0000-0000-0000-0000000f3006', 1),
+  ('00000000-0000-0000-0000-0000000f3701', '00000000-0000-0000-0000-0000000f3007', 1),
+  ('00000000-0000-0000-0000-0000000f3801', '00000000-0000-0000-0000-0000000f3008', 1);
+INSERT INTO extraction_field (extraction_id, line_item_id, field_name, extracted_value, correction_action) VALUES
+  ('00000000-0000-0000-0000-0000000f3006', '00000000-0000-0000-0000-0000000f3601', 'term',            'Rabies Vaccine 3 Yr Canine', 'confirmed'),
+  ('00000000-0000-0000-0000-0000000f3006', '00000000-0000-0000-0000-0000000f3601', 'administered_on', '2025-10-19', 'confirmed'),
+  ('00000000-0000-0000-0000-0000000f3006', '00000000-0000-0000-0000-0000000f3601', 'expires_on',      (SELECT rabies_exp FROM t_dates), 'confirmed'),
+  -- A bordetella booster, eighteen months after the expired one on file.
+  ('00000000-0000-0000-0000-0000000f3007', '00000000-0000-0000-0000-0000000f3701', 'term',            'Bordetella Annual Injectable', 'confirmed'),
+  ('00000000-0000-0000-0000-0000000f3007', '00000000-0000-0000-0000-0000000f3701', 'administered_on', '2025-07-10', 'confirmed'),
+  ('00000000-0000-0000-0000-0000000f3007', '00000000-0000-0000-0000-0000000f3701', 'expires_on',      to_char(CURRENT_DATE + 100, 'YYYY-MM-DD'), 'confirmed'),
+  ('00000000-0000-0000-0000-0000000f3008', '00000000-0000-0000-0000-0000000f3801', 'term',            'Rabies Vaccine 3 Yr Canine', 'confirmed'),
+  ('00000000-0000-0000-0000-0000000f3008', '00000000-0000-0000-0000-0000000f3801', 'administered_on', '2025-10-19', 'confirmed'),
+  ('00000000-0000-0000-0000-0000000f3008', '00000000-0000-0000-0000-0000000f3801', 'expires_on',      (SELECT rabies_exp FROM t_dates), 'confirmed');
+
+SELECT results_eq(
+  $$ SELECT outcome::text FROM confirm_extraction('00000000-0000-0000-0000-0000000f3006',
+                                                  '00000000-0000-0000-0000-00000000d001',
+                                                  '00000000-0000-0000-0000-00000000b002') $$,
+  $$ VALUES ('conflicts_with_record') $$,
+  'A shot given four days from one on file is the same shot read two ways: a conflict, not a second record');
+
+SELECT is((SELECT count(*) FROM vaccination_record vr
+             JOIN vaccine_type vt ON vt.id = vr.vaccine_type_id
+            WHERE vr.dog_id = '00000000-0000-0000-0000-00000000d001' AND vt.code = 'rabies'),
+  1::bigint, 'Jaddi still has one rabies record');
+
+SELECT results_eq(
+  $$ SELECT outcome::text FROM confirm_extraction('00000000-0000-0000-0000-0000000f3007',
+                                                  '00000000-0000-0000-0000-00000000d001',
+                                                  '00000000-0000-0000-0000-00000000b002') $$,
+  $$ VALUES ('record_created') $$,
+  'A booster eighteen months after the last shot is a new shot, not a duplicate');
+
+SELECT is((SELECT status::text FROM record_request WHERE id = '00000000-0000-0000-0000-0000000f3202'),
+  'resolved', '...and being current, it closes the bordetella request the expired one could not');
+
+UPDATE shop_policy SET int_value = 0 WHERE key = 'duplicate_shot_window_days';
+
+SELECT results_eq(
+  $$ SELECT outcome::text FROM confirm_extraction('00000000-0000-0000-0000-0000000f3008',
+                                                  '00000000-0000-0000-0000-00000000d001',
+                                                  '00000000-0000-0000-0000-00000000b002') $$,
+  $$ VALUES ('record_created') $$,
+  'The window is the shop''s setting: at zero, only exact dates match, and the misread day becomes a record');
 
 -- --- 5, continued: the Jaddi invoice, through the real function ---------------------------------------
 -- Rabies and its date given; no expiry anywhere. Luna has no rabies record, and

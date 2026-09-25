@@ -4,7 +4,7 @@ A system of record for a small grooming practice, with the business rules
 enforced **in the database** rather than in the application.
 
 Eighteen numbered rules, each with a dedicated error code, each proven by a test
-that asserts the *refusal* — not the happy path. 201 assertions, all passing.
+that asserts the *refusal* — not the happy path. 208 assertions, all passing.
 How strictly each groom-time rule is enforced (block, warn, or off) is itself a
 row of data, changed by `UPDATE` and recorded in the audit log — not a migration.
 
@@ -48,7 +48,7 @@ that extracts cleanly. Anyone can demo a clean extraction.
 |---|---|
 | Schema | Frozen — sections 0–14 in one file; sections 15–18 follow as separate files |
 | Business rules | 18, codes `GR001`–`GR018` |
-| Test suite | 16 files, 201 pgTAP assertions, passing |
+| Test suite | 16 files, 208 pgTAP assertions, passing |
 | Document vocabulary (§15) | 29 rulings seeded from the labelled corpus; `resolve_term()` fails closed |
 | Extraction line items (§16) | One row per printed line; review views; the shape the harness loads |
 | Confirmation — Layer 3 (§18) | `confirm_extraction()` turns a fully reviewed page into verified records, records every line's outcome, and asks the owner for what the page is missing. Not yet wired to a button in the review tool |
@@ -94,7 +94,7 @@ docker compose exec db psql -U postgres -d grooming_test -f sql/seed/fixture.sql
 docker compose exec db pg_prove -U postgres -d grooming_test tests/*.sql
 ```
 
-Expected: `Files=16, Tests=201, Result: PASS`.
+Expected: `Files=16, Tests=208, Result: PASS`.
 
 The SQL loads in section order. `grooming_platform_schema.sql` is sections 0–14;
 each later section is its own numbered file, and a file's header carries the
@@ -206,9 +206,9 @@ stopped. Every rejection test is paired with the valid case — a rule that reje
 | `11` | Puppy rules — `not_yet_due` compliance and minimum grooming age |
 | `12` | Policy is data: loud failure on a missing key, labels that track the live window, block/warn/off per rule, and the regulatory-change audit trail |
 | `13` | The vocabulary fails closed: typography collapses, cadence words do not; NULL is a ruling; tracking is configuration, not vocabulary |
-| `14` | A line item is a row and its fields stay fields; the review queue empties itself; a corrected term is looked up by its correction; a tracked vaccine with one date still creates nothing; two dates create nothing either until a human has reviewed every field the record carries |
+| `14` | A line item is a row and its fields stay fields; the review queue empties itself; a corrected term is looked up by its correction; a tracked vaccine with one date still creates nothing; two dates create nothing either until a human has reviewed every field the record carries; a reviewer can mark a date unreadable instead of confirming a guess |
 | `15` | The review work order names why each field needs a look; nothing is ready before review; evaluation results that contradict the scorer are refused |
-| `16` | Layer 3: four refusals that write nothing; a shot printed twice is one record; a struck invented expiry asks the owner instead; an expired certificate does not close a request; a re-read that disagrees with the record on file is flagged, not written; confirmed evidence cannot be deleted |
+| `16` | Layer 3: four refusals that write nothing; a shot printed twice is one record; a struck invented expiry asks the owner instead; an expired certificate does not close a request; a re-read that disagrees with the record on file — including a day misread by a few days — is flagged, not written; an unreadable date asks for a better copy and is not counted as a hallucination; confirmed evidence cannot be deleted |
 
 ---
 
@@ -260,6 +260,16 @@ refuses the whole page (`GR016`) while any tracked line is unchecked. Each
 line's fate is then a row in `line_item_outcome`, so "which printed line
 produced this record?" has an answer, and a second copy of the same page
 points at the record it duplicated instead of creating another.
+
+**Two readings of one shot are one shot.** Duplicates are matched on a window,
+not an exact date: the photo gives DHPP as given Oct 19 where the screenshot of
+the same page says Oct 15, and exact matching would sign two verified records
+for one injection. A shot within `duplicate_shot_window_days` (a `shop_policy`
+row, default 7 — under the shortest real booster interval) of one on file is a
+conflict for a human. And a reviewer who cannot read a date marks it
+`unreadable`: no record, a request for a better copy, and no charge against
+the model's hallucination rate for what was a camera problem. "Verified" is
+never signed on a date nobody read.
 
 ---
 

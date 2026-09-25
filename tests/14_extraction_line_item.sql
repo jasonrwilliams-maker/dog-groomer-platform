@@ -16,14 +16,15 @@
 --   5. can_create_record is false on every row of this document, for the same
 --      reason test 04 creates no record from the invoice: a tracked vaccine
 --      with one date is evidence, not a record. And two dates are not enough
---      either: the held-out photo's rabies line, where the model invented an
---      expiry the page does not print, creates nothing until a human has
---      reviewed every field the record would carry.
+--      either: the held-out photo's DHPP line, where the model turned a faint
+--      expiry into a clean date, creates nothing until a human has reviewed
+--      every field the record would carry — and a reviewer who cannot read
+--      the date says so, rather than confirming or removing it.
 --   6. Deleting an extraction takes its line items and their fields with it.
 
 BEGIN;
 SET search_path = groom, public;
-SELECT plan(22);
+SELECT plan(23);
 
 -- --- Fixture: the Doc Side email, transcribed ---------------------------------
 INSERT INTO document (id, owner_id, object_key, mime_type, byte_size, sha256,
@@ -180,12 +181,13 @@ SELECT results_eq(
   $$ VALUES (true, false, 2::bigint) $$,
   'Supply the missing date and the row is a candidate — but its term and expiry are still the model''s word');
 
--- The held-out photo's rabies line, replayed: the page prints when the shot was
--- given and no expiry at all. The model supplied one anyway, cleanly formatted.
+-- The held-out photo's DHPP line, replayed: the page prints when the shot was
+-- given, and an expiry too faint to read. The model supplied one anyway,
+-- cleanly formatted.
 INSERT INTO extraction_line_item (id, extraction_id, n, page_number, source_region) VALUES
   ('00000000-0000-0000-0000-0000000f1106', '00000000-0000-0000-0000-0000000f1002', 6, 1, 'vaccinations_table');
 INSERT INTO extraction_field (extraction_id, line_item_id, field_name, extracted_value) VALUES
-  ('00000000-0000-0000-0000-0000000f1002', '00000000-0000-0000-0000-0000000f1106', 'term',                'Rabies Vaccine 3 Yr Canine'),
+  ('00000000-0000-0000-0000-0000000f1002', '00000000-0000-0000-0000-0000000f1106', 'term',                'Distemper/Parvo Vaccine Adult (3 yr)'),
   ('00000000-0000-0000-0000-0000000f1002', '00000000-0000-0000-0000-0000000f1106', 'administered_on_raw', 'Oct 15, 2025'),
   ('00000000-0000-0000-0000-0000000f1002', '00000000-0000-0000-0000-0000000f1106', 'administered_on',     '2025-10-15'),
   ('00000000-0000-0000-0000-0000000f1002', '00000000-0000-0000-0000-0000000f1106', 'expires_on_raw',      'Oct 15, 2028'),
@@ -198,17 +200,24 @@ SELECT results_eq(
   'An invented expiry looks exactly like a printed one, so an unreviewed row creates nothing');
 
 -- The reviewer checks the page, agrees with the term and the shot date, and
--- strikes the expiry the model made up.
+-- cannot read the expiry. Typing a guess is refused; saying so is not.
 UPDATE extraction_field SET correction_action = 'confirmed'
  WHERE line_item_id = '00000000-0000-0000-0000-0000000f1106' AND field_name IN ('term', 'administered_on');
-UPDATE extraction_field SET correction_action = 'removed'
+
+SELECT throws_ok(
+  $$ UPDATE extraction_field SET correction_action = 'unreadable', corrected_value = '2028-10-15'
+      WHERE line_item_id = '00000000-0000-0000-0000-0000000f1106' AND field_name = 'expires_on' $$,
+  '23514', NULL,
+  'An unreadable field carries no value of the reviewer''s own: that would be a guess');
+
+UPDATE extraction_field SET correction_action = 'unreadable'
  WHERE line_item_id = '00000000-0000-0000-0000-0000000f1106' AND field_name = 'expires_on';
 
 SELECT results_eq(
-  $$ SELECT record_candidate, can_create_record FROM v_extraction_line_item
-      WHERE line_item_id = '00000000-0000-0000-0000-0000000f1106' $$,
-  $$ VALUES (false, false) $$,
-  'With the invented expiry removed, the row is the Jaddi invoice again: evidence, no record');
+  $$ SELECT expires_on, unreadable_count, removed_count, record_candidate, can_create_record
+       FROM v_extraction_line_item WHERE line_item_id = '00000000-0000-0000-0000-0000000f1106' $$,
+  $$ VALUES (NULL::text, 1::bigint, 0::bigint, false, false) $$,
+  'Marked unreadable, the expiry is gone and the row is the Jaddi invoice again — without calling it a hallucination');
 
 -- On row 2 the reviewer confirms what the page does print.
 UPDATE extraction_field SET correction_action = 'confirmed'
