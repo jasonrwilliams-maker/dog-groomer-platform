@@ -354,11 +354,11 @@ CREATE VIEW v_field_correction_rate AS
 SELECT e.model_name,
        e.prompt_version,
        ef.field_key,
-       count(*) FILTER (WHERE ef.correction_action <> 'unreviewed'
+       count(*) FILTER (WHERE ef.correction_action NOT IN ('unreviewed', 'unreadable')
                           AND (ef.extracted_value IS NOT NULL OR ef.corrected_value IS NOT NULL)) AS reviewed,
        count(*) FILTER (WHERE ef.correction_action IN ('edited', 'removed'))                      AS corrected,
        round(count(*) FILTER (WHERE ef.correction_action IN ('edited', 'removed'))::numeric
-             / NULLIF(count(*) FILTER (WHERE ef.correction_action <> 'unreviewed'
+             / NULLIF(count(*) FILTER (WHERE ef.correction_action NOT IN ('unreviewed', 'unreadable')
                           AND (ef.extracted_value IS NOT NULL OR ef.corrected_value IS NOT NULL)), 0),
              3) AS correction_rate
 FROM extraction_field ef
@@ -370,6 +370,11 @@ GROUP BY e.model_name, e.prompt_version, ef.field_key;
 -- removal_rate is the production hallucination rate: of the values the model
 -- produced that a human checked, the share that were not on the page. It is
 -- the number section 7's 'removed' state exists to keep honest.
+--
+-- 'unreadable' is counted, and kept out of both rates' denominators: a value
+-- nobody could check against the page is neither right nor wrong. Counting it
+-- as removed would charge the model for the camera; counting it as confirmed
+-- would credit the model for a guess.
 CREATE VIEW v_model_review_outcomes AS
 SELECT e.model_name,
        e.model_version,
@@ -379,10 +384,11 @@ SELECT e.model_name,
        count(*) FILTER (WHERE ef.correction_action = 'confirmed')                AS confirmed,
        count(*) FILTER (WHERE ef.correction_action = 'edited')                   AS edited,
        count(*) FILTER (WHERE ef.correction_action = 'removed')                  AS removed,
+       count(*) FILTER (WHERE ef.correction_action = 'unreadable')               AS unreadable,
        round(count(*) FILTER (WHERE ef.correction_action = 'edited')::numeric
-             / NULLIF(count(*) FILTER (WHERE ef.correction_action <> 'unreviewed'), 0), 4) AS edit_rate,
+             / NULLIF(count(*) FILTER (WHERE ef.correction_action NOT IN ('unreviewed', 'unreadable')), 0), 4) AS edit_rate,
        round(count(*) FILTER (WHERE ef.correction_action = 'removed')::numeric
-             / NULLIF(count(*) FILTER (WHERE ef.correction_action <> 'unreviewed'
+             / NULLIF(count(*) FILTER (WHERE ef.correction_action NOT IN ('unreviewed', 'unreadable')
                                         AND ef.extracted_value IS NOT NULL), 0), 4)          AS removal_rate
 FROM extraction e
 JOIN extraction_field ef ON ef.extraction_id = e.id
@@ -407,7 +413,7 @@ WITH f AS (
            e.model_name,
            e.prompt_version,
            li.disposition,
-           li.can_create_record,
+           li.record_candidate,
            CASE ef.field_name
              WHEN 'administered_on' THEN li.administered_on_raw
              WHEN 'expires_on'      THEN li.expires_on_raw
@@ -437,11 +443,8 @@ flagged AS (
              -- become a record, so nothing on it feeds one; that row is counted
              -- in the summary as blocked, which is a document-level action
              -- (request a certificate), not a field to check.
-             CASE WHEN f.can_create_record AND f.value IS NOT NULL
-                   AND f.field_name IN ('term', 'administered_on', 'expires_on',
-                                        'vaccine_manufacturer', 'lot_serial_number',
-                                        'veterinarian_name', 'veterinarian_license_no',
-                                        'veterinarian_phone')
+             CASE WHEN f.record_candidate AND f.value IS NOT NULL
+                   AND is_record_field(f.field_name)
                   THEN 'feeds_a_record' END,
              CASE WHEN f.field_name = 'term' AND f.disposition = 'unmapped'
                   THEN 'unmapped_term' END,
@@ -469,7 +472,7 @@ SELECT fl.extraction_field_id,
        fl.value,
        fl.printed_date,
        fl.disposition,
-       fl.can_create_record AS row_can_create_record,
+       fl.record_candidate AS row_record_candidate,
        fl.reasons,
        p.priority,
        CASE p.priority WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END AS priority_rank,
@@ -501,11 +504,14 @@ COMMENT ON VIEW v_field_review_priority IS
 -- the page that cannot become a record, because a date the page does not state
 -- is missing. That number is the prompt to request a proper certificate.
 --
--- records_on_suspect_dates is the other half. can_create_record only asks
--- whether both dates are present, and an invented day is present. This counts
--- the ready rows whose dates the priority view distrusts — so '1 record ready'
--- can never be read without seeing what it is built on. A reviewer confirming
--- the date clears it.
+-- records_ready counts rows a human has finished: both dates present and every
+-- field the record carries reviewed. records_awaiting_review counts the rest of
+-- the candidates — both dates present, not yet looked at. An invented day is
+-- present, so a candidate is not a record until someone confirms it.
+--
+-- records_on_suspect_dates is the subset of those candidates whose dates the
+-- priority view distrusts, so the reviewer knows which to open first. A
+-- reviewer confirming the date clears it.
 CREATE VIEW v_extraction_review_summary AS
 SELECT e.id                                                          AS extraction_id,
        e.document_id,
@@ -524,16 +530,18 @@ SELECT e.id                                                          AS extracti
        li.tracked_rows,
        li.records_ready,
        (SELECT count(DISTINCT p.line_item_id) FROM v_field_review_priority p
-         WHERE p.extraction_id = e.id AND p.row_can_create_record
+         WHERE p.extraction_id = e.id AND p.row_record_candidate
            AND p.reasons && ARRAY['date_more_precise_than_page',
                                   'date_without_printed_form'])      AS records_on_suspect_dates,
-       li.tracked_rows - li.records_ready                            AS tracked_rows_blocked,
+       li.candidates - li.records_ready                              AS records_awaiting_review,
+       li.tracked_rows - li.candidates                               AS tracked_rows_blocked,
        li.unmapped_terms
 FROM extraction e
 JOIN document d ON d.id = e.document_id
 CROSS JOIN LATERAL (
     SELECT count(*)                                              AS line_items,
            count(*) FILTER (WHERE v.disposition = 'tracked')     AS tracked_rows,
+           count(*) FILTER (WHERE v.record_candidate)            AS candidates,
            count(*) FILTER (WHERE v.can_create_record)           AS records_ready,
            count(*) FILTER (WHERE v.disposition = 'unmapped')    AS unmapped_terms
     FROM v_extraction_line_item v
