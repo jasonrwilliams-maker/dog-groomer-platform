@@ -56,6 +56,7 @@ docside_invoice_2025-04-04   rows 13/13 fields 183  correct 175  wrong 1  missed
 | `wrong` | both have a value and they differ |
 | `missed` | the page has a value, the model emitted null |
 | `spurious` | the page has nothing, the model emitted something — **the hallucination class** |
+| `overconf` | the key reads part of a value (`Jan 2?, 2027` — `?` is printed but unreadable) and the model filled in the `?`, or gave a full ISO date beside it. A lucky guess and a wrong one look the same, so neither is `correct` |
 | `traps hit` | `must_not_produce` entries the model fell into, out of those scorable at Layer 1 |
 
 Below the table, every non-correct field is listed with what was expected and

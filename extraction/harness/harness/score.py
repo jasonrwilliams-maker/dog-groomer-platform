@@ -16,6 +16,11 @@ Vocabulary for a field:
   wrong     both have a value, and they differ
   missed    key has a value, model emitted null       — recall failure
   spurious  key is null, model emitted a value        — the hallucination class
+  overconfident  the key reads part of a value ('Jan 2?, 2027', ? = printed but
+            unreadable) and the model supplied a character the page does not
+            show — or a full ISO date beside such a print. A guessed digit that
+            happens to be right is indistinguishable from one that is wrong,
+            so it is never 'correct'
   unscored  a slot the harness deliberately does not grade (source_region)
 
 Before any of that, the model's output is passed through the PII map (see
@@ -32,7 +37,7 @@ from . import pii as P
 @dataclass
 class FieldResult:
     path: str
-    outcome: str            # correct | wrong | missed | spurious | unscored
+    outcome: str            # correct | wrong | missed | spurious | overconfident | unscored
     expected: object
     got: object             # AFTER the PII map — what was actually compared
     pii_mapped: bool = False
@@ -88,6 +93,7 @@ class DocScore:
         return (f"{self.document_id:<38} rows {self.got_items:>2}/{self.expected_items:<2} "
                 f"fields {self.scored:>3}  correct {self.count('correct'):>3}  wrong {self.count('wrong'):>2}  "
                 f"missed {self.count('missed'):>2}  spurious {self.count('spurious'):>2}  "
+                f"overconf {self.count('overconfident'):>2}  "
                 f"traps hit {self.traps_hit}/{self.traps_scorable}")
 
 
@@ -115,7 +121,12 @@ def score_document(key: dict, output: dict | None, document_id: str,
             ds.fields.append(FieldResult(p, "unscored", e, g, mapped))
             continue
         alt = False
-        if e is None and g is None:
+        partial = _partial_outcome(e, g)
+        if partial:
+            outcome = partial
+        elif e is None and g is not None and _beside_partial_print(p, exp_flat):
+            outcome = "overconfident"
+        elif e is None and g is None:
             outcome = "correct"
         elif e is None:
             outcome = "spurious"
@@ -155,6 +166,42 @@ def score_document(key: dict, output: dict | None, document_id: str,
     return ds
 
 
+PARTIAL = "?"   # one printed character that cannot be read (contract v4.3)
+
+
+def _partial_outcome(e, g) -> str | None:
+    """Score a value the key reads only in part, character by character.
+    None when the key's value has no '?' (the ordinary rules apply)."""
+    if not isinstance(e, str) or PARTIAL not in e or g is None:
+        return None
+    g = str(g)
+    if g == e:
+        return "correct"
+    if len(g) != len(e):
+        return "wrong"
+    guessed = cautious = False
+    for ce, cg in zip(e, g):
+        if ce == PARTIAL and cg != PARTIAL:
+            guessed = True
+        elif ce != PARTIAL and cg == PARTIAL:
+            cautious = True
+        elif ce != cg:
+            return "wrong"
+    return "overconfident" if guessed else "missed" if cautious else "correct"
+
+
+def _beside_partial_print(path: str, exp_flat: dict) -> bool:
+    """An ISO date slot whose printed form, in the key, is only partly read:
+    the page does not state a full date, so any ISO value was completed by
+    the model."""
+    idx, f = K.parse_path(path)
+    raw = {"administered_on": "administered_on_raw", "expires_on": "expires_on_raw"}.get(f)
+    if idx is None or raw is None:
+        return False
+    v = exp_flat.get(f"line_items[{idx}].{raw}")
+    return isinstance(v, str) and PARTIAL in v
+
+
 def _check_trap(trap: dict, got_flat: dict, n_items: int) -> TrapResult:
     fpath = trap["field"]
     wrong = K._clean(trap.get("wrong_value"))
@@ -188,18 +235,19 @@ def _check_trap(trap: dict, got_flat: dict, n_items: int) -> TrapResult:
 
 def render(scores: list[DocScore], verbose: bool = False, header: str | None = None) -> str:
     out = []
-    out.append("=" * 118)
+    out.append("=" * 130)
     out.append("Layer 1 — extraction, scored against the answer keys")
     if header:
         out.append(header)
-    out.append("=" * 118)
+    out.append("=" * 130)
     for ds in scores:
         out.append(ds.summary_line())
     tot = totals(scores)
-    out.append("-" * 118)
+    out.append("-" * 130)
     out.append(f"{'TOTAL':<38} rows {tot['got_items']:>2}/{tot['expected_items']:<2} "
                f"fields {tot['scored']:>3}  correct {tot['correct']:>3}  wrong {tot['wrong']:>2}  "
                f"missed {tot['missed']:>2}  spurious {tot['spurious']:>2}  "
+               f"overconf {tot['overconfident']:>2}  "
                f"traps hit {tot['traps_hit']}/{tot['traps_scorable']}")
     if tot["scored"]:
         out.append(f"{'':<38} field accuracy {tot['correct']/tot['scored']:.1%}   "
@@ -208,9 +256,11 @@ def render(scores: list[DocScore], verbose: bool = False, header: str | None = N
     out.append("")
     out.append("spurious = value where the page has none: the hallucination class. "
                "A trap hit is a specific wrong value the key predicted.")
+    out.append("overconf = a character supplied where the key reads '?': printed, but not readable. "
+               "A lucky guess and a wrong one look the same.")
 
     for ds in scores:
-        problems = [f for f in ds.fields if f.outcome in ("wrong", "missed", "spurious")]
+        problems = [f for f in ds.fields if f.outcome in ("wrong", "missed", "spurious", "overconfident")]
         hits = [t for t in ds.traps if t.outcome == "hit"]
         alts = [f for f in ds.fields if f.accepted_alternate]
         unsc = [t for t in ds.traps if t.outcome == "not_scorable"]
@@ -235,12 +285,12 @@ def render(scores: list[DocScore], verbose: bool = False, header: str | None = N
 
 def totals(scores: list[DocScore]) -> dict:
     t = dict(expected_items=0, got_items=0, scored=0, correct=0, wrong=0, missed=0,
-             spurious=0, traps_hit=0, traps_scorable=0, absent=0, other_layer=0, pii_mapped=0)
+             spurious=0, overconfident=0, traps_hit=0, traps_scorable=0, absent=0, other_layer=0, pii_mapped=0)
     for ds in scores:
         t["expected_items"] += ds.expected_items
         t["got_items"] += ds.got_items
         t["scored"] += ds.scored
-        for k in ("correct", "wrong", "missed", "spurious"):
+        for k in ("correct", "wrong", "missed", "spurious", "overconfident"):
             t[k] += ds.count(k)
         t["traps_hit"] += ds.traps_hit
         t["traps_scorable"] += ds.traps_scorable
@@ -260,7 +310,7 @@ def to_json(scores: list[DocScore], ruler: str | None = None) -> dict:
                 "parse_error": ds.parse_error,
                 "expected_items": ds.expected_items,
                 "got_items": ds.got_items,
-                "counts": {k: ds.count(k) for k in ("correct", "wrong", "missed", "spurious")},
+                "counts": {k: ds.count(k) for k in ("correct", "wrong", "missed", "spurious", "overconfident")},
                 "fields": [vars(f) for f in ds.fields if f.outcome != "correct" or f.accepted_alternate],
                 "absent_violations": [vars(a) for a in ds.absent_violations],
                 "traps": [vars(t) for t in ds.traps],

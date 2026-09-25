@@ -183,6 +183,14 @@ def cmd_selfcheck(args) -> int:
             F.row_priority("Client Info: Rabies Vaccine", vocab) == F.PRIORITY_UNKNOWN,
         "the normaliser matches sql/15: spacing round '-' and '/', a trailing '.'":
             F.normalize_term("  Leptospirosis 4 - Way  Vaccine. ") == "leptospirosis 4-way vaccine",
+        "'?' scoring: exact match correct, a filled-in digit overconfident, a ? for a readable digit missed":
+            [S._partial_outcome("Jan 2?, 2027", g) for g in ("Jan 2?, 2027", "Jan 29, 2027", "Jan ??, 2027",
+                                                             "Feb 2?, 2027", "Jan 2?, 27")]
+            == ["correct", "overconfident", "missed", "wrong", "wrong"],
+        "an ISO date beside a partly read print is overconfident, not spurious":
+            _partial_iso_outcome(inv) == "overconfident",
+        "the labelling tool refuses an ISO date beside a partly read print":
+            any("partly read" in e for e in F.validate(_partial_iso_key(inv))[0]),
         "a trap whose wrong value is the key's own value is refused":
             any("trap 9" in e or "which is the key's own value" in e
                 for e in F.validate(_trap_on_own_value(inv))[0]),
@@ -193,6 +201,21 @@ def cmd_selfcheck(args) -> int:
     print()
     print("SELFCHECK", "PASSED" if ok else "FAILED")
     return 0 if ok else 1
+
+
+def _partial_iso_key(key: dict) -> dict:
+    """The invoice key with row 2's printed date partly read, ISO left filled."""
+    k = copy.deepcopy(key)
+    k["expected"]["line_items"][1]["administered_on_raw"] = "04-0?-25"
+    return k
+
+
+def _partial_iso_outcome(key: dict) -> str:
+    k = _partial_iso_key(key)
+    k["expected"]["line_items"][1]["administered_on"] = None
+    got = copy.deepcopy(K.strip_annotations(key["expected"]))      # the model gives the full date
+    ds = S.score_document(k, got, "partial")
+    return next(f.outcome for f in ds.fields if f.path == "line_items[2].administered_on")
 
 
 def _trap_on_own_value(key: dict) -> dict:

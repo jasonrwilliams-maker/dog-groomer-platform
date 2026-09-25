@@ -26,7 +26,7 @@
 
 BEGIN;
 SET search_path = groom, public;
-SELECT plan(28);
+SELECT plan(31);
 
 -- --- Fixture -------------------------------------------------------------------
 INSERT INTO document (id, owner_id, object_key, mime_type, byte_size, sha256,
@@ -278,6 +278,26 @@ SELECT results_eq(
        FROM v_model_review_outcomes WHERE prompt_version = 'p0' $$,
   $$ VALUES (2::bigint, 1::bigint, 0::bigint, 1::bigint, 0.0000::numeric, 0.5000::numeric) $$,
   'In production the reviewer is the key: one of two checked values was not on the page');
+
+-- Partly-read values (answer_key_contract.md v4.3). Last, so nothing above
+-- counts these rows.
+SELECT lives_ok(
+  $$ INSERT INTO eval_field_result (eval_document_result_id, field_path, outcome, expected_value, got_value)
+     VALUES ('00000000-0000-0000-0000-0000000f2301', 'line_items[9].expires_on_raw', 'overconfident',
+             'Jan 2?, 2027', 'Jan 29, 2027') $$,
+  'A digit supplied where the key reads ? is stored as overconfident');
+
+SELECT throws_ok(
+  $$ INSERT INTO eval_field_result (eval_document_result_id, field_path, outcome, expected_value, got_value)
+     VALUES ('00000000-0000-0000-0000-0000000f2301', 'line_items[10].expires_on_raw', 'overconfident',
+             'Jan 20, 2027', 'Jan 29, 2027') $$,
+  '23514', NULL, 'Overconfident against a fully read value is refused — that is wrong, not overconfident');
+
+SELECT lives_ok(
+  $$ INSERT INTO eval_field_result (eval_document_result_id, field_path, outcome, expected_value, got_value)
+     VALUES ('00000000-0000-0000-0000-0000000f2301', 'line_items[6].expires_on_raw', 'missed',
+             'Oct 2?, 2026', 'Oct ??, 2026') $$,
+  'A ? where the page shows a character is a miss, not a wrong value');
 
 SELECT * FROM finish();
 ROLLBACK;

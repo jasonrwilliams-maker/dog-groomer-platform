@@ -78,7 +78,14 @@ def parse_json(text: str) -> tuple[dict | None, str | None]:
         return None, f"JSON parse failed: {e}"
 
 
-def extract_one(doc: CorpusDoc, prompt_path: Path, model: str, run_dir: Path, max_tokens: int = 8000) -> Path:
+# Output tokens include the model's thinking, not just the JSON. A clean page
+# uses ~3-6k; the first photographed page spent ~7k thinking and was cut off at
+# the old 8k cap mid-row. 16k is the largest that stays comfortably inside the
+# SDK's non-streaming timeout.
+MAX_TOKENS = 16000
+
+
+def extract_one(doc: CorpusDoc, prompt_path: Path, model: str, run_dir: Path, max_tokens: int = MAX_TOKENS) -> Path:
     """Send one document; write <run_dir>/<document_id>.json; return its path."""
     import anthropic   # imported here so `score` and `selfcheck` work without the SDK installed
 
@@ -106,6 +113,11 @@ def extract_one(doc: CorpusDoc, prompt_path: Path, model: str, run_dir: Path, ma
     )
     text = "".join(b.text for b in resp.content if getattr(b, "type", "") == "text")
     parsed, err = parse_json(text)
+    if resp.stop_reason == "max_tokens":
+        # Say what happened. A truncated answer fails to parse at whatever
+        # point it was cut, and that parser message points at the wrong cause.
+        parsed, err = None, (f"cut off: the model used all {max_tokens} output tokens (thinking included) "
+                             f"before finishing the JSON — {len(text)} characters of answer were written")
 
     record = {
         "document_id": doc.document_id,
@@ -118,6 +130,7 @@ def extract_one(doc: CorpusDoc, prompt_path: Path, model: str, run_dir: Path, ma
         "model_name": resp.model,          # what actually answered
         "prompt_version": pv,
         "stop_reason": resp.stop_reason,
+        "max_tokens": max_tokens,
         "usage": {"input_tokens": resp.usage.input_tokens, "output_tokens": resp.usage.output_tokens},
         "extracted_at": datetime.now(timezone.utc).isoformat(),
         "raw_response": text,              # unmodified

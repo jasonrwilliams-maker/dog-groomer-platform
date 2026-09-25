@@ -71,9 +71,24 @@ Document date, clinic, owner, patient. Beside every box is a status:
 | blank on page | The label is printed and left empty (`Color:` with nothing after it) |
 | unfilled form question | A printed question nobody answered (unticked Yes/No boxes) |
 | not on this format | This kind of document never has this field |
-| illegible | Something is printed and you can't read it. Note what you *can* see: `03/1_/2025` |
+| illegible | Something is printed and you can't read **any** of it |
+
+### Partly readable? Use `?`
+
+When you can read *most* of a value, type what you can read and put a `?` for
+each character you can't: `Jan 2?, 2027`. Leave the status as *as typed*, and
+leave the ISO date box empty (the page doesn't state a full date).
+
+Don't pick the likeliest digit, even when you're fairly sure. On the Luna
+photo, a "pretty certain" reading of the day was wrong three times out of
+three. The `?` is the honest record, and it is what the model is scored
+against: copying your `?` is correct, filling in a digit is *overconfident*.
 
 ### ② Rows
+
+Click a row in the table to open it below — the box at the left of the row.
+✏️ marks the row that is open. The buttons under the table add, insert, move
+and delete rows.
 
 One row per line in any list on the page — vaccinations, services, reminders,
 discounts — in page order. Headings and footers are not rows.
@@ -108,6 +123,12 @@ date. The score reports how many traps the model fell into.
 - **Worth a second look** — questions, not blockers.
 - **Publish the key** writes it to `extraction/answer_keys/`.
 
+**Scoring and model runs only ever use the published key.** Your edits are
+saved as a draft as you go, but they change no score until you publish. While
+there's anything unpublished, a **✏️ banner** sits at the top of every tab with
+a **Publish now** button, and the document shows as 🟡 *edits not published*
+on the Documents screen and in the sidebar. Run & test warns you too.
+
 ### More…
 
 - **Also accept** — only when the page prints the *same* fact twice in two
@@ -140,6 +161,11 @@ at the page and choose:
 - **The key is wrong** — the key is corrected to the model's reading, and the
   change is logged in the key with your reason.
 - **Both are right** — the page prints this fact twice in two forms.
+
+A 🟣 **overconfident** card means the model filled in a character your key
+reads as `?`. Usually the key stands — the model guessed. If, looking again,
+the character really is readable, say so and the key takes the model's
+reading.
 
 Rows are compared by number, so if the model skipped a row, everything after it
 disagrees. Fix the first one and read the rest with that in mind.

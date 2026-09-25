@@ -2,9 +2,10 @@
 
     Documents   what has been submitted, and where each one stands
     Label       write a document's answer key by looking at the page — never at the model
+    Run & test  the README's commands: database setup, pgTAP, model runs, scoring
     Review      what the model read, against the key, and what needs reconciling
 
-Run it with `docker compose --profile review up review` and open
+It starts with the stack — `docker compose up -d` — at
 http://localhost:8501. Everything it writes is either a key in
 extraction/answer_keys/ (committed, anonymised), a draft in private/drafts/, or
 a review verdict inside a run directory in extraction/runs/ (both gitignored).
@@ -59,7 +60,8 @@ from harness import pii as P        # noqa: E402
 from harness import score as S      # noqa: E402
 from harness.prep import prepare_image   # noqa: E402
 
-import ops                          # noqa: E402  (this folder: the terminal commands, runnable from the page)
+sys.path.insert(0, str(Path(__file__).resolve().parent))   # this folder, however the app was started
+import ops                          # noqa: E402  (the terminal commands, runnable from the page)
 
 RUNS_DIR = K.EXTRACTION_DIR / "runs"
 FIXTURE = K.EXTRACTION_DIR.parent / "sql" / "seed" / "fixture.sql"
@@ -76,7 +78,9 @@ STATUS_HELP = ("Leave empty when you typed a value, or when the page simply has 
                "**blank on page** — the label is printed and left empty.  \n"
                "**unfilled form question** — a printed question nobody answered.  \n"
                "**not on this format** — this kind of document never carries it.  \n"
-               "**illegible** — something is printed and you cannot read it. Say what you *can* see in a note.")
+               "**illegible** — something is printed and you cannot read any of it.  \n"
+               "Can read *part* of it? Keep 'as typed' and type ? for each character you can't read: "
+               "`Jan 2?, 2027`. Don't pick the likeliest digit.")
 
 HELP = {
     "document.as_of_date": "A date the page states about ITSELF — printed on, report date, 'as of'. Not a vaccination date. YYYY-MM-DD.",
@@ -90,9 +94,11 @@ HELP = {
     "patient.tag_number": "A rabies tag printed in the patient header. One printed with the vaccination goes on the row.",
     "term": "Exactly as printed, capitalisation and punctuation included. Don't decide whether it is a vaccine.",
     "source_region": "Where on the page the row sits: services_billed, reminders, vaccinations_table… Not scored.",
-    "administered_on_raw": "The date as printed: '04-04-25', 'Oct 15, 2025'.",
+    "administered_on_raw": "The date as printed: '04-04-25', 'Oct 15, 2025'. A character you can't read is ?: "
+                           "'Oct 1?, 2025'.",
     "administered_on": "YYYY-MM-DD — only when the printed form states year, month AND day.",
-    "expires_on_raw": "The expiry or due date as printed. '03-28' is a month; it lives here and nowhere else.",
+    "expires_on_raw": "The expiry or due date as printed. '03-28' is a month; it lives here and nowhere else. "
+                      "A character you can't read is ?: 'Jan 2?, 2027' — and then the ISO box stays empty.",
     "expires_on": "YYYY-MM-DD — only a full date printed for THIS row. Never derived, never a lot's expiry.",
     "status_raw": "A status word printed on the row: Active, Due, Overdue.",
     "veterinarian_phone": "A vet's own number. A clinic switchboard is not a vet's phone.",
@@ -170,7 +176,20 @@ def inventory() -> list[dict]:
     return rows
 
 
+def has_unpublished_edits(item: dict) -> bool:
+    """A published key with a draft that differs from it: the harness is
+    still scoring the published version."""
+    if not (item["key_path"] and item["draft_path"]):
+        return False
+    try:
+        return item["draft_path"].read_text(encoding="utf-8") != item["key_path"].read_text(encoding="utf-8")
+    except OSError:
+        return False
+
+
 def status_word(item: dict) -> str:
+    if item["key_path"] and has_unpublished_edits(item):
+        return "edits not published"
     if item["key_path"]:
         return "labelled"
     if item["draft_path"]:
@@ -178,9 +197,9 @@ def status_word(item: dict) -> str:
     return "not labelled"
 
 
-STATUS_MARK = {"not labelled": "🔴", "draft": "🟡", "labelled": "🟢"}
+STATUS_MARK = {"not labelled": "🔴", "draft": "🟡", "edits not published": "🟡", "labelled": "🟢"}
 STATUS_COLOUR = {"not labelled": "rgba(230, 70, 70, .28)", "draft": "rgba(240, 180, 40, .30)",
-                 "labelled": "rgba(60, 170, 90, .25)"}
+                 "edits not published": "rgba(240, 180, 40, .30)", "labelled": "rgba(60, 170, 90, .25)"}
 
 
 def label_of(item: dict) -> str:
@@ -265,6 +284,7 @@ def close_draft():
 
 
 NO_HOUSEHOLD = "__none__"
+PROBLEMS = ("wrong", "missed", "spurious", "overconfident")
 
 
 def fixture_choices() -> tuple[dict, dict]:
@@ -316,10 +336,11 @@ def screen_documents(items: list[dict]):
             key = K.load_key(it["key_path"])
             rec = json.loads(Path(latest["path"]).read_text(encoding="utf-8"))
             ds = S.score_document(key, rec.get("output"), it["document_id"], rec.get("parse_error"), pii)
-            problems = [f.path for f in ds.fields if f.outcome in ("wrong", "missed", "spurious")]
+            problems = [f.path for f in ds.fields if f.outcome in PROBLEMS]
             verdicts = load_verdicts(Path(latest["path"]))
             row.update({"correct": f"{ds.count('correct')}/{ds.scored}", "wrong": ds.count("wrong"),
                         "missed": ds.count("missed"), "spurious": ds.count("spurious"),
+                        "overconfident": ds.count("overconfident"),
                         "traps hit": f"{ds.traps_hit}/{ds.traps_scorable}",
                         "to reconcile": sum(1 for p in problems if p not in verdicts)})
         elif latest:
@@ -330,7 +351,7 @@ def screen_documents(items: list[dict]):
         row["labelled before any run"] = blind or "—"
         table.append(row)
     # What needs a human first; the long file names last.
-    order = ["document", "key", "to reconcile", "correct", "wrong", "missed", "spurious", "traps hit",
+    order = ["document", "key", "to reconcile", "correct", "wrong", "missed", "spurious", "overconfident", "traps hit",
              "model runs", "latest run", "labelled before any run", "file"]
     df = pd.DataFrame(table)
     df = df[[c for c in order if c in df.columns]]
@@ -340,7 +361,7 @@ def screen_documents(items: list[dict]):
         styled = styled.map(lambda v: "background-color: rgba(240, 180, 40, .30)"
                             if isinstance(v, (int, float)) and v == v and v > 0 else "", subset=["to reconcile"])
     st.dataframe(styled, width="stretch", hide_index=True)
-    st.caption("🔴 no key yet   🟡 a draft in progress   🟢 key published")
+    st.caption("🔴 no key yet   🟡 a draft in progress, or edits not yet published   🟢 key published")
 
     waiting = [it for it in items if status_word(it) != "labelled"]
     if waiting:
@@ -385,11 +406,13 @@ def screen_label(item: dict):
     st.caption("The model's reading is never shown here. Type what the page prints; a blank box means null, "
                "and null is a correct answer.")
     banner = st.empty()      # filled at the end of the run, so its count is never one click behind
+    pub_banner = st.empty()  # likewise: whether there is anything to publish depends on this run's edits
 
     left, right = st.columns([5, 6], gap="large")
     page_count = page_viewer(file, left)
     _label_tabs(key, item, src, right, page_count)
 
+    unpublished_banner(key, item, pub_banner)
     left_to_check = F.unchecked(key)
     if left_to_check:
         groups = F.bulk_checkable(key, vocabulary())
@@ -580,13 +603,9 @@ def tab_rows(key: dict):
                               "🔴 and 🟠 rows are still checked one by one."):
                 F.mark_all_checked(key, low)
                 bump(); st.rerun()
-        overview = pd.DataFrame([{"n": r["n"], "priority": PRIORITY_BADGE[F.row_priority(r.get("term"), vocab)],
-                                  "to check": str(len(left_on(r["n"])) or ""),
-                                  "term": r.get("term"), "given (printed)": r.get("administered_on_raw"),
-                                  "given": r.get("administered_on"), "expires (printed)": r.get("expires_on_raw"),
-                                  "expires": r.get("expires_on"), "region": r.get("source_region")} for r in rs])
-        st.dataframe(overview, hide_index=True, width="stretch", height=min(38 * (len(rs) + 1), 300))
-
+    # Which row is open. The table is the picker: a click on a row opens it.
+    # Row operations set this directly and bump the generation, which gives
+    # the table a fresh key — so its old click cannot pull the editor back.
     sel_key = "sel_row"
     ns = [r["n"] for r in rs]
     if st.session_state.get(sel_key) not in ns:
@@ -594,21 +613,36 @@ def tab_rows(key: dict):
         order = sorted(ns, key=lambda n: ({F.PRIORITY_TRACKED: 0, F.PRIORITY_UNKNOWN: 1, F.PRIORITY_OTHER: 2}[
             F.row_priority(F.get(key, f"line_items[{n}].term"), vocab)], not left_on(n), n))
         st.session_state[sel_key] = order[0] if ns else None
+    n = st.session_state[sel_key]
+
+    if rs:
+        st.caption("**Click a row to edit it.** ✏️ marks the row open below.")
+        overview = pd.DataFrame([{"": "✏️" if r["n"] == n else "", "n": r["n"],
+                                  "priority": PRIORITY_BADGE[F.row_priority(r.get("term"), vocab)],
+                                  "to check": str(len(left_on(r["n"])) or ""),
+                                  "term": r.get("term"), "given (printed)": r.get("administered_on_raw"),
+                                  "given": r.get("administered_on"), "expires (printed)": r.get("expires_on_raw"),
+                                  "expires": r.get("expires_on"), "region": r.get("source_region")} for r in rs])
+        event = st.dataframe(overview, hide_index=True, width="stretch", height=min(36 * (len(rs) + 1) + 3, 460),
+                             on_select="rerun", selection_mode="single-row", key=wk("rows_table"))
+        picked = event.selection.rows if event is not None else []
+        if picked and rs[picked[0]]["n"] != n:
+            st.session_state[sel_key] = rs[picked[0]]["n"]
+            st.rerun()
+
     b = st.columns(5)
     if b[0].button("➕ Add row at end", width="stretch"):
         st.session_state[sel_key] = F.insert_row(key, None); bump(); st.rerun()
     if not rs:
         st.info("No rows yet.")
         return
-    n = st.selectbox("Row", ns, index=ns.index(st.session_state[sel_key]), format_func=lambda n: f"Row {n}")
-    st.session_state[sel_key] = n
-    if b[1].button("Insert below", width="stretch"):
+    if b[1].button(f"Insert below row {n}", width="stretch"):
         st.session_state[sel_key] = F.insert_row(key, n); bump(); st.rerun()
     if b[2].button("⬆ Move up", width="stretch", disabled=n == 1):
         st.session_state[sel_key] = F.move_row(key, n, -1); bump(); st.rerun()
     if b[3].button("⬇ Move down", width="stretch", disabled=n == len(rs)):
         st.session_state[sel_key] = F.move_row(key, n, +1); bump(); st.rerun()
-    if b[4].button("🗑 Delete row", width="stretch"):
+    if b[4].button(f"🗑 Delete row {n}", width="stretch"):
         F.delete_row(key, n); st.session_state[sel_key] = max(1, n - 1); bump(); st.rerun()
 
     row = F.row_by_n(key, n)
@@ -638,7 +672,10 @@ def tab_rows(key: dict):
         field_input(key, path, f, help_text=HELP.get(f))
         if f in F.DATE_PAIRS:
             iso, raw = F.get(key, path), F.get(key, f"line_items[{n}].{F.DATE_PAIRS[f]}")
-            if iso and not re.match(r"^\d{4}-\d{2}-\d{2}$", str(iso)):
+            if iso and raw and "?" in raw:
+                st.warning(f"The printed form **{raw}** is partly read, so it doesn't state a full date. "
+                           "Leave this box empty.")
+            elif iso and not re.match(r"^\d{4}-\d{2}-\d{2}$", str(iso)):
                 st.warning("YYYY-MM-DD only. The printed form goes in the _raw box above.")
             elif F.raw_supports_iso(raw, iso) is False:
                 st.warning(f"The page prints **{raw}**. Does that really state the year, month *and* day of {iso}? "
@@ -793,12 +830,63 @@ def tab_pii():
             st.success(f"Saved {len(new)} replacements to private/pii_map.json.")
 
 
-def tab_publish(key: dict, item: dict):
-    pii = P.load()
-    errors, warns = F.validate(key, pii)
+def publish_checks(key: dict) -> tuple[list[str], list[str]]:
+    errors, warns = F.validate(key, P.load())
     if not st.session_state.get("corpus_owner"):
         errors = errors + ["No household chosen (About this document → Corpus entry). If it isn't in the "
                            "list, choose '(not in the fixture yet)'."]
+    return errors, warns
+
+
+def is_unpublished(key: dict) -> bool:
+    target = F.published_path(key["meta"].get("document_id") or "")
+    return not target.exists() or F.dumps(key) != target.read_text(encoding="utf-8")
+
+
+def publish(key: dict, item: dict):
+    doc_id = key["meta"]["document_id"]
+    target = F.published_path(doc_id)
+    out = copy.deepcopy(key)
+    if st.session_state.draft_source == "new" and not item["runs"]:
+        out["meta"]["_labelled_blind"] = (f"Labelled on {date.today().isoformat()}, before any model run on "
+                                          "this file. A held-out test until a run is reviewed.")
+    F.write(target, out)
+    F.upsert_corpus({"document_id": doc_id, "key": f"answer_keys/{target.name}",
+                     "file": f"../private/{item['file'].name}",
+                     "owner_id": None if st.session_state.get("corpus_owner") == NO_HOUSEHOLD
+                                 else st.session_state.get("corpus_owner"),
+                     "dog_id": st.session_state.get("corpus_dog") or None})
+    dp = F.draft_path(doc_id)
+    if dp.exists():
+        dp.unlink()
+    st.session_state.flash = (f"Published {target.name}. Scoring now uses it — re-score an older run from "
+                              "**Run & test → Scoring**, or send it to the model from **Run & test → Model**.")
+    close_draft()
+    st.rerun()
+
+
+def unpublished_banner(key: dict, item: dict, where):
+    """Shown on every tab of the Label screen while the open key differs from
+    what is published — because the harness only ever reads the published
+    one, and an edit that never gets published silently changes nothing."""
+    if not is_unpublished(key):
+        return
+    errors, _ = publish_checks(key)
+    never = not F.published_path(key["meta"].get("document_id") or "").exists()
+    with where.container(border=True):
+        c1, c2 = st.columns([4, 1])
+        c1.markdown("**✏️ This key isn't published yet.** Scoring and model runs can't use it until it is."
+                    if never else
+                    "**✏️ Unpublished changes.** Scoring and model runs still use the published version of "
+                    "this key — publish to make them count.")
+        if errors:
+            c1.caption(f"{len(errors)} thing(s) to fix first — **④ Check & publish** lists them.")
+        elif c2.button("Publish now", type="primary", width="stretch", key=wk("publish_banner")):
+            publish(key, item)
+
+
+def tab_publish(key: dict, item: dict):
+    errors, warns = publish_checks(key)
     st.code(F.self_score_line(key), language=None)
     if errors:
         st.error("**Fix before publishing**\n\n" + "\n".join(f"- {e}" for e in errors))
@@ -812,23 +900,7 @@ def tab_publish(key: dict, item: dict):
     st.caption(f"Publishing writes `{rel(target)}` (committed — anonymised values only) and the "
                f"`corpus.json` entry. Drafts autosave to `private/drafts/`.")
     if st.button("Publish the key", type="primary", disabled=bool(errors)):
-        out = copy.deepcopy(key)
-        if st.session_state.draft_source == "new" and not item["runs"]:
-            out["meta"]["_labelled_blind"] = (f"Labelled on {date.today().isoformat()}, before any model run on "
-                                              "this file. A held-out test until a run is reviewed.")
-        F.write(target, out)
-        F.upsert_corpus({"document_id": doc_id, "key": f"answer_keys/{target.name}",
-                         "file": f"../private/{item['file'].name}",
-                         "owner_id": None if st.session_state.get("corpus_owner") == NO_HOUSEHOLD
-                                     else st.session_state.get("corpus_owner"),
-                         "dog_id": st.session_state.get("corpus_dog") or None})
-        dp = F.draft_path(doc_id)
-        if dp.exists():
-            dp.unlink()
-        st.session_state.flash = (f"Published {target.name}. Next: **Run & test** → Checks → self-check, "
-                                  "then Model → send it to the model.")
-        close_draft()
-        st.rerun()
+        publish(key, item)
 
 
 def autosave(key: dict):
@@ -866,6 +938,10 @@ def save_verdict(run_record_path: Path, path: str, verdict: str, note: str, key:
     F.write(p, data)
 
 
+VERDICTS_OVERCONFIDENT = {
+    "model_wrong": "The model guessed — the key's ? stands",
+    "key_wrong": "It is readable after all — use the model's reading",
+}
 VERDICTS = {
     "model_wrong": "The model is wrong — the key stands",
     "key_wrong": "The key is wrong — use the model's reading",
@@ -904,19 +980,30 @@ def screen_review(item: dict):
     pii = P.load()
     ds = S.score_document(key, rec.get("output"), item["document_id"], rec.get("parse_error"), pii)
     verdicts = load_verdicts(rec_path)
+    if rec.get("stop_reason") == "max_tokens":
+        used = (rec.get("usage") or {}).get("output_tokens")
+        st.error(f"**The model ran out of room before finishing.** It used all {used} output tokens it was "
+                 f"allowed — most of them thinking — and its answer stops partway through. Nothing is wrong "
+                 "with the document or the key. Run it again from **Run & test**: runs now allow 16,000 tokens.")
+        st.caption("What it wrote before being cut off:")
+        st.code(rec.get("raw_response", "")[-3000:])
+        return
     if rec.get("parse_error"):
         st.error(f"The response didn't parse: {rec['parse_error']}")
         st.code(rec.get("raw_response", "")[:4000])
         return
 
-    m = st.columns(7)
+    m = st.columns(8)
     m[0].metric("Rows", f"{ds.got_items}/{ds.expected_items}")
     m[1].metric("Correct", f"{ds.count('correct')}/{ds.scored}")
     m[2].metric("Wrong", ds.count("wrong"))
     m[3].metric("Missed", ds.count("missed"))
     m[4].metric("Spurious", ds.count("spurious"), help="A value where the page has none — the hallucination class.")
-    m[5].metric("Traps hit", f"{ds.traps_hit}/{ds.traps_scorable}")
-    m[6].metric("Absence violations", len(ds.absent_violations))
+    m[5].metric("Overconfident", ds.count("overconfident"),
+                help="A character filled in where the key reads ? — printed, but not readable. A lucky guess and "
+                     "a wrong one look the same, so neither counts as correct.")
+    m[6].metric("Traps hit", f"{ds.traps_hit}/{ds.traps_scorable}")
+    m[7].metric("Absence violations", len(ds.absent_violations))
     if rec.get("prepared"):
         pn = rec["prepared"]
         st.caption(f"Sent as a {pn['sent_size'][0]}×{pn['sent_size'][1]} image"
@@ -930,7 +1017,7 @@ def screen_review(item: dict):
     left, right = st.columns([5, 6], gap="large")
     page_viewer(file, left)
     with right:
-        problems = [f for f in ds.fields if f.outcome in ("wrong", "missed", "spurious")]
+        problems = [f for f in ds.fields if f.outcome in PROBLEMS]
         absent_by_path = {a.path: a.outcome for a in ds.absent_violations}
         hits = {}
         for t in ds.traps:
@@ -963,7 +1050,7 @@ def screen_review(item: dict):
             only = st.toggle("Only disagreements", value=False)
             rows = [{"field": f.path, "key": _s(f.expected), "model": _s(f.got), "outcome": f.outcome,
                      "via PII map": "yes" if f.pii_mapped else "", "alternate form": "yes" if f.accepted_alternate else ""}
-                    for f in ds.fields if not only or f.outcome in ("wrong", "missed", "spurious")]
+                    for f in ds.fields if not only or f.outcome in PROBLEMS]
             st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch", height=600)
 
 
@@ -974,7 +1061,8 @@ def _s(v):
 def reconcile_card(f: S.FieldResult, key: dict, item: dict, rec_path: Path, run: dict,
                    absent_cat: str | None, traps: list):
     with st.container(border=True):
-        badge = {"wrong": "🟠 wrong", "missed": "🔵 missed", "spurious": "🔴 spurious"}[f.outcome]
+        badge = {"wrong": "🟠 wrong", "missed": "🔵 missed", "spurious": "🔴 spurious",
+                 "overconfident": "🟣 overconfident — filled in a character the key reads as ?"}[f.outcome]
         st.markdown(f"**{f.path}** &nbsp; {badge}")
         c1, c2 = st.columns(2)
         c1.markdown("Key says")
@@ -991,7 +1079,8 @@ def reconcile_card(f: S.FieldResult, key: dict, item: dict, rec_path: Path, run:
         if notes:
             st.caption("Note: " + "; ".join(notes) + ".")
         options = ["model_wrong", "key_wrong"] + (["also_accept"] if f.outcome == "wrong" else [])
-        choice = st.radio("Verdict", options, format_func=VERDICTS.get, key=f"v|{run['stamp']}|{f.path}",
+        wording = VERDICTS_OVERCONFIDENT if f.outcome == "overconfident" else VERDICTS
+        choice = st.radio("Verdict", options, format_func=wording.get, key=f"v|{run['stamp']}|{f.path}",
                           index=None, label_visibility="collapsed")
         note = st.text_input("Why (optional, but future-you will want it)", key=f"n|{run['stamp']}|{f.path}")
         if choice == "key_wrong":
@@ -1070,6 +1159,11 @@ def screen_ops(items: list[dict]):
     elif db == "empty":
         st.info("The database is reachable but has no schema. Open **Database** below and set it up.")
 
+    stale = [it["document_id"] for it in items if has_unpublished_edits(it)]
+    if stale:
+        st.warning("**Unpublished edits:** " + ", ".join(f"`{d}`" for d in stale) + ". Runs and scores use the "
+                   "*published* key, so these edits won't count until you publish them on the **Label** screen.")
+
     t_model, t_score, t_checks, t_db = st.tabs(["Model", "Scoring", "Checks", "Database"])
 
     with t_model:
@@ -1131,7 +1225,7 @@ def main():
     items = inventory()
     with st.sidebar:
         st.title("🐕 Records")
-        screen = st.radio("Screen", ["Instructions", "Documents", "Label", "Review", "Run & test"],
+        screen = st.radio("Screen", ["Instructions", "Documents", "Label", "Run & test", "Review"],
                           index=1, key="screen")
         item = None
         if screen in ("Label", "Review"):

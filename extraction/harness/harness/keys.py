@@ -67,7 +67,7 @@ def load_corpus() -> list[CorpusDoc]:
     return docs
 
 
-CONTRACT_VERSION = "v4.2"
+CONTRACT_VERSION = "v4.3"
 _CONTRACT_RE = re.compile(r"answer_key_contract\.md (v4(?:\.\d+)?)\b")
 
 # The four kinds of nothing (contract, "Four kinds of absence"). Every one is

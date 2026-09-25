@@ -1,4 +1,4 @@
-# Answer Key Contract — v4.2
+# Answer Key Contract — v4.3
 
 Shared contract for every hand-labelled extraction answer key. Read this before
 writing a new key; keys are only comparable to each other if they agree on this.
@@ -232,6 +232,42 @@ a sentence of prose are not rows, however they are laid out.
   (`"03/1_/2025 — second digit of the day under glare"`), so a better copy of
   the page can settle it.
 
+### Partly read: `?` for a character you cannot read
+
+Between a value you can read and one that is `illegible` is a value you can
+*partly* read: `Jan 2_, 2027`, where the second digit of the day is under the
+glare. Write it with one `?` for each character that is printed but not
+readable:
+
+```jsonc
+"expires_on_raw": "Jan 2?, 2027",
+"expires_on": null          // the page does not state a full date
+```
+
+- **One `?` per character**, in the `_raw` slot or any other text slot. Only
+  where something is printed: a character that is simply not there is not `?`.
+- **The ISO slot stays `null`** whenever its `_raw` form has a `?`. An ISO date
+  claims a day; the page does not give one. The labelling tool refuses the
+  combination.
+- **Do not resolve the `?` from what you know.** The first photographed page
+  proved why: the labeller was "pretty certain" of three blurred day digits
+  and wrong on all three (`Oct 25` for `Oct 29`, `Jan 20` for `Jan 29`, twice),
+  and the model was confident and wrong on two others. The second digit of a
+  day is guessable, and a guess reads exactly like a reading.
+- A **literal** question mark printed on the page is vanishingly rare on these
+  documents; if one appears, say so in the slot's `_note`.
+
+The scorer compares character by character. The model matching the key,
+`?` for `?`, is **correct**. A digit where the key has `?` is
+**overconfident** — its own column, because a lucky guess and a wrong one are
+indistinguishable, and that is the calibration this corpus exists to measure.
+A `?` where the key reads a digit is **missed**. Any other mismatch is
+**wrong**. An ISO date beside a partly read print is **overconfident**.
+
+What happens next is not the key's business. Turning `Jan 2?, 2027` into the
+range Jan 20 – Jan 29, and deciding whether a range that wide changes a
+compliance answer, belong to Layers 2 and 3 — see `reference/`, when written.
+
 ### `must_not_produce`
 
 Each entry carries `layer: "extraction"` or `layer: "resolution"`, so a failure is
@@ -304,3 +340,16 @@ that is the empirical argument for the human confirmation step.
   saves the same bytes Python's `json.dumps(indent=2, ensure_ascii=False)`
   produces, so a key edited in the tool diffs only where it changed. Hand
   editing still works; the self-check is the arbiter either way.
+
+---
+
+## Changes from v4.2
+
+- `?` marks one printed character that cannot be read, and an ISO slot beside
+  a partly read print stays `null`. The first photographed page showed that
+  `illegible` alone forces a false choice: record a guessed digit as fact, or
+  throw away a month and a year that are perfectly readable.
+- The scorer gains an outcome, `overconfident`, and so does
+  `sql/17_extraction_evaluation.sql` (`eval_field_outcome`, its coherence
+  check, and both evaluation views). `missed` now also covers a model that
+  writes `?` where the key reads a character.

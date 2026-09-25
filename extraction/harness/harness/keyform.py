@@ -623,8 +623,8 @@ def raw_supports_iso(raw: str | None, iso: str | None) -> bool | None:
     ISO slot claims? None when there is nothing to compare. This is the
     labeller's version of the model's worst mistake: '03-28' is a month, and
     an ISO date written next to it has invented a day."""
-    if not raw or not iso or not _ISO.match(iso):
-        return None
+    if not raw or not iso or not _ISO.match(iso) or "?" in raw:
+        return None     # a partly read print has its own rule in validate()
     y, m, d = (int(x) for x in iso.split("-"))
     nums = [int(t) for t in re.findall(r"\d+", raw)]
     words = [w.lower()[:3] for w in re.findall(r"[A-Za-z]+", raw)]
@@ -684,6 +684,10 @@ def validate(key: dict, pii: P.PiiMap = P.EMPTY) -> tuple[list[str], list[str]]:
     for r in rs:
         for iso_f, raw_f in DATE_PAIRS.items():
             iso, raw = r.get(iso_f), r.get(raw_f)
+            if raw and "?" in raw and iso:
+                errors.append(f"row {r['n']}: {raw_f} is {raw!r} — partly read — so {iso_f} must stay empty. "
+                              "The page doesn't state a full date; the ? is the honest record.")
+                continue
             ok = raw_supports_iso(raw, iso)
             if ok is False:
                 warns.append(f"row {r['n']}: {iso_f} = {iso} but the page prints {raw!r}. "
