@@ -10,6 +10,8 @@ The order is always the same:
 2. **Label** — write (or check) the answer key, looking at the page.
 3. **Run & test** — send the document to the model.
 4. **Review** — go through the disagreements.
+5. **Confirm** — what a groomer does in the shop: check the model's reading
+   against the page, and turn the page into the dog's vaccination records.
 
 ---
 
@@ -169,3 +171,41 @@ reading.
 
 Rows are compared by number, so if the model skipped a row, everything after it
 disagrees. Fix the first one and read the rest with that in mind.
+
+---
+
+## 5. Confirm
+
+Review asks *did the model match the answer key?* Confirm asks what someone at
+the counter asks: *is this what the page says?* — and then files it.
+
+A page reaches this screen once its run is loaded into the database
+(**Run & test → Scoring → Load into the database**). Choose who you are
+(**Reviewing as**) and the page. The page is on the left.
+
+1. **Whose page is this?** Pick the dog. If the page isn't filed under the
+   right dog yet, file it from the box below.
+2. **Check each vaccine line.** Only lines for vaccines the shop tracks need
+   checking; they open by themselves. For every field, look at the page and
+   choose:
+   - **Matches the page**
+   - **The page says something else** — type what it says (dates as
+     year-month-day), then *Save the correction*.
+   - **Not on the page — the model made it up**
+   - **On the page, but I can't read it** — no record is made from a date
+     nobody could read; the owner is asked for a better copy instead, and the
+     model isn't blamed for the blur.
+
+   *Everything I haven't answered on this line matches the page* saves the
+   rest of a line in one click. A ⚑ note under a field is why it deserves a
+   second look.
+   An **unfamiliar name** — a vaccine name the shop has never seen — needs a
+   ruling once: what it is, or *not a vaccine*. Every page that prints it the
+   same way is handled from then on.
+3. **Confirm this page.** If anything is unfinished the database says what,
+   and nothing is saved. Otherwise each line shows what became of it: a new
+   record, already on file, a disagreement with a record on file, or no record
+   because a date is missing or unreadable.
+
+A confirmed page is locked: its records rest on the checks you made. To start
+over, reset the database on **Run & test → Database**.

@@ -51,7 +51,8 @@ that extracts cleanly. Anyone can demo a clean extraction.
 | Test suite | 16 files, 208 pgTAP assertions, passing |
 | Document vocabulary (§15) | 29 rulings seeded from the labelled corpus; `resolve_term()` fails closed |
 | Extraction line items (§16) | One row per printed line; review views; the shape the harness loads |
-| Confirmation — Layer 3 (§18) | `confirm_extraction()` turns a fully reviewed page into verified records, records every line's outcome, and asks the owner for what the page is missing. Not yet wired to a button in the review tool |
+| Confirmation — Layer 3 (§18) | `confirm_extraction()` turns a fully reviewed page into verified records, records every line's outcome, and asks the owner for what the page is missing |
+| Confirm screen | The review tool's **Confirm** screen: a groomer checks each tracked field against the page (matches / says something else / made up / can't read it), rules on unfamiliar vaccine names, and confirms. Refusals show the database's own groomer-facing hint |
 | Extraction harness | Built — scores a model run against the answer keys; self-check passing |
 | Photo preparation | Built — a photo is turned upright, stripped of EXIF and GPS, and downscaled before it is sent |
 | Labelling & review tool | Built — Streamlit; writes answer keys from a form, and reconciles a run against its key |
@@ -76,6 +77,8 @@ http://localhost:8501. Everything else is on that page:
 - **Documents** — what is in `private/`, and where each one stands.
 - **Label** — write a document's answer key from a form beside the page.
 - **Review** — a model run against its key, one disagreement at a time.
+- **Confirm** — what a groomer does in production: check the model's reading
+  against the page, then turn the page into the dog's vaccination records.
 - **Run & test** — set up or reset the database, run the pgTAP suite, send
   documents to the model, re-score a run, load a run into the database.
 
@@ -279,9 +282,8 @@ never signed on a date nobody read.
    tool or prompt v2 had been seen, is in `private/`. Label it in the tool
    *before* running the model on it, so it stays a test rather than one more
    document tuned against. Then run it and reconcile on the Review screen.
-2. ~~Layer 3 — the confirmation step.~~ Built in section 18. Next: a
-   **Confirm** action on the review tool's Review screen that calls
-   `confirm_extraction()` and shows each line's outcome.
+2. ~~Layer 3 — the confirmation step.~~ Built in section 18, with a
+   **Confirm** screen in the review tool.
 3. Duplicate-upload warning — a near-duplicate image check before the model is
    called (a resized or re-saved copy of a page already on file). Exact copies
    are already refused per owner; a re-read of a shot already on file is
