@@ -3,8 +3,8 @@
 A system of record for a small grooming practice, with the business rules
 enforced **in the database** rather than in the application.
 
-Fourteen numbered rules, each with a dedicated error code, each proven by a test
-that asserts the *refusal* — not the happy path. 163 assertions, all passing.
+Eighteen numbered rules, each with a dedicated error code, each proven by a test
+that asserts the *refusal* — not the happy path. 208 assertions, all passing.
 How strictly each groom-time rule is enforced (block, warn, or off) is itself a
 row of data, changed by `UPDATE` and recorded in the audit log — not a migration.
 
@@ -46,11 +46,12 @@ that extracts cleanly. Anyone can demo a clean extraction.
 
 | Component | State |
 |---|---|
-| Schema | Frozen — sections 0–14 in one file; sections 15–16 follow as separate files |
-| Business rules | 14, codes `GR001`–`GR014` |
-| Test suite | 15 files, 163 pgTAP assertions, passing |
+| Schema | Frozen — sections 0–14 in one file; sections 15–18 follow as separate files |
+| Business rules | 18, codes `GR001`–`GR018` |
+| Test suite | 16 files, 208 pgTAP assertions, passing |
 | Document vocabulary (§15) | 29 rulings seeded from the labelled corpus; `resolve_term()` fails closed |
 | Extraction line items (§16) | One row per printed line; review views; the shape the harness loads |
+| Confirmation — Layer 3 (§18) | `confirm_extraction()` turns a fully reviewed page into verified records, records every line's outcome, and asks the owner for what the page is missing. Not yet wired to a button in the review tool |
 | Extraction harness | Built — scores a model run against the answer keys; self-check passing |
 | Photo preparation | Built — a photo is turned upright, stripped of EXIF and GPS, and downscaled before it is sent |
 | Labelling & review tool | Built — Streamlit; writes answer keys from a form, and reconciles a run against its key |
@@ -88,11 +89,12 @@ docker compose exec db psql -U postgres -d grooming_test -v ON_ERROR_STOP=1 -f s
 docker compose exec db psql -U postgres -d grooming_test -v ON_ERROR_STOP=1 -f sql/15_document_term.sql
 docker compose exec db psql -U postgres -d grooming_test -v ON_ERROR_STOP=1 -f sql/16_extraction_line_item.sql
 docker compose exec db psql -U postgres -d grooming_test -v ON_ERROR_STOP=1 -f sql/17_extraction_evaluation.sql
+docker compose exec db psql -U postgres -d grooming_test -v ON_ERROR_STOP=1 -f sql/18_confirmation.sql
 docker compose exec db psql -U postgres -d grooming_test -f sql/seed/fixture.sql
 docker compose exec db pg_prove -U postgres -d grooming_test tests/*.sql
 ```
 
-Expected: `Files=15, Tests=163, Result: PASS`.
+Expected: `Files=16, Tests=208, Result: PASS`.
 
 The SQL loads in section order. `grooming_platform_schema.sql` is sections 0–14;
 each later section is its own numbered file, and a file's header carries the
@@ -160,6 +162,10 @@ model run against them — is in [`extraction/`](extraction/).
 | `GR012` | A regulatory vaccine rule does not appear, change, or disappear without a stated reason |
 | `GR013` | A missing or mistyped `shop_policy` key fails loudly, never as NULL |
 | `GR014` | `shop_policy` rows are updated, never deleted |
+| `GR015` | A page is confirmed once, and only while it is awaiting review |
+| `GR016` | A page is not confirmed until every tracked vaccine line is checked and every unfamiliar term is ruled on |
+| `GR017` | A page becomes paperwork only for a dog it is filed under |
+| `GR018` | A date goes on a record only if it is a real date, not in the future, and the expiry follows the shot |
 
 Each raises its own SQLSTATE so tests assert on a stable identifier rather than on
 error prose, and the API layer can map codes to user-facing messages without
@@ -200,7 +206,9 @@ stopped. Every rejection test is paired with the valid case — a rule that reje
 | `11` | Puppy rules — `not_yet_due` compliance and minimum grooming age |
 | `12` | Policy is data: loud failure on a missing key, labels that track the live window, block/warn/off per rule, and the regulatory-change audit trail |
 | `13` | The vocabulary fails closed: typography collapses, cadence words do not; NULL is a ruling; tracking is configuration, not vocabulary |
-| `14` | A line item is a row and its fields stay fields; the review queue empties itself; a corrected term is looked up by its correction; a tracked vaccine with one date still creates nothing |
+| `14` | A line item is a row and its fields stay fields; the review queue empties itself; a corrected term is looked up by its correction; a tracked vaccine with one date still creates nothing; two dates create nothing either until a human has reviewed every field the record carries; a reviewer can mark a date unreadable instead of confirming a guess |
+| `15` | The review work order names why each field needs a look; nothing is ready before review; evaluation results that contradict the scorer are refused |
+| `16` | Layer 3: four refusals that write nothing; a shot printed twice is one record; a struck invented expiry asks the owner instead; an expired certificate does not close a request; a re-read that disagrees with the record on file — including a day misread by a few days — is flagged, not written; an unreadable date asks for a better copy and is not counted as a hallucination; confirmed evidence cannot be deleted |
 
 ---
 
@@ -244,6 +252,25 @@ line item, so `correction_action` stays per field. The hallucination case on
 this corpus is one invented `expires_on` on one row, and a per-row review state
 would score that as a bad row and lose which field it was.
 
+**A present date is not a checked date.** On the held-out photo, every smudged
+expiry came back from the model as a clean, confident date. Nothing in the
+value distinguishes that from a printed one, so a line becomes a record only
+when a human has reviewed every field the record carries — and confirmation
+refuses the whole page (`GR016`) while any tracked line is unchecked. Each
+line's fate is then a row in `line_item_outcome`, so "which printed line
+produced this record?" has an answer, and a second copy of the same page
+points at the record it duplicated instead of creating another.
+
+**Two readings of one shot are one shot.** Duplicates are matched on a window,
+not an exact date: the photo gives DHPP as given Oct 19 where the screenshot of
+the same page says Oct 15, and exact matching would sign two verified records
+for one injection. A shot within `duplicate_shot_window_days` (a `shop_policy`
+row, default 7 — under the shortest real booster interval) of one on file is a
+conflict for a human. And a reviewer who cannot read a date marks it
+`unreadable`: no record, a request for a better copy, and no charge against
+the model's hallucination rate for what was a camera problem. "Verified" is
+never signed on a date nobody read.
+
 ---
 
 ## Roadmap
@@ -252,13 +279,16 @@ would score that as a bad row and lose which field it was.
    tool or prompt v2 had been seen, is in `private/`. Label it in the tool
    *before* running the model on it, so it stays a test rather than one more
    document tuned against. Then run it and reconcile on the Review screen.
-2. Layer 3 — the confirmation step. A function that takes a reviewed extraction
-   and writes `vaccination_record` rows for exactly the line items where
-   `v_extraction_line_item.can_create_record` is true, and opens a
-   `record_request` marked `insufficient` for a document that produced none.
-3. Seed migration — the template × tier × zone mapping
-4. FastAPI backend, with the review screen reading `v_extraction_line_item`
-5. Next.js / React / Tailwind / shadcn frontend
+2. ~~Layer 3 — the confirmation step.~~ Built in section 18. Next: a
+   **Confirm** action on the review tool's Review screen that calls
+   `confirm_extraction()` and shows each line's outcome.
+3. Duplicate-upload warning — a near-duplicate image check before the model is
+   called (a resized or re-saved copy of a page already on file). Exact copies
+   are already refused per owner; a re-read of a shot already on file is
+   already caught at confirmation (`already_on_file`).
+4. Seed migration — the template × tier × zone mapping
+5. FastAPI backend, with the review screen reading `v_extraction_line_item`
+6. Next.js / React / Tailwind / shadcn frontend
 
 The extraction schema is shaped for honest measurement: raw model responses
 stored unmodified, model and prompt versions as columns, and a per-field
