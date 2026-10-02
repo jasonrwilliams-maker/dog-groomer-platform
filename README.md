@@ -5,8 +5,8 @@
 A system of record for a small grooming practice, with the business rules
 enforced **in the database** rather than in the application.
 
-Nineteen numbered rules, each with a dedicated error code, each proven by a test
-that asserts the *refusal* — not the happy path. 237 assertions, all passing.
+Twenty numbered rules, each with a dedicated error code, each proven by a test
+that asserts the *refusal* — not the happy path. 251 assertions, all passing.
 How strictly each groom-time rule is enforced (block, warn, or off) is itself a
 row of data, changed by `UPDATE` and recorded in the audit log — not a migration.
 
@@ -79,14 +79,16 @@ for a better copy instead of recording a guess.
 
 | Component | State |
 |---|---|
-| Schema | Sections 0–14 stable, in one file; later sections appended as separate files (15–19) |
-| Business rules | 19, codes `GR001`–`GR019` |
-| Test suite | 17 files, 237 pgTAP assertions, passing |
+| Schema | Sections 0–14 stable, in one file; later sections appended as separate files (15–20) |
+| Business rules | 20, codes `GR001`–`GR020` |
+| Test suite | 18 files, 251 pgTAP assertions, passing; 7 API tests |
 | Document vocabulary (§15) | 29 rulings seeded from the labelled corpus; `resolve_term()` fails closed |
 | Extraction line items (§16) | One row per printed line; review views; the shape the harness loads |
 | Confirmation — Layer 3 (§18) | `confirm_extraction()` turns a fully reviewed page into verified records, records every line's outcome, and asks the owner for what the page is missing |
 | Confirm screen | The review tool's **Confirm** screen: a groomer checks each tracked field against the page (matches / says something else / made up / can't read it), rules on unfamiliar vaccine names, and confirms. Refusals show the database's own groomer-facing hint |
 | Owner outreach (§19) | Opt-in consent per channel, kept as a history; one message per owner per dog naming every certificate needed; spaced, capped reminders; an outbox and a sender. **Test mode**: nothing is delivered yet — a real email or text provider plugs into `extraction/review/outreach.py` |
+| Check-in (§20) | `start_visit()` opens a groom and refuses (GR020) while a service-blocking vaccine is expired, missing, disputed or still being chased. Past visits can still be recorded as history |
+| Groomer interface | **Check-in screen** (`web/`, Next.js + Tailwind, shadcn-style components) on a thin FastAPI backend (`api/`): find a dog, see whether today's groom can start and why not, allergies, handling notes, last visit; start the groom. Runs on its own demo database, `grooming_demo` |
 | Extraction harness | Built — scores a model run against the answer keys; self-check passing |
 | Photo preparation | Built — a photo is turned upright, stripped of EXIF and GPS, and downscaled before it is sent |
 | Labelling & review tool | Built — Streamlit; writes answer keys from a form, and reconciles a run against its key |
@@ -104,8 +106,19 @@ Requires Docker Desktop, and a `.env` copied from `.env.example`.
 docker compose up -d --build --wait
 ```
 
-That starts two containers: the database, and the labelling and review tool at
-http://localhost:8501. Everything else is on that page:
+That starts the database and three apps, all on this machine only:
+
+| | |
+|---|---|
+| **http://localhost:3000** | The groomer interface: the check-in screen |
+| http://localhost:8000/docs | Its backend's endpoints |
+| http://localhost:8501 | The labelling and review tool |
+
+The groomer interface runs on its own database, `grooming_demo`: the schema and
+eleven demo dogs (`sql/seed/demo.sql`), built on first start. Jaddi is the real
+one. The pgTAP suite never sees it.
+
+The labelling and review tool has everything else on one page:
 
 - **Instructions** — the whole workflow, step by step.
 - **Documents** — what is in `private/`, and where each one stands.
@@ -130,11 +143,16 @@ docker compose exec db psql -U postgres -d grooming_test -v ON_ERROR_STOP=1 -f s
 docker compose exec db psql -U postgres -d grooming_test -v ON_ERROR_STOP=1 -f sql/17_extraction_evaluation.sql
 docker compose exec db psql -U postgres -d grooming_test -v ON_ERROR_STOP=1 -f sql/18_confirmation.sql
 docker compose exec db psql -U postgres -d grooming_test -v ON_ERROR_STOP=1 -f sql/19_outreach.sql
+docker compose exec db psql -U postgres -d grooming_test -v ON_ERROR_STOP=1 -f sql/20_check_in.sql
 docker compose exec db psql -U postgres -d grooming_test -f sql/seed/fixture.sql
 docker compose exec db pg_prove -U postgres -d grooming_test tests/*.sql
 ```
 
-Expected: `Files=17, Tests=237, Result: PASS`.
+Expected: `Files=18, Tests=251, Result: PASS`. The backend's tests build their own copy of the demo database:
+
+```bash
+docker compose exec -w /repo/api api python -m pytest -q
+```
 
 The SQL loads in section order. `grooming_platform_schema.sql` is sections 0–14;
 each later section is its own numbered file, and a file's header carries the
@@ -207,6 +225,7 @@ model run against them — is in [`extraction/`](extraction/).
 | `GR017` | A page becomes paperwork only for a dog it is filed under |
 | `GR018` | A date goes on a record only if it is a real date, not in the future, and the expiry follows the shot |
 | `GR019` | No automated message to an owner who has not agreed to that channel — checked when it is queued and again when it is sent |
+| `GR020` | A groom does not start while a vaccine that blocks service is expired, missing, disputed or still being chased — but a past visit can still be recorded |
 
 Each raises its own SQLSTATE so tests assert on a stable identifier rather than on
 error prose, and the API layer can map codes to user-facing messages without
@@ -251,6 +270,7 @@ stopped. Every rejection test is paired with the valid case — a rule that reje
 | `15` | The review work order names why each field needs a look; nothing is ready before review; evaluation results that contradict the scorer are refused |
 | `16` | Layer 3: four refusals that write nothing; a shot printed twice is one record; a struck invented expiry asks the owner instead; an expired certificate does not close a request; a re-read that disagrees with the record on file — including a day misread by a few days — is flagged, not written; an unreadable date asks for a better copy and is not counted as a hallucination; an unreadable vaccine name asks for every tracked vaccine the dog is short of, and only those; confirmed evidence cannot be deleted |
 | `17` | Outreach: no answer is a no and an email opt-out beats a yes; nothing queued without consent; one message per dog; sending schedules a reminder and the dashboard reads "requested"; reminders wait, are capped, then go to a person; a failed send changes nothing; a STOP after queueing stops the send |
+| `18` | Check-in: no rabies record, or an expired one, refuses the groom by name and writes nothing; a non-blocking lapse does not, and making it block is a setting; a puppy too young for rabies is fine; one visit per dog per day, dated in the shop's time zone; history is still recordable |
 
 ---
 
@@ -322,16 +342,17 @@ never signed on a date nobody read.
    the one to hold out.
 2. ~~Layer 3 — the confirmation step.~~ Built in section 18, with a
    **Confirm** screen in the review tool.
-3. A read-only compliance dashboard — every dog, every tracked vaccine, and
-   why each one reads the way it does, straight from `v_compliance_dashboard`.
-   Shows the database's answers without needing a full application.
-4. Duplicate-upload warning — a near-duplicate image check before the model is
+3. ~~Groomer interface, first slice.~~ The check-in screen, its backend, and
+   demo data (section 20, `api/`, `web/`, `sql/seed/demo.sql`).
+4. Seed migration — the template × tier × zone mapping, then the **Record the
+   haircut** screen that uses it.
+5. Compliance dashboard and paperwork screens in the groomer interface, on the
+   same backend.
+6. Duplicate-upload warning — a near-duplicate image check before the model is
    called (a resized or re-saved copy of a page already on file). Exact copies
    are already refused per owner; a re-read of a shot already on file is
    already caught at confirmation (`already_on_file`).
-5. Seed migration — the template × tier × zone mapping
-6. FastAPI backend, with the review screen reading `v_extraction_line_item`
-7. Next.js / React / Tailwind / shadcn frontend
+7. Polish: README wording, a second held-out photo, visual design.
 
 **Possible extension, not planned:** real delivery for owner outreach. The
 rules, consent, outbox and sender are built and tested in test mode; going live

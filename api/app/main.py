@@ -70,7 +70,12 @@ def find_dogs(q: str = ""):
         SELECT d.id, d.name, b.name AS breed,
                o.first_name || ' ' || o.last_name AS owner,
                c.state::text AS state, c.plain_language_label AS label,
-               COALESCE(c.blocks_service, false) AS blocks_service
+               COALESCE(c.blocks_service, false) AS blocks_service,
+               -- The one line a groomer should know about first, named:
+               -- 'Bordetella: expired' says more than the dog's worst state.
+               (SELECT l.vaccine || ': ' || lower(l.label) FROM v_check_in_vaccine l
+                 WHERE l.dog_id = d.id AND l.state NOT IN ('current', 'not_yet_due')
+                 ORDER BY l.blocks_service DESC, l.sort_order, l.vaccine LIMIT 1) AS attention
           FROM dog d
           JOIN owner o ON o.id = d.owner_id
           LEFT JOIN breed b ON b.id = d.breed_id

@@ -14,3 +14,9 @@ __pycache__/
 # Model runs on private documents: raw responses contain PII, so the whole
 # directory stays out of version control, same reasoning as private/.
 extraction/runs/
+
+# The web app: dependencies and build output live in its container.
+web/node_modules/
+web/.next/
+web/next-env.d.ts
+web/tsconfig.tsbuildinfo
