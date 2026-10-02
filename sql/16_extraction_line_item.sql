@@ -273,6 +273,7 @@ pivot AS (
            count(*) FILTER (WHERE correction_action = 'unreviewed')         AS unreviewed_count,
            count(*) FILTER (WHERE correction_action = 'removed')            AS removed_count,
            count(*) FILTER (WHERE correction_action = 'unreadable')         AS unreadable_count,
+           bool_or(field_name = 'term' AND correction_action = 'unreadable') AS term_unreadable,
            count(*) FILTER (WHERE correction_action = 'unreviewed'
                               AND is_record_field(field_name))              AS unreviewed_record_fields
     FROM f
@@ -295,6 +296,7 @@ SELECT li.id                    AS line_item_id,
        p.unreviewed_count,
        p.removed_count,
        p.unreadable_count,
+       COALESCE(p.term_unreadable, false) AS term_unreadable,
        p.unreviewed_record_fields,
        -- Layer 2 begins here.
        r.disposition,

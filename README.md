@@ -4,7 +4,7 @@ A system of record for a small grooming practice, with the business rules
 enforced **in the database** rather than in the application.
 
 Eighteen numbered rules, each with a dedicated error code, each proven by a test
-that asserts the *refusal* — not the happy path. 208 assertions, all passing.
+that asserts the *refusal* — not the happy path. 212 assertions, all passing.
 How strictly each groom-time rule is enforced (block, warn, or off) is itself a
 row of data, changed by `UPDATE` and recorded in the audit log — not a migration.
 
@@ -48,10 +48,11 @@ that extracts cleanly. Anyone can demo a clean extraction.
 |---|---|
 | Schema | Frozen — sections 0–14 in one file; sections 15–18 follow as separate files |
 | Business rules | 18, codes `GR001`–`GR018` |
-| Test suite | 16 files, 208 pgTAP assertions, passing |
+| Test suite | 16 files, 212 pgTAP assertions, passing |
 | Document vocabulary (§15) | 29 rulings seeded from the labelled corpus; `resolve_term()` fails closed |
 | Extraction line items (§16) | One row per printed line; review views; the shape the harness loads |
-| Confirmation — Layer 3 (§18) | `confirm_extraction()` turns a fully reviewed page into verified records, records every line's outcome, and asks the owner for what the page is missing. Not yet wired to a button in the review tool |
+| Confirmation — Layer 3 (§18) | `confirm_extraction()` turns a fully reviewed page into verified records, records every line's outcome, and asks the owner for what the page is missing |
+| Confirm screen | The review tool's **Confirm** screen: a groomer checks each tracked field against the page (matches / says something else / made up / can't read it), rules on unfamiliar vaccine names, and confirms. Refusals show the database's own groomer-facing hint |
 | Extraction harness | Built — scores a model run against the answer keys; self-check passing |
 | Photo preparation | Built — a photo is turned upright, stripped of EXIF and GPS, and downscaled before it is sent |
 | Labelling & review tool | Built — Streamlit; writes answer keys from a form, and reconciles a run against its key |
@@ -76,6 +77,8 @@ http://localhost:8501. Everything else is on that page:
 - **Documents** — what is in `private/`, and where each one stands.
 - **Label** — write a document's answer key from a form beside the page.
 - **Review** — a model run against its key, one disagreement at a time.
+- **Confirm** — what a groomer does in production: check the model's reading
+  against the page, then turn the page into the dog's vaccination records.
 - **Run & test** — set up or reset the database, run the pgTAP suite, send
   documents to the model, re-score a run, load a run into the database.
 
@@ -94,7 +97,7 @@ docker compose exec db psql -U postgres -d grooming_test -f sql/seed/fixture.sql
 docker compose exec db pg_prove -U postgres -d grooming_test tests/*.sql
 ```
 
-Expected: `Files=16, Tests=208, Result: PASS`.
+Expected: `Files=16, Tests=212, Result: PASS`.
 
 The SQL loads in section order. `grooming_platform_schema.sql` is sections 0–14;
 each later section is its own numbered file, and a file's header carries the
@@ -208,7 +211,7 @@ stopped. Every rejection test is paired with the valid case — a rule that reje
 | `13` | The vocabulary fails closed: typography collapses, cadence words do not; NULL is a ruling; tracking is configuration, not vocabulary |
 | `14` | A line item is a row and its fields stay fields; the review queue empties itself; a corrected term is looked up by its correction; a tracked vaccine with one date still creates nothing; two dates create nothing either until a human has reviewed every field the record carries; a reviewer can mark a date unreadable instead of confirming a guess |
 | `15` | The review work order names why each field needs a look; nothing is ready before review; evaluation results that contradict the scorer are refused |
-| `16` | Layer 3: four refusals that write nothing; a shot printed twice is one record; a struck invented expiry asks the owner instead; an expired certificate does not close a request; a re-read that disagrees with the record on file — including a day misread by a few days — is flagged, not written; an unreadable date asks for a better copy and is not counted as a hallucination; confirmed evidence cannot be deleted |
+| `16` | Layer 3: four refusals that write nothing; a shot printed twice is one record; a struck invented expiry asks the owner instead; an expired certificate does not close a request; a re-read that disagrees with the record on file — including a day misread by a few days — is flagged, not written; an unreadable date asks for a better copy and is not counted as a hallucination; an unreadable vaccine name asks for every tracked vaccine the dog is short of, and only those; confirmed evidence cannot be deleted |
 
 ---
 
@@ -279,9 +282,8 @@ never signed on a date nobody read.
    tool or prompt v2 had been seen, is in `private/`. Label it in the tool
    *before* running the model on it, so it stays a test rather than one more
    document tuned against. Then run it and reconcile on the Review screen.
-2. ~~Layer 3 — the confirmation step.~~ Built in section 18. Next: a
-   **Confirm** action on the review tool's Review screen that calls
-   `confirm_extraction()` and shows each line's outcome.
+2. ~~Layer 3 — the confirmation step.~~ Built in section 18, with a
+   **Confirm** screen in the review tool.
 3. Duplicate-upload warning — a near-duplicate image check before the model is
    called (a resized or re-saved copy of a page already on file). Exact copies
    are already refused per owner; a re-read of a shot already on file is
