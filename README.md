@@ -46,7 +46,7 @@ that extracts cleanly. Anyone can demo a clean extraction.
 ### What the model actually did
 
 Every model run so far, re-scored against today's answer keys. One ruler for
-every row (`r-a7727eb91217`), so the rows can be compared with each other.
+every row (`r-5e0c74e1fcba`), so the rows can be compared with each other.
 *Overconfident* means a character the page prints but no one can read, returned
 as a clean, specific value: a smudged `Jan 2?, 2027` read back as `Jan 29, 2027`.
 
@@ -364,12 +364,14 @@ than by file extension. Model runs on them are gitignored for the same reason,
 since a raw response repeats what the page says.
 
 The answer keys in `extraction/answer_keys/` are anonymised at labelling time.
-Owner names, addresses, phone numbers, pet names, microchip and tag numbers are
-substituted in every field (Jaddi's household is the Webbs, and he is Nutmeg),
-while clinical facts (dates, lot numbers, product names) are kept verbatim so a
-key can still be checked against its page. Household structure is preserved:
-two households have two surnames. Clinic names and phone numbers are kept,
-since they are businesses and already public. The other owners, dogs, groomers
+Everyone else's names, addresses and phone numbers, their pets' names, clinic
+account numbers, microchip and tag numbers, and the veterinarians' names and
+licence numbers are substituted in every field (Jaddi's household appears as
+the Webbs, and he as Nutmeg), while clinical facts (dates, lot numbers,
+product names) are kept verbatim so a key can still be checked against its
+page. Household structure is preserved: two households have two surnames.
+Clinic names and phone numbers are kept, since they are businesses and already
+public. The other owners, dogs, groomers
 and visits in the test fixture are invented.
 
 ---
