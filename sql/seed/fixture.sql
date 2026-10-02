@@ -31,7 +31,7 @@ INSERT INTO breed (id, name, default_coat_type_id) VALUES
 INSERT INTO dog (id, owner_id, name, breed_id, coat_type_id, sex) VALUES
   ('00000000-0000-0000-0000-00000000d001', '00000000-0000-0000-0000-00000000a001',
    'Jaddi', '00000000-0000-0000-0000-00000000c001',
-   (SELECT id FROM coat_type WHERE code = 'silky'), 'female'),
+   (SELECT id FROM coat_type WHERE code = 'silky'), 'male'),
   ('00000000-0000-0000-0000-00000000d002', '00000000-0000-0000-0000-00000000a001',
    'Luna',  '00000000-0000-0000-0000-00000000c001',
    (SELECT id FROM coat_type WHERE code = 'silky'), 'female'),
