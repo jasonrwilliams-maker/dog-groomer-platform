@@ -60,6 +60,22 @@ def setup_database(reset: bool) -> list[Step]:
     return steps
 
 
+DEMO = SQL / "seed" / "demo.sql"
+DEMO_DB = "grooming_demo"
+
+
+def setup_demo_database() -> list[Step]:
+    """The groomer interface's database: the schema and the demo dogs, rebuilt
+    from scratch. Separate from grooming_test, so the pgTAP suite never sees it."""
+    admin = ["-d", "postgres", "-v", "ON_ERROR_STOP=1", "-c"]
+    steps = [Step(f"Drop {DEMO_DB}", _psql(*admin, f"DROP DATABASE IF EXISTS {DEMO_DB} WITH (FORCE)"), REPO),
+             Step(f"Create {DEMO_DB}", _psql(*admin, f"CREATE DATABASE {DEMO_DB}"), REPO)]
+    for f in schema_files() + [DEMO]:
+        steps.append(Step(f"Load {f.relative_to(REPO).as_posix()}",
+                          _psql("-d", DEMO_DB, "-v", "ON_ERROR_STOP=1", "-f", f.relative_to(REPO).as_posix()), REPO))
+    return steps
+
+
 def run_tests() -> list[Step]:
     tests = sorted(p.relative_to(REPO).as_posix() for p in (REPO / "tests").glob("*.sql"))
     return [Step("pg_prove tests/*.sql", ["pg_prove", *tests], REPO)]
