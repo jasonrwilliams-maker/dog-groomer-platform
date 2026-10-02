@@ -12,6 +12,8 @@ The order is always the same:
 4. **Review** — go through the disagreements.
 5. **Confirm** — what a groomer does in the shop: check the model's reading
    against the page, and turn the page into the dog's vaccination records.
+6. **Outreach** — ask owners for the certificates a confirmed page couldn't
+   supply, by email or text if they've agreed to it.
 
 ---
 
@@ -211,3 +213,24 @@ A page reaches this screen once its run is loaded into the database
 
 A confirmed page is locked: its records rest on the checks you made. To start
 over, reset the database on **Run & test → Database**.
+
+---
+
+## 6. Outreach
+
+When a confirmed page leaves a dog short of a certificate, the owner is owed a
+request. This screen sends it — but only to owners who have **agreed** to be
+emailed or texted. Nobody agrees by default.
+
+The tool is in **test mode**: messages land in the outbox and nothing is
+delivered. Everything else works exactly as it will for real.
+
+- **Send** — queues one message per owner per dog, naming every certificate
+  needed, and sends it. A reminder follows a week later, up to three times.
+- **Needs a person** — owners the shop can't message by itself, and why: they
+  haven't agreed yet, or the reminders are used up. Ask at the counter or call.
+- **Consent** — record what an owner said, for email and for texts, and how you
+  know ("ticked the box on the intake form"). Answers are never edited; a
+  change of mind is a new entry. An owner who opted out of email is never
+  emailed, whatever they said here.
+- **Outbox** — every message, exactly as the owner would read it.
