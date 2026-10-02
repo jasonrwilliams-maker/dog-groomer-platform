@@ -1,5 +1,7 @@
 # Dog Grooming Platform
 
+[![tests](https://github.com/jasonrwilliams-maker/dog-groomer-platform/actions/workflows/tests.yml/badge.svg)](https://github.com/jasonrwilliams-maker/dog-groomer-platform/actions/workflows/tests.yml)
+
 A system of record for a small grooming practice, with the business rules
 enforced **in the database** rather than in the application.
 
@@ -29,8 +31,9 @@ That last one is the design decision the rest of the project is organized around
 
 ### The document that proves the point
 
-A real vet invoice for one of the dogs names a rabies vaccination and the date it
-was given. It contains no expiry date anywhere on the page.
+A real vet invoice for Jaddi, the dog whose grooming routine started this
+project, names a rabies vaccination and the date it was given. It contains no
+expiry date anywhere on the page.
 
 The system ingests it, retains the document, retains the extraction — and creates
 no vaccination record. The dog stays non-compliant. It does not infer a one-year
@@ -39,6 +42,36 @@ health department will actually see.
 
 A pipeline that correctly declines to invent a date is a better artifact than one
 that extracts cleanly. Anyone can demo a clean extraction.
+
+### What the model actually did
+
+Every model run so far, re-scored against today's answer keys. One ruler for
+every row (`r-a7727eb91217`), so the rows can be compared with each other.
+*Overconfident* means a character the page prints but no one can read, returned
+as a clean, specific value: a smudged `Jan 2?, 2027` read back as `Jan 29, 2027`.
+
+| Run | Prompt | Documents | Fields correct | Wrong | Missed | Invented | Overconfident |
+|---|---|---|---|---|---|---|---|
+| 2026-09-22 | v1 | 3 clean PDFs + 1 screenshot | 501 / 504 | 1 | 1 | 1 | 0 |
+| 2026-09-22 | v2 | 3 clean PDFs + 1 screenshot | **492 / 492** | 0 | 0 | 0 | 0 |
+| 2026-09-24 | v2 | phone photo, held out | 141 / 159 | 2 | 0 | 2 | 14 |
+| 2026-09-25 | v2 | phone photo | 141 / 159 | 2 | 0 | 2 | 14 |
+| 2026-09-25 | v3 | phone photo | 141 / 159 | 3 | 0 | 2 | 13 |
+
+*Plus one 2026-09-24 photo run whose response did not parse, scored as nothing.*
+
+On clean pages the model transcribes perfectly. On a phone photo of the same
+kind of page it makes the same mistake every time, whatever the prompt:
+**about fifteen confident dates the page does not support**, out of 159
+fields. A third prompt did not fix it. (The photo's saved scores once read
+16, then 6, then 2 invented values; that drop was the answer key learning to
+mark partly readable characters, not the model improving. Scored by one
+ruler, the runs are the same.)
+
+That is why the database does not trust a date for being present. A line
+becomes a vaccination record only after a person has checked every field it
+carries, and a reviewer who can't read a date says so, which asks the owner
+for a better copy instead of recording a guess.
 
 ---
 
@@ -57,7 +90,7 @@ that extracts cleanly. Anyone can demo a clean extraction.
 | Extraction harness | Built — scores a model run against the answer keys; self-check passing |
 | Photo preparation | Built — a photo is turned upright, stripped of EXIF and GPS, and downscaled before it is sent |
 | Labelling & review tool | Built — Streamlit; writes answer keys from a form, and reconciles a run against its key |
-| Model runs | Two runs of the four-document corpus, 2026-09-22 |
+| Model runs | Six: two of the four-document corpus (2026-09-22) and four of the held-out phone photo (2026-09-24 to 25). Results under *What the model actually did*, above |
 | Seed migration | Not started — ~150 template × tier × zone rows |
 | API / frontend | Not started |
 
@@ -289,10 +322,9 @@ never signed on a date nobody read.
    the one to hold out.
 2. ~~Layer 3 — the confirmation step.~~ Built in section 18, with a
    **Confirm** screen in the review tool.
-3. Real delivery for outreach — an email service and a text provider behind
-   `OUTREACH_PROVIDER`, a scheduled run of `outreach.py`, and STOP replies and
-   unsubscribe links recorded as consent entries. Needs accounts, keys, and a
-   US business texting registration.
+3. A read-only compliance dashboard — every dog, every tracked vaccine, and
+   why each one reads the way it does, straight from `v_compliance_dashboard`.
+   Shows the database's answers without needing a full application.
 4. Duplicate-upload warning — a near-duplicate image check before the model is
    called (a resized or re-saved copy of a page already on file). Exact copies
    are already refused per owner; a re-read of a shot already on file is
@@ -300,6 +332,13 @@ never signed on a date nobody read.
 5. Seed migration — the template × tier × zone mapping
 6. FastAPI backend, with the review screen reading `v_extraction_line_item`
 7. Next.js / React / Tailwind / shadcn frontend
+
+**Possible extension, not planned:** real delivery for owner outreach. The
+rules, consent, outbox and sender are built and tested in test mode; going live
+means an email service and a text provider behind `OUTREACH_PROVIDER`, a
+scheduled run of `outreach.py`, STOP replies and unsubscribe links recorded as
+consent entries, and a US business texting registration. That is a step toward
+a product rather than toward this project's point.
 
 The extraction schema is shaped for honest measurement: raw model responses
 stored unmodified, model and prompt versions as columns, and a per-field
