@@ -1,8 +1,8 @@
--- The Jaddi case. Her vet invoice names a rabies vaccination and the date it
+-- The Jaddi case. His vet invoice names a rabies vaccination and the date it
 -- was given, but carries no expiry date anywhere on the page.
 --
 -- Correct behaviour: the document and its extraction are retained as evidence,
--- no vaccination record is created, and she stays non-compliant. The system
+-- no vaccination record is created, and he stays non-compliant. The system
 -- does not invent a date the certificate never stated.
 
 BEGIN;
