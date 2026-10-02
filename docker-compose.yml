@@ -65,5 +65,25 @@ services:
       db:
         condition: service_healthy
 
+  # The groomer interface's backend (api/). On first start it builds the demo
+  # database, grooming_demo, from the schema and sql/seed/demo.sql; after that
+  # it leaves it alone. http://localhost:8000/docs lists its endpoints.
+  api:
+    build:
+      context: ./api
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/grooming_demo
+      PGHOST: db                    # psql, for building the demo database
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./:/repo
+    depends_on:
+      db:
+        condition: service_healthy
+
 volumes:
   pgdata:

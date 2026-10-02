@@ -51,6 +51,31 @@ jobs:
       - name: Run the pgTAP suite
         run: docker exec db sh -c 'pg_prove -U postgres -d grooming_test tests/*.sql'
 
+  api:
+    name: Groomer API tests
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 2s --health-timeout 3s --health-retries 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client
+      - run: pip install -r api/requirements.txt
+      - name: pytest (builds its own copy of the demo database)
+        working-directory: api
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/grooming_demo
+        run: python -m pytest -q
+
   harness:
     name: Extraction harness self-check
     runs-on: ubuntu-latest
