@@ -65,5 +65,42 @@ services:
       db:
         condition: service_healthy
 
+  # The groomer interface's backend (api/). On first start it builds the demo
+  # database, grooming_demo, from the schema and sql/seed/demo.sql; after that
+  # it leaves it alone. http://localhost:8000/docs lists its endpoints.
+  api:
+    build:
+      context: ./api
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/grooming_demo
+      PGHOST: db                    # psql, for building the demo database
+      PGPORT: "5432"
+      PGUSER: postgres
+      PGPASSWORD: postgres
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - ./:/repo
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # The groomer interface (web/): http://localhost:3000. It passes /api/* to
+  # the api service, so the browser talks to one origin.
+  web:
+    build:
+      context: ./web
+    environment:
+      API_URL: http://api:8000
+      WATCHPACK_POLLING: "true"     # file changes on a Windows bind mount arrive without events
+    ports:
+      - "127.0.0.1:3000:3000"
+    volumes:
+      - ./web:/app
+      - /app/node_modules           # the container's own, not the host's
+      - /app/.next
+    depends_on:
+      - api
+
 volumes:
   pgdata:
