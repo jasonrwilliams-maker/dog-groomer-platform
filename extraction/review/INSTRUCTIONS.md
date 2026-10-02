@@ -83,7 +83,7 @@ When you can read *most* of a value, type what you can read and put a `?` for
 each character you can't: `Jan 2?, 2027`. Leave the status as *as typed*, and
 leave the ISO date box empty (the page doesn't state a full date).
 
-Don't pick the likeliest digit, even when you're fairly sure. On the Luna
+Don't pick the likeliest digit, even when you're fairly sure. On the held-out
 photo, a "pretty certain" reading of the day was wrong three times out of
 three. The `?` is the honest record, and it is what the model is scored
 against: copying your `?` is correct, filling in a digit is *overconfident*.

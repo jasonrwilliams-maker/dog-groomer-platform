@@ -114,9 +114,9 @@ SELECT throws_ok(
 SELECT lives_ok(
   $$ INSERT INTO extraction_field (extraction_id, line_item_id, field_name, extracted_value)
      VALUES ('00000000-0000-0000-0000-0000000f1002',
-             '00000000-0000-0000-0000-0000000f1102', 'tag_number', '240-680'),
+             '00000000-0000-0000-0000-0000000f1102', 'tag_number', '317-204'),
             ('00000000-0000-0000-0000-0000000f1002',
-             NULL, 'patient.tag_number', '240-680') $$,
+             NULL, 'patient.tag_number', '317-204') $$,
   'The same fact in two slots — a tag on the row and in the patient block — coexists');
 
 -- --- 2. The review queue -------------------------------------------------------

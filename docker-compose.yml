@@ -10,7 +10,9 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: grooming_test
     ports:
-      - "5432:5432"
+      # This machine only, like the review tool: once a run is loaded, the
+      # database holds the model's raw responses, which carry real details.
+      - "127.0.0.1:5432:5432"
     volumes:
       - ./:/repo                    # your repo, visible inside the container
       - ./docker/postgres-init:/docker-entrypoint-initdb.d

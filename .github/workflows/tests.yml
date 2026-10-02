@@ -1,0 +1,65 @@
+# Every push and pull request: build the same database image the project uses
+# locally, load the schema in section order with the fixture, run the pgTAP
+# suite, and run the extraction harness's self-check.
+#
+# Nothing here needs private/ or an API key. The pgTAP suite runs on the
+# invented fixture, and the self-check scores the committed answer keys
+# against themselves offline.
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  database:
+    name: pgTAP suite
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the database image (Postgres 16 + pgTAP)
+        run: docker build -t groomer-db -f docker/test.dockerfile docker
+
+      - name: Start it
+        run: |
+          docker run -d --name db \
+            -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=grooming_test \
+            -v "$PWD":/repo -w /repo \
+            -v "$PWD/docker/postgres-init":/docker-entrypoint-initdb.d \
+            groomer-db
+          for i in $(seq 1 60); do
+            docker exec db pg_isready -U postgres -d grooming_test >/dev/null 2>&1 && break
+            sleep 1
+          done
+          # pg_isready answers during the init script's temporary server; wait
+          # until pgTAP, which the init script creates, is there.
+          for i in $(seq 1 60); do
+            docker exec db psql -U postgres -d grooming_test -tAc \
+              "SELECT 1 FROM pg_extension WHERE extname = 'pgtap'" 2>/dev/null | grep -q 1 && break
+            sleep 1
+          done
+
+      - name: Load the schema, in section order, and the fixture
+        run: |
+          for f in sql/grooming_platform_schema.sql $(ls sql/[0-9][0-9]_*.sql | sort); do
+            echo "loading $f"
+            docker exec db psql -q -U postgres -d grooming_test -v ON_ERROR_STOP=1 -f "$f"
+          done
+          docker exec db psql -q -U postgres -d grooming_test -v ON_ERROR_STOP=1 -f sql/seed/fixture.sql
+
+      - name: Run the pgTAP suite
+        run: docker exec db sh -c 'pg_prove -U postgres -d grooming_test tests/*.sql'
+
+  harness:
+    name: Extraction harness self-check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r extraction/harness/requirements.txt
+      - name: Self-check (offline; never reads private/)
+        working-directory: extraction/harness
+        run: python -m harness selfcheck

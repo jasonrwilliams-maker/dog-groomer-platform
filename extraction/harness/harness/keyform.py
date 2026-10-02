@@ -28,7 +28,7 @@ PRIVATE_DIR = K.EXTRACTION_DIR.parent / "private"
 CONTRACT_LINE = (f"answer_key_contract.md {K.CONTRACT_VERSION} — `expected` and `also_accept` are "
                  "canonical and compared; keys beginning with `_` are never compared.")
 
-DOC_CLASSES = ["rabies_certificate", "vet_invoice", "form51", "handwritten_note", "unknown"]   # sql enum document_class
+DOC_CLASSES = ["rabies_certificate", "vet_invoice", "vaccination_summary", "form51", "handwritten_note", "unknown"]   # sql enum document_class
 SOURCES = ["upload", "email_reply", "scan"]                                                    # sql enum document_source
 MEDIA_TYPES = {".pdf": "application/pdf", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
                ".png": "image/png", ".heic": "image/heic"}

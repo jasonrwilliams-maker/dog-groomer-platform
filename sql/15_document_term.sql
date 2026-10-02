@@ -35,6 +35,17 @@
 SET search_path = groom, public;
 
 -- -----------------------------------------------------------------------------
+-- A kind of document the corpus kept finding
+--
+-- A clinic's vaccination summary — the Doc Side email, the Petly portal page —
+-- is neither an invoice nor a certificate, and three of the five labelled
+-- documents fell to 'unknown' for want of it. Their keys argued for this value;
+-- it is added here, with the vocabulary, before anything reads it.
+-- -----------------------------------------------------------------------------
+
+ALTER TYPE document_class ADD VALUE 'vaccination_summary' BEFORE 'unknown';
+
+-- -----------------------------------------------------------------------------
 -- Normalisation
 --
 -- DELIBERATELY CONSERVATIVE. It absorbs typography and nothing else: case,
