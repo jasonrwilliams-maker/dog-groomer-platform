@@ -194,7 +194,9 @@ A page reaches this screen once its run is loaded into the database
    - **Not on the page — the model made it up**
    - **On the page, but I can't read it** — no record is made from a date
      nobody could read; the owner is asked for a better copy instead, and the
-     model isn't blamed for the blur.
+     model isn't blamed for the blur. If it's the *vaccine name* you can't
+     read, the line could be any vaccine, so the owner is asked for a readable
+     copy covering every tracked vaccine the dog has no current record for.
 
    *Everything I haven't answered on this line matches the page* saves the
    rest of a line in one click. A ⚑ note under a field is why it deserves a

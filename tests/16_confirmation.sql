@@ -31,10 +31,12 @@
 --   9. Confirmed evidence cannot be deleted.
 --  10. An unreadable date is counted as a capture problem, not charged to the
 --      model as an invented value.
+--  11. An unreadable vaccine name asks the owner for a readable copy covering
+--      every tracked vaccine the dog is short of — and only those.
 
 BEGIN;
 SET search_path = groom, public;
-SELECT plan(36);
+SELECT plan(40);
 
 -- --- Fixture -----------------------------------------------------------------
 -- Jaddi (d001) and Luna (d002) belong to owner a001; Biscuit (d003) to a002.
@@ -215,7 +217,7 @@ SELECT is((SELECT count(*) FROM vaccination_record vr
 
 SELECT results_eq(
   $$ SELECT rr.status::text, rr.channel::text, rr.created_by
-       FROM record_request rr JOIN t_result r ON r.record_request_id = rr.id WHERE r.n = 2 $$,
+       FROM record_request rr JOIN t_result r ON rr.id = ANY (r.record_request_ids) WHERE r.n = 2 $$,
   $$ VALUES ('insufficient', 'email', '00000000-0000-0000-0000-00000000b001'::uuid) $$,
   'The owner is marked as owing a readable DHPP certificate, by email, which they allow');
 
@@ -379,7 +381,7 @@ INSERT INTO extraction_field (extraction_id, line_item_id, field_name, extracted
   ('00000000-0000-0000-0000-0000000f3005', '00000000-0000-0000-0000-0000000f3501', 'administered_on', '2025-03-08', 'confirmed');
 
 SELECT results_eq(
-  $$ SELECT outcome::text, record_request_id IS NOT NULL
+  $$ SELECT outcome::text, cardinality(record_request_ids) = 1
        FROM confirm_extraction('00000000-0000-0000-0000-0000000f3005',
                                '00000000-0000-0000-0000-00000000d002',
                                '00000000-0000-0000-0000-00000000b001') $$,
@@ -389,6 +391,63 @@ SELECT results_eq(
 SELECT is((SELECT state::text FROM v_dog_vaccine_compliance
             WHERE dog_id = '00000000-0000-0000-0000-00000000d002' AND vaccine_code = 'rabies'),
   'no_record', 'Luna stays non-compliant, which is the honest answer');
+
+-- --- 11. An unreadable name ---------------------------------------------------------------------------
+-- Two more readings of the page. On each, the reviewer can see a vaccine was
+-- given but cannot read which.
+INSERT INTO extraction (id, document_id, model_name, model_version, prompt_version,
+                        raw_response, status) VALUES
+  ('00000000-0000-0000-0000-0000000f3009', '00000000-0000-0000-0000-0000000f3001',
+   'test-model', 'test-model-1', 'p7', '{}'::jsonb, 'needs_review'),
+  ('00000000-0000-0000-0000-0000000f3010', '00000000-0000-0000-0000-0000000f3001',
+   'test-model', 'test-model-1', 'p8', '{}'::jsonb, 'needs_review');
+INSERT INTO extraction_line_item (id, extraction_id, n) VALUES
+  ('00000000-0000-0000-0000-0000000f3901', '00000000-0000-0000-0000-0000000f3009', 1),
+  ('00000000-0000-0000-0000-0000000f4001', '00000000-0000-0000-0000-0000000f3010', 1);
+INSERT INTO extraction_field (extraction_id, line_item_id, field_name, extracted_value, correction_action) VALUES
+  ('00000000-0000-0000-0000-0000000f3009', '00000000-0000-0000-0000-0000000f3901', 'term',            'Rab1es Vacc', 'unreadable'),
+  ('00000000-0000-0000-0000-0000000f3009', '00000000-0000-0000-0000-0000000f3901', 'administered_on', '2025-06-01', 'confirmed'),
+  ('00000000-0000-0000-0000-0000000f3010', '00000000-0000-0000-0000-0000000f4001', 'term',            'D?PP',       'unreadable'),
+  ('00000000-0000-0000-0000-0000000f3010', '00000000-0000-0000-0000-0000000f4001', 'administered_on', '2025-06-01', 'confirmed');
+
+-- Luna has no current record for anything, and already owes a rabies
+-- certificate from the Jaddi invoice above.
+CREATE TEMP TABLE t_luna AS
+SELECT * FROM confirm_extraction('00000000-0000-0000-0000-0000000f3009',
+                                 '00000000-0000-0000-0000-00000000d002',
+                                 '00000000-0000-0000-0000-00000000b001');
+
+SELECT results_eq(
+  $$ SELECT outcome::text, vaccine_code, cardinality(record_request_ids) FROM t_luna $$,
+  $$ VALUES ('unreadable_name', NULL::text, 3) $$,
+  'An unreadable name could be any tracked vaccine: Luna is short of all three, so a readable copy is asked for all three');
+
+SELECT results_eq(
+  $$ SELECT vt.code, count(*) FROM record_request rr JOIN vaccine_type vt ON vt.id = rr.vaccine_type_id
+      WHERE rr.dog_id = '00000000-0000-0000-0000-00000000d002' GROUP BY vt.code ORDER BY vt.code $$,
+  $$ VALUES ('bordetella', 1::bigint), ('dhpp', 1::bigint), ('rabies', 1::bigint) $$,
+  '...one request per vaccine: the rabies certificate she already owed is the same request, not a second one');
+
+-- Jaddi is current on rabies and bordetella; only DHPP is outstanding.
+-- Confirmed into a table first: a query cannot see rows that a function it
+-- calls inserts, so joining record_request in the same statement would hide
+-- any request this confirmation newly opened.
+CREATE TEMP TABLE t_jaddi AS
+SELECT * FROM confirm_extraction('00000000-0000-0000-0000-0000000f3010',
+                                 '00000000-0000-0000-0000-00000000d001',
+                                 '00000000-0000-0000-0000-00000000b001');
+
+SELECT results_eq(
+  $$ SELECT vt.code FROM t_jaddi r
+       CROSS JOIN LATERAL unnest(r.record_request_ids) q(id)
+       JOIN record_request rr ON rr.id = q.id
+       JOIN vaccine_type vt   ON vt.id = rr.vaccine_type_id $$,
+  $$ VALUES ('dhpp') $$,
+  'For a dog current on everything else, an unreadable name asks only for what is actually missing');
+
+SELECT is((SELECT count(*) FROM line_item_request
+            WHERE line_item_id = '00000000-0000-0000-0000-0000000f4001'), 1::bigint,
+  'Which line caused which request is stored, not just returned');
 
 -- --- 9. Evidence stays ------------------------------------------------------------------------------------
 SELECT throws_ok(

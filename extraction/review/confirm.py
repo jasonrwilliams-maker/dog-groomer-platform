@@ -46,6 +46,7 @@ OUTCOMES = {
     "already_on_file":       "↔️ Already on file — nothing added",
     "conflicts_with_record": "⚠️ Disagrees with a record on file — check which is right",
     "missing_date":          "⛔ No record — a date is missing or unreadable",
+    "unreadable_name":       "⛔ No record — the vaccine name can't be read",
     "not_tracked":           "— Not a vaccine the shop tracks",
     "no_term":               "— No vaccine name",
 }
@@ -114,7 +115,7 @@ def household_dogs(owner_id: str) -> list[dict]:
 
 
 def line_items(extraction_id: str) -> list[dict]:
-    return _all("""SELECT line_item_id::text, n, source_region, term, disposition::text, vaccine_code,
+    return _all("""SELECT line_item_id::text, n, source_region, term, term_unreadable, disposition::text, vaccine_code,
                           administered_on_raw, administered_on, expires_on_raw, expires_on,
                           record_candidate, can_create_record, unreviewed_record_fields
                      FROM v_extraction_line_item WHERE extraction_id = %s::uuid ORDER BY n""",
@@ -142,13 +143,20 @@ def outcomes(extraction_id: str) -> list[dict]:
     return _all("""
         SELECT li.n, v.term, vt.name AS vaccine, o.outcome::text,
                vr.administered_on, vr.expires_on, vr.verification_status::text AS verification,
-               rr.status::text AS request_status, rr.channel::text AS request_channel
+               v.term_unreadable,
+               (SELECT array_agg(rvt.name ORDER BY rvt.name)
+                  FROM line_item_request lr
+                  JOIN record_request rr  ON rr.id = lr.record_request_id
+                  JOIN vaccine_type rvt   ON rvt.id = rr.vaccine_type_id
+                 WHERE lr.line_item_id = o.line_item_id) AS requested,
+               (SELECT min(rr.channel::text)
+                  FROM line_item_request lr JOIN record_request rr ON rr.id = lr.record_request_id
+                 WHERE lr.line_item_id = o.line_item_id) AS channel
           FROM line_item_outcome o
           JOIN extraction_line_item li   ON li.id = o.line_item_id
           JOIN v_extraction_line_item v  ON v.line_item_id = o.line_item_id
           LEFT JOIN vaccine_type vt      ON vt.id = o.vaccine_type_id
           LEFT JOIN vaccination_record vr ON vr.id = o.vaccination_record_id
-          LEFT JOIN record_request rr    ON rr.id = o.record_request_id
          WHERE o.extraction_id = %s::uuid
          ORDER BY li.n""", (extraction_id,))
 

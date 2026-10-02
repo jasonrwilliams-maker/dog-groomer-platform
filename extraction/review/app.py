@@ -1176,18 +1176,20 @@ def confirmed_view(page: dict):
 
 def outcome_table(rows: list[dict]):
     def what(r: dict) -> str:
-        if r["outcome"] == "missing_date":
-            return ("owner asked for a readable copy" if r["request_status"]
-                    else "nothing to ask — the dog already has a current record")
+        if r["outcome"] in ("missing_date", "unreadable_name"):
+            if r["requested"]:
+                by = {"email": "by email", "sms": "by text", "verbal_at_counter": "at the counter"}
+                return (f"owner asked for a readable copy ({', '.join(r['requested'])}), "
+                        f"{by.get(r['channel'], '')}")
+            return "nothing to ask — the dog already has current records"
         if r["expires_on"]:
-            return f"given {r['administered_on']}, expires {r['expires_on']} ({r['verification']})"
+            return f"{r['vaccine']}: given {r['administered_on']}, expires {r['expires_on']} ({r['verification']})"
         return ""
     for r in rows:
         with st.container(border=True):
             c1, c2 = st.columns([2, 3])
-            c1.markdown(f"**Line {r['n']}** · {r['term'] or '(no name)'}")
-            c2.markdown(C.OUTCOMES.get(r["outcome"], r["outcome"])
-                        + (f"  \n{r['vaccine']}: {what(r)}" if r["vaccine"] and what(r) else ""))
+            c1.markdown(f"**Line {r['n']}** · {r['term'] or ('(name unreadable)' if r['term_unreadable'] else '(no name)')}")
+            c2.markdown(C.OUTCOMES.get(r["outcome"], r["outcome"]) + (f"  \n{what(r)}" if what(r) else ""))
 
 
 def review_view(page: dict, me: str):
@@ -1250,8 +1252,11 @@ def line_card(li: dict, flds: dict, me: str):
     badge = {"tracked": f"🟢 {li['vaccine_code']}", "unmapped": "🟠 unfamiliar name",
              "recognized_untracked": f"⚪ {li['vaccine_code'] or 'vaccine'} — not tracked",
              "not_a_vaccine": "⚪ not a vaccine"}.get(disp, "⚪ no name")
+    if li["term_unreadable"]:
+        badge = "🟠 name unreadable — the owner will be asked for a readable copy"
     done = disp == "tracked" and not li["unreviewed_record_fields"]
-    title = f"Line {li['n']} · {li['term'] or '(no name)'} · {badge}" + (" · ✔ checked" if done else "")
+    name = li["term"] or ("(name unreadable)" if li["term_unreadable"] else "(no name)")
+    title = f"Line {li['n']} · {name} · {badge}" + (" · ✔ checked" if done else "")
     needs_work = disp == "unmapped" or (disp == "tracked" and not done)
     with st.expander(title, expanded=needs_work):
         if disp == "unmapped":
