@@ -46,7 +46,7 @@ that extracts cleanly. Anyone can demo a clean extraction.
 
 | Component | State |
 |---|---|
-| Schema | Frozen — sections 0–14 in one file; sections 15–19 follow as separate files |
+| Schema | Sections 0–14 stable, in one file; later sections appended as separate files (15–19) |
 | Business rules | 19, codes `GR001`–`GR019` |
 | Test suite | 17 files, 237 pgTAP assertions, passing |
 | Document vocabulary (§15) | 29 rulings seeded from the labelled corpus; `resolve_term()` fails closed |
@@ -314,16 +314,24 @@ expected, absent, must-not-produce — and reports the hallucination class
 
 ## Disclosure
 
-All owners, dogs, and visit data in this repository are synthetic. The real
-documents used to develop and test the extraction logic contain personal
-information and are deliberately excluded from version control: they live in
-`private/`, which is gitignored as a directory rather than by file extension.
+This project started with my own dog, Jaddi, and his grooming routine, and the
+two of us appear by name: the test fixture's first owner and dog are us, three
+of the labelled documents are Jaddi's, and his name is in their file names and
+notes. Everyone else is anonymised.
 
-The answer keys in `extraction/answer_keys/` are anonymised at labelling time —
-owner names, addresses, phone numbers, patient names, microchip and tag numbers
-are substituted, while clinical facts (dates, lot numbers, product names) are
-kept verbatim so a key can still be checked against its page. Household
-structure is preserved: two households have two surnames.
+The real documents contain personal information and are excluded from version
+control: they live in `private/`, which is gitignored as a directory rather
+than by file extension. Model runs on them are gitignored for the same reason,
+since a raw response repeats what the page says.
+
+The answer keys in `extraction/answer_keys/` are anonymised at labelling time.
+Owner names, addresses, phone numbers, pet names, microchip and tag numbers are
+substituted in every field (Jaddi's household is the Webbs, and he is Nutmeg),
+while clinical facts (dates, lot numbers, product names) are kept verbatim so a
+key can still be checked against its page. Household structure is preserved:
+two households have two surnames. Clinic names and phone numbers are kept,
+since they are businesses and already public. The other owners, dogs, groomers
+and visits in the test fixture are invented.
 
 ---
 

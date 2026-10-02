@@ -778,7 +778,7 @@ def tab_about(key: dict, item: dict, page_count: int):
     c1, c2 = st.columns(2)
     dc = meta.get("doc_class") or "unknown"
     meta["doc_class"] = c1.selectbox("Document type", F.DOC_CLASSES,
-                                     index=F.DOC_CLASSES.index(dc) if dc in F.DOC_CLASSES else 4)
+                                     index=F.DOC_CLASSES.index(dc if dc in F.DOC_CLASSES else "unknown"))
     src = meta.get("source") or "upload"
     meta["source"] = c2.selectbox("Arrived by", F.SOURCES, index=F.SOURCES.index(src) if src in F.SOURCES else 0)
     if meta.get("page_count") != page_count and st.session_state.draft_source == "new":
