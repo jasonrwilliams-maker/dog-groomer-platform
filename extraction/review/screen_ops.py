@@ -110,6 +110,16 @@ def screen_ops(items: list[dict]):
             if st.button("Yes, reset it", type="primary"):
                 run_steps(ops.setup_database(reset=True), "Database reset")
 
+        st.divider()
+        st.markdown(f"The groomer interface runs on its own database, `{ops.DEMO_DB}`: the same schema and a "
+                    "shop's worth of demo dogs. It is built on first start; rebuild it here to undo what the "
+                    "demo has recorded since.")
+        with st.popover("Reset the demo database…"):
+            st.write(f"Drops `{ops.DEMO_DB}` and rebuilds it from the schema and `sql/seed/demo.sql`. The test "
+                     "database is not touched.")
+            if st.button("Yes, rebuild the demo", type="primary"):
+                run_steps(ops.setup_demo_database(), "Demo database")
+
     if "ops_last" in st.session_state and not st.session_state.pop("ops_ran_now", False):
         title, ok, lines = st.session_state["ops_last"]
         with st.expander(f"Last output — {title} ({'ok' if ok else 'failed'})", expanded=False):
