@@ -119,6 +119,8 @@ the same effective length. Worth a check constraint or a test.
 | Level 4 — widespread matting | #7F | Warning shown, groomer may proceed |
 | Level 5 — pelted | #10 | Acknowledgment required before saving |
 
+The blade applies to every style zone; the hygiene zones keep their fixed cuts.
+
 `is_remedial = true`. Applying this template requires a linked `coat_assessment` at
 level 4 or higher. The system should refuse to record a shave-down with a level 1–3
 assessment, or require an explicit override reason — that refusal is the record that

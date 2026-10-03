@@ -12,6 +12,11 @@ BEGIN;
 SET search_path = groom, public;
 SELECT plan(5);
 
+-- This file configures its own poodle_kennel rows, so it sets the seeded ones
+-- (sql/21_style_template_seed.sql) aside first. Rolled back with the rest.
+DELETE FROM style_template_zone_spec
+ WHERE style_template_id = (SELECT id FROM style_template WHERE code = 'poodle_kennel');
+
 -- Poodle's face is clamped to a maximum of 1/16 inch by the seed data.
 SELECT is(
   (SELECT c.max_effective_length_in

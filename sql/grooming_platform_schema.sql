@@ -1790,7 +1790,7 @@ LEFT JOIN length_tier lt ON lt.id = s.length_tier_id;
 -- =============================================================================
 -- 14. Reference seed data
 --     Vocabulary only. The per-template zone mappings from style_tier_mapping.md
---     are ~150 rows and belong in their own migration.
+--     live in their own file, sql/21_style_template_seed.sql.
 -- =============================================================================
 
 INSERT INTO coat_type (code, name, description) VALUES
