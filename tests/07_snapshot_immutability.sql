@@ -10,6 +10,11 @@ BEGIN;
 SET search_path = groom, public;
 SELECT plan(6);
 
+-- This file configures its own teddy_bear rows, so it sets the seeded ones
+-- (sql/21_style_template_seed.sql) aside first. Rolled back with the rest.
+DELETE FROM style_template_zone_spec
+ WHERE style_template_id = (SELECT id FROM style_template WHERE code = 'teddy_bear');
+
 INSERT INTO style_template_zone_spec
     (style_template_id, length_tier_id, body_zone_id, tool, blade_id)
 VALUES

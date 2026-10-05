@@ -48,6 +48,17 @@ jobs:
           done
           docker exec db psql -q -U postgres -d grooming_test -v ON_ERROR_STOP=1 -f sql/seed/fixture.sql
 
+      - name: Load the style templates a second time (editing a style means re-running that file)
+        # A re-run with no edits must change nothing, so it records nothing:
+        # the audit log should hold real style edits only.
+        run: |
+          count="SELECT count(*) FROM groom.audit_log WHERE entity_type LIKE 'style_template%'"
+          before=$(docker exec db psql -U postgres -d grooming_test -tAc "$count")
+          docker exec db psql -q -U postgres -d grooming_test -v ON_ERROR_STOP=1 -f sql/21_style_template_seed.sql
+          after=$(docker exec db psql -U postgres -d grooming_test -tAc "$count")
+          echo "style audit rows: $before before, $after after"
+          test "$before" = "$after"
+
       - name: Run the pgTAP suite
         run: docker exec db sh -c 'pg_prove -U postgres -d grooming_test tests/*.sql'
 

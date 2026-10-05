@@ -27,6 +27,11 @@ SET search_path = groom, public;
 SET CONSTRAINTS ALL IMMEDIATE;
 SELECT plan(27);
 
+-- This file configures its own kennel_puppy rows, so it sets the seeded ones
+-- (sql/21_style_template_seed.sql) aside first. Rolled back with the rest.
+DELETE FROM style_template_zone_spec
+ WHERE style_template_id = (SELECT id FROM style_template WHERE code = 'kennel_puppy');
+
 -- --- Every key the read functions reference exists ---------------------------
 -- The cheapest defense against the silent-NULL failure: if a rename or a
 -- botched seed ever removes a key, this is the test that goes red.

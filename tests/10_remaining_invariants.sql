@@ -12,6 +12,11 @@ SET search_path = groom, public;
 SET CONSTRAINTS ALL IMMEDIATE;
 SELECT plan(9);
 
+-- This file configures its own kennel_puppy rows, so it sets the seeded ones
+-- (sql/21_style_template_seed.sql) aside first. Rolled back with the rest.
+DELETE FROM style_template_zone_spec
+ WHERE style_template_id = (SELECT id FROM style_template WHERE code = 'kennel_puppy');
+
 -- --- GR004: a haircut record needs a service that carries one ---------------
 INSERT INTO visit (id, dog_id, performed_by, visit_date) VALUES
     ('00000000-0000-0000-0000-0000000e0010',
