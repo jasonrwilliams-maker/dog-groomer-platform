@@ -48,6 +48,9 @@ jobs:
           done
           docker exec db psql -q -U postgres -d grooming_test -v ON_ERROR_STOP=1 -f sql/seed/fixture.sql
 
+      - name: Load the style templates a second time (editing a style means re-running that file)
+        run: docker exec db psql -q -U postgres -d grooming_test -v ON_ERROR_STOP=1 -f sql/21_style_template_seed.sql
+
       - name: Run the pgTAP suite
         run: docker exec db sh -c 'pg_prove -U postgres -d grooming_test tests/*.sql'
 

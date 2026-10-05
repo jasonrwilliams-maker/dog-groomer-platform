@@ -213,7 +213,8 @@ CREATE TABLE comb (
 
 CREATE TABLE length_tier (
     id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    code        text NOT NULL UNIQUE CHECK (code IN ('short','medium','long')),
+    -- Not a fixed list: a shop that wants an extra-long tier adds a row.
+    code        text NOT NULL UNIQUE CHECK (code ~ '^[a-z][a-z_]*$'),
     sort_order  integer NOT NULL UNIQUE
 );
 
@@ -1789,8 +1790,8 @@ JOIN body_zone bz       ON bz.id = s.body_zone_id
 LEFT JOIN length_tier lt ON lt.id = s.length_tier_id;
 -- =============================================================================
 -- 14. Reference seed data
---     Vocabulary only. The per-template zone mappings from style_tier_mapping.md
---     live in their own file, sql/21_style_template_seed.sql.
+--     Vocabulary only: blades, combs, body zones, length tiers, hygiene cuts.
+--     The styles built from it live in sql/21_style_template_seed.sql.
 -- =============================================================================
 
 INSERT INTO coat_type (code, name, description) VALUES
@@ -1895,35 +1896,9 @@ INSERT INTO compliance_state_meta
   ('not_yet_due',         7, 'Not yet due (puppy)',           false, false),
   ('current',             8, 'Current',                       false, false);
 
-INSERT INTO style_template
-  (code, name, plain_language_description, is_remedial, supports_tiers,
-   requires_uniform_length, min_coat_ordinal_required)
-VALUES
-  ('teddy_bear',   'Teddy Bear',
-   'Face left longer than the body; rounded, soft silhouette.',
-   false, true, false, NULL),
-  ('poodle_kennel','Poodle (Kennel Trim)',
-   'Clean-shaved face, feet and tail base; short body; fuller neck and top knot.',
-   false, true, false, NULL),
-  ('lamb',         'Lamb',
-   'Body shorter than legs. The contrast is vertical, not front-to-back.',
-   false, true, false, NULL),
-  ('kennel_puppy', 'Kennel / Puppy',
-   'One length everywhere. The absence of a differential is the style.',
-   false, true, true,  NULL),
-  ('shaved',       'Shaved (remedial)',
-   'Not a style. A response to coat condition.',
-   true,  false, false, 4);
-
--- The one clamp that exists today. Expressed in inches so it also catches a
--- comb, which has no blade number to compare against.
-INSERT INTO style_template_zone_clamp
-  (style_template_id, body_zone_id, max_effective_length_in, rationale)
-SELECT t.id, z.id, 0.062500,
-       'A fluffy-faced Poodle trim is not a Poodle trim; face may not exceed #10.'
-FROM style_template t
-CROSS JOIN body_zone z
-WHERE t.code = 'poodle_kennel' AND z.code IN ('face','muzzle_beard');
+-- The style templates themselves (Teddy Bear, Poodle, ...), their clamps and
+-- their per-zone cuts all live in sql/21_style_template_seed.sql, so a style
+-- is edited in one place.
 
 INSERT INTO retention_rule (entity_type, retain_months, anchor_field, action) VALUES
   ('vaccination_record', 36, 'expires_on',       'archive'),

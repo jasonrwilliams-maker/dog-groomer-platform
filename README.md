@@ -201,6 +201,39 @@ The extraction subsystem — its ingestion flow, the answer-key contract that
 governs its labelled evaluation set, the four keys, and the harness that scores a
 model run against them — is in [`extraction/`](extraction/).
 
+### Changing a style
+
+The styles are data, not code. Everything about a style (its name, its rules,
+and its cut for every zone at every length) is in one file,
+[`sql/21_style_template_seed.sql`](sql/21_style_template_seed.sql), written the way
+a groomer would say it: `('teddy_bear', 'short', 'body', '#7F')`,
+`'#30 + 3/4"'`, `'Scissors'`. Change the file, then run it again:
+
+```bash
+docker compose exec db psql -U postgres -d grooming_test -v ON_ERROR_STOP=1 -f sql/21_style_template_seed.sql
+```
+
+Use `-d grooming_demo` for the demo database. Each run replaces the styles in
+the file as a whole, in one transaction. A typo stops it with a message naming
+the line and what to fix, and the old version stays. Past haircuts never change;
+each keeps its own copy of what was cut.
+
+| To… | Do this |
+|---|---|
+| Change a cut | Edit its line in the seed file and re-run it |
+| Add a style | Add it to the style list at the top of the seed file, then a block of cuts (one per zone, per length tier) |
+| Add a comb or blade | Add a row to `comb` or `blade` in section 14 of the schema; the seed finds a comb by the length it leaves |
+| Add a zone | Add a row to `body_zone` in section 14; the shave-down picks it up on the next seed run |
+| Add a length tier | Add a row to `length_tier` in section 14, then cuts for it in every tiered style |
+| Keep a zone within a length | Add a clamp in the seed file (the Poodle face is the example) |
+
+[`tests/19_style_seed.sql`](tests/19_style_seed.sql) checks the result. A new style
+gets the general checks automatically: every length covers the same zones, the
+hygiene zones are left alone, combs sit on a #30, and a haircut can be recorded
+at every length. A rule that is specific to the new style (say, a Schnauzer's
+beard stays long) is one more query in that file, next to the Teddy Bear and
+Lamb ones.
+
 ---
 
 ## Business rules
