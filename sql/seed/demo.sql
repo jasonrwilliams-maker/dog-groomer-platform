@@ -160,7 +160,7 @@ SELECT dg.id, b.diff, bz.id, b.trig, b.note, now() - (b.days_ago || ' days')::in
        '00000000-0000-0000-0000-0000000d0b02'
   FROM (VALUES
     ('Pepper', 3, NULL,        'dryer',        'Fine with the stand dryer on low. Panics at the force dryer near her face.', 40),
-    ('Moose',  4, 'feet_pads', 'nail_grinder', 'Two people for nails. Grinder only, no clippers.', 75),
+    ('Moose',  4, 'feet', 'nail_grinder', 'Two people for nails. Grinder only, no clippers.', 75),
     ('Willow', 4, 'ears',      'other',        'Snaps when her ears are plucked. Muzzle for that part only.', 20),
     ('Tank',   2, NULL,        'water',        'Wary of the tub. Lift him in; he settles once he is wet.', 120),
     ('Olive',  1, NULL,        NULL,           'An easy groom. Loves the table.', 30)

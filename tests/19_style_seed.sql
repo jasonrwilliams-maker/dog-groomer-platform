@@ -8,7 +8,8 @@
 --
 -- The rows are a guide, not law: a groomer roughs a Teddy Bear head in with a
 -- comb and finishes it with scissors. So the identity rules are the shapes
--- that make a style that style, and no more precise than that.
+-- that make a style that style, and no more precise than that. (The owner's
+-- ruling, 2026-10-03: "longer" is the Teddy Bear rule, not a count of steps.)
 --
 -- Then every template and tier is turned into a real haircut, so the rules
 -- that check haircuts rather than seed rows (GR003, GR009, GR010, and GR001
@@ -18,7 +19,7 @@ BEGIN;
 SET search_path = groom, public;
 -- GR003 is checked at commit, and this file never commits.
 SET CONSTRAINTS ALL IMMEDIATE;
-SELECT plan(15);
+SELECT plan(19);
 
 CREATE TEMP VIEW seeded AS
 SELECT t.code                    AS template,
@@ -90,6 +91,16 @@ SELECT is_empty(
      EXCEPT
      SELECT min_coat_ordinal, zone FROM seeded WHERE template = 'shaved' $$,
   'Each shave-down coat level covers every style zone'
+);
+
+-- A pelted coat is in worse shape than a matted one, so it is cut shorter.
+SELECT is_empty(
+  $$ SELECT l5.zone FROM seeded l5
+       JOIN seeded l4 ON l4.template = l5.template AND l4.zone = l5.zone
+                     AND l4.min_coat_ordinal = 4
+      WHERE l5.template = 'shaved' AND l5.min_coat_ordinal = 5
+        AND NOT (l5.len < l4.len) $$,
+  'A level-5 (pelted) shave-down is shorter than a level-4 one on every zone'
 );
 
 -- --- Spec: "## Blade reference" — combs override the blade ----------------------
@@ -229,6 +240,22 @@ SELECT is_empty(
   'The hygiene zones come out the same in every haircut'
 );
 
+-- A level-5 coat meets the level-4 threshold too; the most severe level it
+-- meets is the one that cuts.
+SELECT is_empty(
+  $$ SELECT h.coat_level, c.body_zone_id
+       FROM seed_haircut h
+       JOIN cut_spec_zone c ON c.cut_specification_id = h.cut_specification_id
+                           AND c.resolved_from = 'template'
+       JOIN style_template_zone_spec s
+         ON s.style_template_id = (SELECT id FROM style_template WHERE code = 'shaved')
+        AND s.min_coat_ordinal  = h.coat_level
+        AND s.body_zone_id      = c.body_zone_id
+      WHERE h.template = 'shaved'
+        AND (c.blade_id, c.comb_id) IS DISTINCT FROM (s.blade_id, s.comb_id) $$,
+  'Each shave-down is cut with the blade for its own coat level, not a milder one'
+);
+
 -- The shave-down rows do not loosen the gate on a shave-down: a coat that is
 -- not matted enough is still refused, with the seed in place.
 INSERT INTO visit (id, dog_id, performed_by, visit_date) VALUES
@@ -246,6 +273,44 @@ SELECT throws_ok(
   'GR001',
   NULL,
   'A level-3 coat still does not justify a shave-down, seed or no seed'
+);
+
+-- --- Style edits are recorded (schema section 11b) -----------------------------
+-- An edit changes the next haircut for every dog on that style, so the edit
+-- itself is kept: before, after, and why.
+SELECT set_config('groom.change_reason', 'Shorter body for summer', true);
+
+UPDATE style_template_zone_spec s
+   SET blade_id = (SELECT id FROM blade WHERE number = 5 AND is_finish)
+  FROM style_template t, length_tier lt, body_zone z
+ WHERE s.style_template_id = t.id AND s.length_tier_id = lt.id AND s.body_zone_id = z.id
+   AND t.code = 'teddy_bear' AND lt.code = 'medium' AND z.code = 'body';
+
+SELECT results_eq(
+  $$ SELECT action::text, changed_fields->>'style', changed_fields->>'tier',
+            changed_fields->>'zone', changed_fields->>'before', changed_fields->>'after',
+            changed_fields->>'reason'
+       FROM audit_log
+      WHERE entity_type = 'style_template_zone_spec' AND action = 'update'
+        AND occurred_at = now() $$,  -- this transaction only
+  $$ VALUES ('update', 'teddy_bear', 'medium', 'body', '#4F', '#5F',
+             'Shorter body for summer') $$,
+  'Changing a cut records the style, tier, zone, the cut before and after, and why'
+);
+
+DELETE FROM style_template_zone_spec s
+ USING style_template t, length_tier lt, body_zone z
+ WHERE s.style_template_id = t.id AND s.length_tier_id = lt.id AND s.body_zone_id = z.id
+   AND t.code = 'lamb' AND lt.code = 'long' AND z.code = 'ears';
+
+SELECT results_eq(
+  $$ SELECT changed_fields->>'style', changed_fields->>'zone',
+            changed_fields->>'before', changed_fields->>'after'
+       FROM audit_log
+      WHERE entity_type = 'style_template_zone_spec' AND action = 'delete'
+        AND occurred_at = now() $$,  -- this transaction only
+  $$ VALUES ('lamb', 'ears', 'Scissors', NULL::text) $$,
+  'Removing a cut records what it was'
 );
 
 SELECT * FROM finish();

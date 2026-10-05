@@ -9,12 +9,17 @@
 -- database that already has it: the styles listed here are replaced as a whole,
 -- inside one transaction, so a mistake leaves the old version in place. Past
 -- haircuts are not touched; each one keeps its own copy of what was cut.
+--
+-- Only what actually changed is written, and every change lands in audit_log
+-- with what the cut was before and after (section 11b of the schema). A re-run
+-- with no edits records nothing. To say why, pass a reason:
+--     psql ... -v reason='Shorter Teddy Bear body for summer' -f sql/21_style_template_seed.sql
 -- See "Changing a style" in the README.
 --
 -- What is NOT here, on purpose:
 --   * The vocabulary (blades, combs, body zones, length tiers). That lives in
 --     section 14 of the schema; add a comb there, then use it here.
---   * The hygiene zones (sanitary, feet & pads, inside ears). They are the
+--   * The hygiene zones (sanitary, paw pads, inside ears). They are the
 --     same for every template and tier, and live in zone_default
 --     (spec: "Fixed zones — invariant across all templates and tiers").
 --   * Zones a template's table does not list. Each template carries only the
@@ -30,6 +35,10 @@
 SET search_path = groom, public;
 
 BEGIN;
+
+\if :{?reason}
+SELECT set_config('groom.change_reason', :'reason', true) \gset style_seed_
+\endif
 
 -- --- The styles ------------------------------------------------------------------
 -- Re-running updates a style in place, keyed on its code. Removing a line here
@@ -61,7 +70,14 @@ ON CONFLICT (code) DO UPDATE SET
   is_remedial                = EXCLUDED.is_remedial,
   supports_tiers             = EXCLUDED.supports_tiers,
   requires_uniform_length    = EXCLUDED.requires_uniform_length,
-  min_coat_ordinal_required  = EXCLUDED.min_coat_ordinal_required;
+  min_coat_ordinal_required  = EXCLUDED.min_coat_ordinal_required
+WHERE (style_template.name, style_template.plain_language_description,
+       style_template.is_remedial, style_template.supports_tiers,
+       style_template.requires_uniform_length, style_template.min_coat_ordinal_required)
+      IS DISTINCT FROM
+      (EXCLUDED.name, EXCLUDED.plain_language_description,
+       EXCLUDED.is_remedial, EXCLUDED.supports_tiers,
+       EXCLUDED.requires_uniform_length, EXCLUDED.min_coat_ordinal_required);
 
 -- One row per spec table cell. tier is NULL and coat_level set only for the
 -- remedial template, which keys on coat condition instead of tier.
@@ -95,6 +111,9 @@ INSERT INTO style_seed_row (template, tier, zone, cut) VALUES
   ('teddy_bear', 'short',  'legs',              '#5F'),
   ('teddy_bear', 'medium', 'legs',              '#4'),
   ('teddy_bear', 'long',   'legs',              '#30 + 1"'),
+  ('teddy_bear', 'short',  'feet',              'Scissors'),    -- round "teddy feet"
+  ('teddy_bear', 'medium', 'feet',              'Scissors'),
+  ('teddy_bear', 'long',   'feet',              'Scissors'),
   ('teddy_bear', 'short',  'head_skull',        '#30 + 3/4"'),
   ('teddy_bear', 'medium', 'head_skull',        '#30 + 1"'),
   ('teddy_bear', 'long',   'head_skull',        '#30 + 1 1/4"'),
@@ -132,6 +151,9 @@ INSERT INTO style_seed_row (template, tier, zone, cut) VALUES
   ('poodle_kennel', 'short',  'legs',              '#7F'),
   ('poodle_kennel', 'medium', 'legs',              '#4'),
   ('poodle_kennel', 'long',   'legs',              '#30 + 3/4"'),
+  ('poodle_kennel', 'short',  'feet',              '#15'),         -- clean-shaved feet
+  ('poodle_kennel', 'medium', 'feet',              '#10'),
+  ('poodle_kennel', 'long',   'feet',              '#10'),
   ('poodle_kennel', 'short',  'face',              '#15'),
   ('poodle_kennel', 'medium', 'face',              '#10'),
   ('poodle_kennel', 'long',   'face',              '#10'),
@@ -167,6 +189,9 @@ INSERT INTO style_seed_row (template, tier, zone, cut) VALUES
   ('lamb', 'short',  'legs',              '#30 + 3/4"'),
   ('lamb', 'medium', 'legs',              '#30 + 1"'),
   ('lamb', 'long',   'legs',              '#30 + 1 1/4"'),
+  ('lamb', 'short',  'feet',              'Scissors'),          -- round feet under full legs
+  ('lamb', 'medium', 'feet',              'Scissors'),
+  ('lamb', 'long',   'feet',              'Scissors'),
   ('lamb', 'short',  'head_skull',        '#30 + 3/4"'),
   ('lamb', 'medium', 'head_skull',        '#30 + 1"'),
   ('lamb', 'long',   'head_skull',        '#30 + 1"'),
@@ -192,7 +217,7 @@ INSERT INTO style_seed_row (template, tier, zone, cut) VALUES
 INSERT INTO style_seed_row (template, tier, zone, cut)
 SELECT 'kennel_puppy', tier, zone, cut
 FROM (VALUES ('short', '#7F'), ('medium', '#4F'), ('long', '#30 + 1"')) AS t(tier, cut)
-CROSS JOIN (VALUES ('body'), ('neck'), ('legs'), ('head_skull'), ('muzzle_beard'),
+CROSS JOIN (VALUES ('body'), ('neck'), ('legs'), ('feet'), ('head_skull'), ('muzzle_beard'),
                    ('ears'), ('tail'), ('stomach_underbody')) AS z(zone);
 
 -- --- Spec: "## 5. Shaved — remedial, no tiers" --------------------------------
@@ -254,24 +279,51 @@ BEGIN
     END LOOP;
 END $$;
 
--- Replace the listed styles' cuts and clamps as a whole. Clamps go in first,
--- because the clamp check (GR006) reads them as each cut loads.
-DELETE FROM style_template_zone_spec
- WHERE style_template_id IN (SELECT DISTINCT template_id FROM style_seed_resolved);
-DELETE FROM style_template_zone_clamp
- WHERE style_template_id IN (SELECT DISTINCT template_id FROM style_seed_resolved);
+-- Bring the listed styles into line with this file, writing only what
+-- differs, so the audit log holds real edits and nothing else. Stale rows go
+-- first; clamps before cuts, because the clamp check (GR006) reads them as
+-- each cut is written.
+DELETE FROM style_template_zone_spec s
+ WHERE s.style_template_id IN (SELECT template_id FROM style_seed_resolved)
+   AND NOT EXISTS (
+        SELECT 1 FROM style_seed_resolved r
+         WHERE r.template_id = s.style_template_id
+           AND r.zone_id     = s.body_zone_id
+           AND r.tier_id    IS NOT DISTINCT FROM s.length_tier_id
+           AND r.coat_level IS NOT DISTINCT FROM s.min_coat_ordinal);
 
-INSERT INTO style_template_zone_clamp
+DELETE FROM style_template_zone_clamp c
+ WHERE c.style_template_id IN (SELECT template_id FROM style_seed_resolved)
+   AND NOT EXISTS (
+        SELECT 1 FROM style_seed_clamp k
+          JOIN style_template t ON t.code = k.template
+          JOIN body_zone      z ON z.code = k.zone
+         WHERE t.id = c.style_template_id AND z.id = c.body_zone_id);
+
+INSERT INTO style_template_zone_clamp AS c
     (style_template_id, body_zone_id, min_effective_length_in, max_effective_length_in, rationale)
 SELECT (SELECT id FROM style_template WHERE code = k.template),
        (SELECT id FROM body_zone      WHERE code = k.zone),
        k.min_in, k.max_in, k.rationale
-FROM style_seed_clamp k;
+FROM style_seed_clamp k
+ON CONFLICT (style_template_id, body_zone_id) DO UPDATE SET
+    min_effective_length_in = EXCLUDED.min_effective_length_in,
+    max_effective_length_in = EXCLUDED.max_effective_length_in,
+    rationale               = EXCLUDED.rationale
+WHERE (c.min_effective_length_in, c.max_effective_length_in, c.rationale)
+      IS DISTINCT FROM
+      (EXCLUDED.min_effective_length_in, EXCLUDED.max_effective_length_in, EXCLUDED.rationale);
 
-INSERT INTO style_template_zone_spec
+INSERT INTO style_template_zone_spec AS s
     (style_template_id, length_tier_id, min_coat_ordinal, body_zone_id, tool, blade_id, comb_id)
 SELECT template_id, tier_id, coat_level, zone_id, tool,
        CASE WHEN tool = 'clipper' THEN blade_id END, comb_id
-FROM style_seed_resolved;
+FROM style_seed_resolved
+ON CONFLICT (style_template_id, length_tier_id, min_coat_ordinal, body_zone_id) DO UPDATE SET
+    tool     = EXCLUDED.tool,
+    blade_id = EXCLUDED.blade_id,
+    comb_id  = EXCLUDED.comb_id
+WHERE (s.tool, s.blade_id, s.comb_id)
+      IS DISTINCT FROM (EXCLUDED.tool, EXCLUDED.blade_id, EXCLUDED.comb_id);
 
 COMMIT;

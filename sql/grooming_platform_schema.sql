@@ -1515,6 +1515,69 @@ CREATE TRIGGER vaccine_type_regulatory_guard
     BEFORE INSERT OR UPDATE OR DELETE ON vaccine_type
     FOR EACH ROW EXECUTE FUNCTION enforce_regulatory_change_reason();
 
+-- -----------------------------------------------------------------------------
+-- 11b. Style edits are recorded.
+--
+-- A style is data and is meant to be edited (sql/21_style_template_seed.sql),
+-- and an edit changes the next haircut for every dog on that style. Past
+-- haircuts keep their own copy; this keeps the other half of the story: what
+-- the style said, what it says now, who changed it and when. "Why was Biscuit's
+-- body shorter this month?" is a query on audit_log.
+--
+-- Not a block: a style is a guide, not law. A reason is recorded when one is
+-- given (SET LOCAL groom.change_reason, or psql -v reason=... on the seed
+-- file), and never required.
+-- -----------------------------------------------------------------------------
+
+CREATE FUNCTION log_style_change() RETURNS trigger LANGUAGE plpgsql AS $$
+DECLARE
+    v_old    jsonb := CASE WHEN TG_OP <> 'INSERT' THEN to_jsonb(OLD) END;
+    v_new    jsonb := CASE WHEN TG_OP <> 'DELETE' THEN to_jsonb(NEW) END;
+    v_row    jsonb := COALESCE(v_new, v_old);
+    v_detail jsonb;
+BEGIN
+    IF TG_TABLE_NAME = 'style_template' THEN
+        v_detail := jsonb_build_object(
+            'style',   v_row->>'code',
+            'changed', CASE WHEN TG_OP = 'UPDATE' THEN jsonb_diff(v_old, v_new)
+                            ELSE v_row - 'id' END);
+    ELSE
+        v_detail := jsonb_build_object(
+            'style', (SELECT code FROM style_template WHERE id = (v_row->>'style_template_id')::uuid),
+            'zone',  (SELECT code FROM body_zone      WHERE id = (v_row->>'body_zone_id')::uuid));
+        IF TG_TABLE_NAME = 'style_template_zone_spec' THEN
+            v_detail := v_detail || jsonb_build_object(
+                'tier',       (SELECT code FROM length_tier WHERE id = (v_row->>'length_tier_id')::uuid),
+                'coat_level', v_row->'min_coat_ordinal',
+                'before', describe_tooling((v_old->>'tool')::cutting_tool,
+                                           (v_old->>'blade_id')::uuid, (v_old->>'comb_id')::uuid),
+                'after',  describe_tooling((v_new->>'tool')::cutting_tool,
+                                           (v_new->>'blade_id')::uuid, (v_new->>'comb_id')::uuid));
+        ELSE                                    -- style_template_zone_clamp
+            v_detail := v_detail || jsonb_build_object(
+                'before', v_old - 'id' - 'style_template_id' - 'body_zone_id',
+                'after',  v_new - 'id' - 'style_template_id' - 'body_zone_id');
+        END IF;
+    END IF;
+
+    INSERT INTO audit_log (actor_label, action, entity_type, entity_id, changed_fields)
+    VALUES (current_user,
+            CASE TG_OP WHEN 'INSERT' THEN 'create' WHEN 'UPDATE' THEN 'update' ELSE 'delete' END::audit_action,
+            TG_TABLE_NAME, (v_row->>'id')::uuid,
+            v_detail || jsonb_build_object('reason', NULLIF(current_setting('groom.change_reason', true), '')));
+    RETURN NULL;
+END $$;
+
+CREATE TRIGGER style_template_audit
+    AFTER INSERT OR UPDATE OR DELETE ON style_template
+    FOR EACH ROW EXECUTE FUNCTION log_style_change();
+CREATE TRIGGER style_template_zone_spec_audit
+    AFTER INSERT OR UPDATE OR DELETE ON style_template_zone_spec
+    FOR EACH ROW EXECUTE FUNCTION log_style_change();
+CREATE TRIGGER style_template_zone_clamp_audit
+    AFTER INSERT OR UPDATE OR DELETE ON style_template_zone_clamp
+    FOR EACH ROW EXECUTE FUNCTION log_style_change();
+
 -- =============================================================================
 -- 12. Cut specification expansion — implements §1 precedence exactly
 -- =============================================================================
@@ -1831,10 +1894,12 @@ INSERT INTO body_zone (code, plain_language_label, display_order) VALUES
   ('stomach_underbody',   'Stomach / underbody',  90),
   ('ears',                'Ears',                100),
   ('sanitary',            'Sanitary',            200),
-  ('feet_pads',           'Feet & pads',         210),
+  -- Pads only. The rest of the foot is a style choice (zone 'feet').
+  ('paw_pads',            'Paw pads',            210),
   ('inside_ears',         'Inside ears',         220);
 
 INSERT INTO body_zone (code, plain_language_label, display_order, parent_zone_id) VALUES
+  ('feet',      'Feet',            35, (SELECT id FROM body_zone WHERE code='legs')),
   ('face',      'Face',            50, (SELECT id FROM body_zone WHERE code='head_skull')),
   ('top_knot',  'Top knot',        60, (SELECT id FROM body_zone WHERE code='head_skull')),
   ('ear_tips',  'Ear tips',       110, (SELECT id FROM body_zone WHERE code='ears')),
@@ -1848,7 +1913,7 @@ INSERT INTO body_zone (code, plain_language_label, display_order, parent_zone_id
 INSERT INTO zone_default (body_zone_id, blade_id, rationale) VALUES
   ((SELECT id FROM body_zone WHERE code='sanitary'),
    (SELECT id FROM blade WHERE number=10 AND NOT is_finish), 'Hygiene cut'),
-  ((SELECT id FROM body_zone WHERE code='feet_pads'),
+  ((SELECT id FROM body_zone WHERE code='paw_pads'),
    (SELECT id FROM blade WHERE number=15 AND NOT is_finish), 'Hygiene cut; pads must be clear'),
   ((SELECT id FROM body_zone WHERE code='inside_ears'),
    (SELECT id FROM blade WHERE number=10 AND NOT is_finish), 'Hygiene cut; airflow');
@@ -1915,6 +1980,7 @@ ALTER FUNCTION enforcement_level(text) SET search_path = groom, public;
 ALTER FUNCTION log_policy_warning(text, text, uuid, text) SET search_path = groom, public;
 ALTER FUNCTION jsonb_diff(jsonb, jsonb) SET search_path = groom, public;
 ALTER FUNCTION log_config_change() SET search_path = groom, public;
+ALTER FUNCTION log_style_change() SET search_path = groom, public;
 ALTER FUNCTION reject_shop_policy_delete() SET search_path = groom, public;
 ALTER FUNCTION enforce_regulatory_change_reason() SET search_path = groom, public;
 ALTER FUNCTION derive_effective_length(cutting_tool, uuid, uuid) SET search_path = groom, public;

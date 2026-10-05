@@ -27,7 +27,7 @@ These do not vary. They are hygiene cuts, not style cuts.
 | Zone | Tool | Blade | Notes |
 |---|---|---|---|
 | Sanitary | Clipper | #10 | Always |
-| Feet & pads | Clipper | #15 | Always |
+| Paw pads | Clipper | #15 | Always; pads only. The rest of the foot is a style zone, "Feet" |
 | Inside ears | Clipper | #10 | Always |
 
 Encoding these as template-independent defaults means a new template only has to
@@ -45,6 +45,7 @@ face-to-body length differential is what makes it a Teddy Bear.
 | Body | #7F | #4F | #30 + 3/4" comb |
 | Neck | #7F | #4F | #30 + 3/4" comb |
 | Legs | #5F | #4 | #30 + 1" comb |
+| Feet | Scissors | Scissors | Scissors |
 | Head / skull | #30 + 3/4" comb | #30 + 1" comb | #30 + 1 1/4" comb |
 | Muzzle / beard | Scissors | Scissors | Scissors |
 | Ears | #7F | #4F | Scissors |
@@ -52,7 +53,9 @@ face-to-body length differential is what makes it a Teddy Bear.
 | Tail | Scissors | Scissors | Scissors |
 | Stomach / underbody | #10 | #7F | #4F |
 
-Differential holds at every tier: head is always at least two steps longer than body.
+Differential holds at every tier: the head is always left longer than the body. The
+clippers only rough the length in; the groomer finishes the head with scissors, so
+"longer" is the rule, not a count of blade steps (owner's ruling, 2026-10-03).
 
 ## 2. Poodle (Kennel Trim)
 
@@ -64,6 +67,7 @@ top knot forming a mane.
 | Body | #7F | #5 | #3 |
 | Neck / mane | #5 | #4 | #30 + 3/4" comb |
 | Legs | #7F | #4 | #30 + 3/4" comb |
+| Feet | #15 | #10 | #10 |
 | Face | #15 | #10 | #10 |
 | Muzzle | #15 | #10 | #10 |
 | Ears | Scissors | Scissors | Scissors |
@@ -85,6 +89,7 @@ here the contrast is vertical, not front-to-back.
 | Body | #7F | #5 | #4 |
 | Neck | #7F | #5 | #4 |
 | Legs | #30 + 3/4" comb | #30 + 1" comb | #30 + 1 1/4" comb |
+| Feet | Scissors | Scissors | Scissors |
 | Head / skull | #30 + 3/4" comb | #30 + 1" comb | #30 + 1" comb |
 | Face | #15 | #10 | #10 |
 | Ears | Scissors | Scissors | Scissors |
@@ -101,6 +106,7 @@ here the contrast is vertical, not front-to-back.
 | Body | #7F | #4F | #30 + 1" comb |
 | Neck | #7F | #4F | #30 + 1" comb |
 | Legs | #7F | #4F | #30 + 1" comb |
+| Feet | #7F | #4F | #30 + 1" comb |
 | Head / skull | #7F | #4F | #30 + 1" comb |
 | Muzzle | #7F | #4F | #30 + 1" comb |
 | Ears | #7F | #4F | #30 + 1" comb |
