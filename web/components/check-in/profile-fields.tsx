@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { BreedPicker } from "@/components/check-in/breed-picker";
 import { useWalkInOptions } from "@/components/check-in/paperwork-form";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -72,10 +73,6 @@ export function DogFields({ dog, onChange, autoFocus, coatTouched = false }: {
     <Card>
       <CardHeader><CardTitle>Dog</CardTitle></CardHeader>
       <CardContent className="grid gap-4 sm:grid-cols-2">
-        {/* One list for every breed box in the form. */}
-        <datalist id="known-breeds">
-          {opts?.breeds.map((b) => <option key={b.name} value={b.name} />)}
-        </datalist>
         <Field label="Name">
           <Input required autoFocus={autoFocus} value={dog.name} onChange={(e) => onChange({ ...dog, name: e.target.value })} />
         </Field>
@@ -138,9 +135,13 @@ export function DogFields({ dog, onChange, autoFocus, coatTouched = false }: {
 function BreedInput({ label, value, onChange, note, autoFocus }: {
   label: string; value: string; onChange: (v: string) => void; note?: string; autoFocus?: boolean;
 }) {
+  const opts = useWalkInOptions();
+  const breeds = useMemo(() => (opts?.breeds ?? []).map((b) => b.name), [opts]);
   return (
-    <Field label={label} note={note}>
-      <Input list="known-breeds" value={value} autoFocus={autoFocus} onChange={(e) => onChange(e.target.value)} />
+    // A group, not a label: a click on the open list would otherwise be passed
+    // on to the box and open the list again.
+    <Field group label={label} note={note}>
+      <BreedPicker label={label} value={value} onChange={onChange} breeds={breeds} autoFocus={autoFocus} />
     </Field>
   );
 }
