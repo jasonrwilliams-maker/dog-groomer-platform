@@ -89,7 +89,7 @@ for a better copy instead of recording a guess.
 | Owner outreach (§19) | Opt-in consent per channel, kept as a history; one message per owner per dog naming every certificate needed; spaced, capped reminders; an outbox and a sender. **Test mode**: nothing is delivered yet — a real email or text provider plugs into `extraction/review/outreach.py` |
 | Check-in (§20) | `start_visit()` opens a groom and refuses (GR020) while a service-blocking vaccine is expired, missing, disputed or still being chased. Past visits can still be recorded as history |
 | Style templates (§21) | 148 rows from `reference/style_tier_mapping.md`: four styles at three lengths, plus the shave-down at coat levels 4 and 5. Tests check each style's identity (a Teddy Bear head stays longer than the body; a Poodle face stays shaved; Kennel is one length), not a copy of the rows. Every style edit is recorded in the audit log, before and after |
-| Groomer interface | **Check-in screen** (`web/`, Next.js + Tailwind, shadcn-style components) on a thin FastAPI backend (`api/`): find a dog, see whether today's groom can start and why not, allergies, handling notes, last visit; start the groom. Runs on its own demo database, `grooming_demo` |
+| Groomer interface | **Check-in screen** (`web/`, Next.js + Tailwind, shadcn-style components) on a thin FastAPI backend (`api/`): pick who's grooming, find a dog by its name or its owner's, see whether today's groom can start and why not, allergies, handling notes; start the groom. Managers also get an Admin view: the whole book's compliance at a glance and the way into the records tool. Runs on its own demo database, `grooming_demo` |
 | Extraction harness | Built — scores a model run against the answer keys; self-check passing |
 | Photo preparation | Built — a photo is turned upright, stripped of EXIF and GPS, and downscaled before it is sent |
 | Labelling & review tool | Built — Streamlit; writes answer keys from a form, and reconciles a run against its key |
@@ -110,7 +110,7 @@ That starts the database and three apps, all on this machine only:
 
 | | |
 |---|---|
-| **http://localhost:3000** | The groomer interface: the check-in screen |
+| **http://localhost:3000** | The groomer interface: the check-in screen, and (for managers) Admin and the records tool |
 | http://localhost:8000/docs | Its backend's endpoints |
 | http://localhost:8501 | The labelling and review tool |
 

@@ -14,11 +14,13 @@ const TRIGGER = {
 } as Record<string, string>;
 
 export function DogCard({
-  card, groomerId, onChanged,
+  card, groomerId, onChanged, detailsOpen = false,
 }: {
   card: CheckInCard;
   groomerId: string | null;
   onChanged: () => void;
+  /** Managers see everything unfolded; groomers get the short card. */
+  detailsOpen?: boolean;
 }) {
   const { dog } = card;
   const [busy, setBusy] = useState(false);
@@ -56,7 +58,6 @@ export function DogCard({
         <p className="mt-1 text-sm">
           {dog.owner}
           {dog.phone && <> · <a className="underline-offset-2 hover:underline" href={`tel:${dog.phone}`}>{dog.phone}</a></>}
-          {dog.email && <> · {dog.email}</>}
         </p>
       </div>
 
@@ -100,7 +101,6 @@ export function DogCard({
             <Button variant="go" size="lg" disabled={!card.can_start || !groomerId || busy} onClick={start}>
               {busy ? "Starting…" : "Start groom"}
             </Button>
-            {!groomerId && <span className="text-sm text-muted-foreground">Choose who is grooming, above.</span>}
           </div>
         )}
         {refusal && (
@@ -131,65 +131,75 @@ export function DogCard({
         </Card>
       )}
 
-      <div className="grid gap-4 md:grid-cols-2">
+      {card.behaviour.length > 0 && (
         <Card>
-          <CardHeader><CardTitle>Vaccinations</CardTitle></CardHeader>
+          <CardHeader><CardTitle>Handling</CardTitle></CardHeader>
           <CardContent>
-            <ul className="flex flex-col divide-y divide-border">
-              {card.vaccines.map((v) => (
-                <li key={v.code} className="flex items-center justify-between gap-3 py-2">
-                  <span>
-                    <span className="font-medium">{v.vaccine}</span>
-                    {v.expires_on && (
-                      <span className="block text-sm text-muted-foreground">
-                        {v.days_until_expiry !== null && v.days_until_expiry < 0 ? "Expired" : "Expires"} {formatDate(v.expires_on)}
-                      </span>
-                    )}
-                  </span>
-                  <Badge tone={toneFor(v.state, v.blocks_service)}>{v.label}</Badge>
+            <ul className="flex flex-col gap-3">
+              {card.behaviour.map((b, i) => (
+                <li key={i}>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge tone={b.difficulty >= 4 ? "stop" : b.difficulty === 3 ? "warn" : "ok"}>{b.difficulty_label}</Badge>
+                    <span className="text-sm text-muted-foreground">
+                      {[b.trigger && TRIGGER[b.trigger], b.zone].filter(Boolean).join(" · ")}
+                    </span>
+                  </div>
+                  {b.note && <p className="mt-1 text-sm">{b.note}</p>}
                 </li>
               ))}
             </ul>
           </CardContent>
         </Card>
+      )}
 
-        <Card>
-          <CardHeader><CardTitle>Handling</CardTitle></CardHeader>
-          <CardContent>
-            {card.behaviour.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No handling notes yet.</p>
-            ) : (
-              <ul className="flex flex-col gap-3">
-                {card.behaviour.map((b, i) => (
-                  <li key={i}>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge tone={b.difficulty >= 4 ? "stop" : b.difficulty === 3 ? "warn" : "ok"}>{b.difficulty_label}</Badge>
-                      <span className="text-sm text-muted-foreground">
-                        {[b.trigger && TRIGGER[b.trigger], b.zone].filter(Boolean).join(" · ")}
-                      </span>
-                    </div>
-                    {b.note && <p className="mt-1 text-sm">{b.note}</p>}
+      {/* The rest is there when it's wanted, out of the way when it isn't. */}
+      <details open={detailsOpen} className="group">
+        <summary className="cursor-pointer list-none rounded-[var(--radius)] px-1 py-2 text-sm font-medium text-muted-foreground hover:text-foreground">
+          <span className="group-open:hidden">▸ More details: vaccinations, last visit, contact</span>
+          <span className="hidden group-open:inline">▾ Fewer details</span>
+        </summary>
+        <div className="mt-2 grid gap-4 md:grid-cols-2">
+          <Card>
+            <CardHeader><CardTitle>Vaccinations</CardTitle></CardHeader>
+            <CardContent>
+              <ul className="flex flex-col divide-y divide-border">
+                {card.vaccines.map((v) => (
+                  <li key={v.code} className="flex items-center justify-between gap-3 py-2">
+                    <span>
+                      <span className="font-medium">{v.vaccine}</span>
+                      {v.expires_on && (
+                        <span className="block text-sm text-muted-foreground">
+                          {v.days_until_expiry !== null && v.days_until_expiry < 0 ? "Expired" : "Expires"} {formatDate(v.expires_on)}
+                        </span>
+                      )}
+                    </span>
+                    <Badge tone={toneFor(v.state, v.blocks_service)}>{v.label}</Badge>
                   </li>
                 ))}
               </ul>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+            </CardContent>
+          </Card>
 
-      <Card>
-        <CardHeader><CardTitle>Last visit</CardTitle></CardHeader>
-        <CardContent>
-          {card.last_visit ? (
-            <p className="text-sm">
-              <span className="font-medium">{formatDate(card.last_visit.visit_date)}</span> with {card.last_visit.groomer}
-              {card.last_visit.note && <span className="block text-muted-foreground">{card.last_visit.note}</span>}
-            </p>
-          ) : (
-            <p className="text-sm text-muted-foreground">No visits recorded yet.</p>
-          )}
-        </CardContent>
-      </Card>
+          <Card>
+            <CardHeader><CardTitle>Last visit</CardTitle></CardHeader>
+            <CardContent>
+              {card.last_visit ? (
+                <p className="text-sm">
+                  <span className="font-medium">{formatDate(card.last_visit.visit_date)}</span> with {card.last_visit.groomer}
+                  {card.last_visit.note && <span className="block text-muted-foreground">{card.last_visit.note}</span>}
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground">No visits recorded yet.</p>
+              )}
+              <p className="mt-4 text-sm">
+                <span className="block font-medium">{dog.owner}</span>
+                {dog.phone && <a className="block underline-offset-2 hover:underline" href={`tel:${dog.phone}`}>{dog.phone}</a>}
+                {dog.email && <a className="block underline-offset-2 hover:underline" href={`mailto:${dog.email}`}>{dog.email}</a>}
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      </details>
     </div>
   );
 }

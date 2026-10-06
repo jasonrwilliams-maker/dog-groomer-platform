@@ -1,14 +1,35 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { Logo } from "@/components/brand/logo";
+import { AdminView } from "@/components/check-in/admin-view";
 import { DogCard } from "@/components/check-in/dog-card";
 import { DogList } from "@/components/check-in/dog-list";
-import { api, type CheckInCard, type DogSummary, type Groomer } from "@/lib/api";
+import { Welcome } from "@/components/check-in/welcome";
+import { Button } from "@/components/ui/button";
+import { api, type CheckInCard, type DogSummary, type Groomer, type SearchBy } from "@/lib/api";
+import { cn } from "@/lib/utils";
+
+// Who is at the counter survives a page reload on this device, until someone
+// taps "Switch". Storage can be unavailable (private windows); the screen
+// then simply asks again.
+const WHO = "check-in.groomer";
+function remembered(): string | null {
+  try { return localStorage.getItem(WHO); } catch { return null; }
+}
+function remember(id: string | null) {
+  try { if (id) localStorage.setItem(WHO, id); else localStorage.removeItem(WHO); } catch { /* ask again next time */ }
+}
+
+type View = "check-in" | "admin";
 
 export default function CheckInPage() {
   const [groomers, setGroomers] = useState<Groomer[]>([]);
-  const [groomerId, setGroomerId] = useState<string | null>(null);
+  const [me, setMe] = useState<Groomer | null>(null);
+  const [ready, setReady] = useState(false);
+  const [view, setView] = useState<View>("check-in");
   const [query, setQuery] = useState("");
+  const [by, setBy] = useState<SearchBy>("any");
   const [dogs, setDogs] = useState<DogSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -16,20 +37,24 @@ export default function CheckInPage() {
   const [problem, setProblem] = useState<string | null>(null);
 
   useEffect(() => {
-    api.groomers().then(setGroomers).catch((e) => setProblem(String(e.message ?? e)));
+    api.groomers()
+      .then((gs) => { setGroomers(gs); setMe(gs.find((g) => g.id === remembered()) ?? null); })
+      .catch((e) => setProblem(String(e.message ?? e)))
+      .finally(() => setReady(true));
   }, []);
 
   // Search as you type, a beat after the last keystroke.
   useEffect(() => {
+    if (!me) return;
     setLoading(true);
     const t = setTimeout(() => {
-      api.findDogs(query)
+      api.findDogs(query, by)
         .then((d) => { setDogs(d); setProblem(null); })
         .catch((e) => setProblem(String(e.message ?? e)))
         .finally(() => setLoading(false));
     }, 200);
     return () => clearTimeout(t);
-  }, [query]);
+  }, [me, query, by]);
 
   const loadCard = useCallback((id: string) => {
     api.card(id).then(setCard).catch((e) => setProblem(String(e.message ?? e)));
@@ -40,48 +65,75 @@ export default function CheckInPage() {
     else setCard(null);
   }, [selectedId, loadCard]);
 
+  function signIn(g: Groomer) { remember(g.id); setMe(g); setView("check-in"); }
+  function signOut() { remember(null); setMe(null); setSelectedId(null); setQuery(""); }
+
+  const manager = me?.role === "manager";
+  const trouble = problem && (
+    <p role="alert" className="mx-auto max-w-md rounded-[var(--radius)] border border-stop/30 bg-stop-soft p-3 text-sm text-stop">
+      Can&apos;t reach the shop&apos;s records right now: {problem}
+    </p>
+  );
+
+  if (!ready) return null;
+  if (!me) return <>{trouble}<Welcome groomers={groomers} onPick={signIn} /></>;
+
   return (
     <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-6 md:px-8">
-      <header className="flex flex-wrap items-end justify-between gap-4 border-b border-border pb-4">
-        <div>
-          <p className="text-sm font-medium text-muted-foreground">Paws &amp; Polish Grooming</p>
-          <h1 className="text-2xl font-semibold tracking-tight">Check-in</h1>
+      <header className="flex flex-wrap items-center justify-between gap-4 border-b border-border pb-4">
+        <Logo />
+        <div className="flex flex-wrap items-center gap-3">
+          {manager && (
+            <nav className="flex rounded-[var(--radius)] bg-muted p-1 text-sm" aria-label="Screens">
+              {(["check-in", "admin"] as View[]).map((v) => (
+                <button
+                  key={v}
+                  onClick={() => setView(v)}
+                  aria-current={view === v ? "page" : undefined}
+                  className={cn(
+                    "rounded-[calc(var(--radius)-0.2rem)] px-3 py-1.5 font-medium transition-colors",
+                    view === v ? "bg-card shadow-sm" : "text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  {v === "check-in" ? "Check-in" : "Admin"}
+                </button>
+              ))}
+            </nav>
+          )}
+          <span className="text-sm">
+            <span className="text-muted-foreground">Grooming: </span>
+            <span className="font-medium">{me.name}</span>
+          </span>
+          <Button variant="outline" size="sm" onClick={signOut}>Switch</Button>
         </div>
-        <label className="flex items-center gap-2 text-sm">
-          <span className="text-muted-foreground">Grooming today:</span>
-          <select
-            className="h-10 rounded-[var(--radius)] border border-border bg-card px-3"
-            value={groomerId ?? ""}
-            onChange={(e) => setGroomerId(e.target.value || null)}
-          >
-            <option value="">Choose…</option>
-            {groomers.map((g) => <option key={g.id} value={g.id}>{g.name}</option>)}
-          </select>
-        </label>
       </header>
 
-      {problem && (
-        <p role="alert" className="rounded-[var(--radius)] border border-stop/30 bg-stop-soft p-3 text-sm text-stop">
-          Can&apos;t reach the shop&apos;s records right now: {problem}
-        </p>
-      )}
+      {trouble}
 
-      <div className="grid gap-6 md:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]">
-        <aside>
-          <DogList query={query} onQuery={setQuery} dogs={dogs} selectedId={selectedId}
-                   onSelect={setSelectedId} loading={loading} />
-        </aside>
-        <main>
-          {card ? (
-            <DogCard key={card.dog.id} card={card} groomerId={groomerId}
-                     onChanged={() => { loadCard(card.dog.id); api.findDogs(query).then(setDogs); }} />
-          ) : (
-            <div className="flex h-64 items-center justify-center rounded-[var(--radius)] border border-dashed border-border text-muted-foreground">
-              Find a dog to see whether they&apos;re cleared for today&apos;s groom.
-            </div>
-          )}
-        </main>
-      </div>
+      {view === "admin" && manager ? (
+        <AdminView onOpenDog={(id) => { setSelectedId(id); setView("check-in"); }} />
+      ) : (
+        <div className="grid gap-6 md:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]">
+          {/* On a phone the list and the card take turns; side by side from tablet up. */}
+          <aside className={cn(selectedId && "hidden md:block")}>
+            <DogList query={query} onQuery={setQuery} by={by} onBy={setBy} dogs={dogs}
+                     selectedId={selectedId} onSelect={setSelectedId} loading={loading} />
+          </aside>
+          <main className={cn(!selectedId && "hidden md:block")}>
+            <Button variant="ghost" size="sm" className="mb-3 md:hidden" onClick={() => setSelectedId(null)}>
+              ← All dogs
+            </Button>
+            {card ? (
+              <DogCard key={card.dog.id} card={card} groomerId={me.id} detailsOpen={manager}
+                       onChanged={() => { loadCard(card.dog.id); api.findDogs(query, by).then(setDogs); }} />
+            ) : (
+              <div className="flex h-64 items-center justify-center rounded-[var(--radius)] border border-dashed border-border px-6 text-center text-muted-foreground">
+                Pick a dog to see whether they&apos;re cleared for today&apos;s groom.
+              </div>
+            )}
+          </main>
+        </div>
+      )}
     </div>
   );
 }

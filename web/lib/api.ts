@@ -38,7 +38,18 @@ export type CheckInCard = {
   paperwork_requests: { vaccine: string; status: string; channel: string; next_reminder_on: string | null }[];
 };
 
-export type Groomer = { id: string; name: string };
+export type Groomer = { id: string; name: string; role: "groomer" | "manager" };
+
+/** Where a search looks: the dog's name, the owner's, or either. */
+export type SearchBy = "any" | "dog" | "owner";
+
+export type ComplianceLine = {
+  dog_id: string; dog: string; owner: string; vaccine: string; state: string; label: string;
+  expires_on: string | null; days_until_expiry: number | null; blocks_service: boolean;
+  request_status: string | null;
+};
+
+export type ComplianceSummary = { dogs: number; cleared: number; blocked: number; lines: ComplianceLine[] };
 
 /** A refusal from the database, passed through by the backend as a 409. */
 export class Refusal extends Error {
@@ -55,7 +66,8 @@ async function get<T>(path: string): Promise<T> {
 
 export const api = {
   groomers: () => get<Groomer[]>("/groomers"),
-  findDogs: (q: string) => get<DogSummary[]>(`/dogs?q=${encodeURIComponent(q)}`),
+  findDogs: (q: string, by: SearchBy = "any") => get<DogSummary[]>(`/dogs?q=${encodeURIComponent(q)}&by=${by}`),
+  compliance: () => get<ComplianceSummary>("/admin/compliance"),
   card: (id: string) => get<CheckInCard>(`/dogs/${id}`),
   async startGroom(dogId: string, groomerId: string) {
     const r = await fetch(`/api/dogs/${dogId}/visits`, {
