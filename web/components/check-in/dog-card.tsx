@@ -4,6 +4,8 @@ import { useState } from "react";
 import { Badge, toneFor } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { AllergyCard } from "@/components/check-in/allergy-card";
+import { HandlingCard } from "@/components/check-in/handling-card";
 import { PaperworkForm } from "@/components/check-in/paperwork-form";
 import { ProfileEditForm } from "@/components/check-in/profile-edit-form";
 import { api, Refusal, type CheckInCard } from "@/lib/api";
@@ -11,9 +13,6 @@ import { cn, formatDate, formatTime } from "@/lib/utils";
 
 const SEX = { male: "Male", female: "Female", unknown: "" } as Record<string, string>;
 const CHANNEL = { email: "by email", sms: "by text", verbal_at_counter: "at the counter" } as Record<string, string>;
-const TRIGGER = {
-  dryer: "Dryer", clippers: "Clippers", nail_grinder: "Nail grinder", restraint: "Restraint", water: "Water", other: "",
-} as Record<string, string>;
 
 export function DogCard({
   card, groomerId, onChanged, onAddDog, detailsOpen = false,
@@ -65,7 +64,7 @@ export function DogCard({
       <div>
         <div className="flex items-start justify-between gap-3">
           <h2 className="text-3xl font-semibold tracking-tight">{dog.name}</h2>
-          <Button variant="outline" size="sm" onClick={() => setEditing(true)}>Edit</Button>
+          <Button variant="outline" size="sm" onClick={() => setEditing(true)}>Edit profile</Button>
         </div>
         <p className="text-muted-foreground">{details}</p>
         <p className="mt-1 text-sm">
@@ -142,43 +141,9 @@ export function DogCard({
       )}
 
       {/* Allergies first among the details: they change what goes on the dog. */}
-      {card.allergies.length > 0 && (
-        <Card className="border-stop/30">
-          <CardHeader><CardTitle className="text-stop">Allergies</CardTitle></CardHeader>
-          <CardContent>
-            <ul className="flex flex-col gap-2">
-              {card.allergies.map((a) => (
-                <li key={a.allergen} className="flex flex-wrap items-baseline gap-x-2">
-                  <span className="font-medium">{a.allergen}</span>
-                  <Badge tone={a.severity >= 3 ? "stop" : "warn"}>{a.severity_label}</Badge>
-                  {a.note && <span className="w-full text-sm text-muted-foreground">{a.note}</span>}
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-      )}
+      <AllergyCard dogId={dog.id} allergies={card.allergies} groomerId={groomerId} onChanged={onChanged} />
 
-      {card.behaviour.length > 0 && (
-        <Card>
-          <CardHeader><CardTitle>Handling</CardTitle></CardHeader>
-          <CardContent>
-            <ul className="flex flex-col gap-3">
-              {card.behaviour.map((b, i) => (
-                <li key={i}>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Badge tone={b.difficulty >= 4 ? "stop" : b.difficulty === 3 ? "warn" : "ok"}>{b.difficulty_label}</Badge>
-                    <span className="text-sm text-muted-foreground">
-                      {[b.trigger && TRIGGER[b.trigger], b.zone].filter(Boolean).join(" · ")}
-                    </span>
-                  </div>
-                  {b.note && <p className="mt-1 text-sm">{b.note}</p>}
-                </li>
-              ))}
-            </ul>
-          </CardContent>
-        </Card>
-      )}
+      <HandlingCard dogId={dog.id} notes={card.behaviour} groomerId={groomerId} onChanged={onChanged} />
 
       {/* The rest is there when it's wanted, out of the way when it isn't. */}
       <details open={detailsOpen} className="group">

@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import { Badge, toneFor } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { api, type ComplianceLine, type ComplianceSummary } from "@/lib/api";
+import { Button } from "@/components/ui/button";
+import { api, type ComplianceLine, type ComplianceSummary, type Review } from "@/lib/api";
 import { formatDate } from "@/lib/utils";
 
 // The labelling and review tool (extraction/review/). Managers only.
@@ -23,12 +24,15 @@ const GROUPS: { title: string; note: string; match: (l: ComplianceLine) => boole
     match: (l) => !l.blocks_service && l.state === "expiring_soon" },
 ];
 
-export function AdminView({ onOpenDog }: { onOpenDog: (dogId: string) => void }) {
+export function AdminView({ groomerId, onOpenDog }: { groomerId: string; onOpenDog: (dogId: string) => void }) {
   const [summary, setSummary] = useState<ComplianceSummary | null>(null);
+  const [reviews, setReviews] = useState<Review[]>([]);
   const [problem, setProblem] = useState<string | null>(null);
 
+  const loadReviews = () => api.reviews().then(setReviews).catch((e) => setProblem(String(e.message ?? e)));
   useEffect(() => {
     api.compliance().then(setSummary).catch((e) => setProblem(String(e.message ?? e)));
+    loadReviews();
   }, []);
 
   if (problem) {
@@ -65,6 +69,39 @@ export function AdminView({ onOpenDog }: { onOpenDog: (dogId: string) => void })
           </a>
         </CardContent>
       </Card>
+
+      {reviews.length > 0 && (
+        <Card className="border-warn/40">
+          <CardHeader>
+            <CardTitle>Changes to review · {reviews.length}</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Allergies taken off or made less severe while no manager was in. Check each with the groomer or the owner.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <ul className="flex flex-col divide-y divide-border">
+              {reviews.map((r) => (
+                <li key={r.id} className="flex flex-wrap items-center justify-between gap-3 py-2.5">
+                  <button className="min-w-0 text-left hover:underline" onClick={() => onOpenDog(r.dog_id)}>
+                    <span className="font-medium">{r.dog}</span>
+                    <span className="text-muted-foreground"> · {r.owner}</span>
+                    <span className="block text-sm">{r.summary}</span>
+                    <span className="block text-sm text-muted-foreground">
+                      &ldquo;{r.reason}&rdquo; · {r.changed_by}, {new Date(r.changed_at).toLocaleString("en-US", {
+                        month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                    </span>
+                  </button>
+                  <Button variant="outline" size="sm"
+                          onClick={() => api.markReviewed(r.id, groomerId).then(loadReviews)
+                                             .catch((e) => setProblem(String(e.message ?? e)))}>
+                    Mark reviewed
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
 
       {grouped.map((g) => g.lines.length > 0 && (
         <Group key={g.title} title={`${g.title} · ${g.lines.length}`} note={g.note} lines={g.lines} onOpenDog={onOpenDog} />

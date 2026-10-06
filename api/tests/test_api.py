@@ -204,3 +204,47 @@ def test_a_misspelt_breed_is_caught_and_a_typo_can_be_put_right(client):
                                                       "email": "jason@example.test"})
     assert renamed.json()["changed"] == {"first_name": {"old": "Jason", "new": "Jayson"}}
     assert client.get(f"/dogs/{jaddi_id}").json()["dog"]["owner"] == "Jayson Williams"
+
+
+def test_allergies_are_kept_from_the_counter_and_a_weaker_one_waits_for_a_manager(client):
+    tank = dog_named(client, "Tank")["id"]
+    card = client.get(f"/dogs/{tank}").json()
+    assert card["allergies"][0]["type"] == "contact", "contact allergies come first"
+
+    assert client.get("/allergens/suggest", params={"q": "Chiken"}).json()[0]["name"] == "Chicken"
+    typo = client.post(f"/dogs/{tank}/allergies", json={"groomer_id": groomer(client), "allergen": "Chiken",
+                                                     "severity": 2})
+    assert typo.status_code == 409 and typo.json()["code"] == "GR024"
+    added = client.post(f"/dogs/{tank}/allergies", json={"groomer_id": groomer(client), "allergen": "Chicken",
+                                                      "severity": 2, "note": "Treats only"})
+    assert added.status_code == 201
+    chicken = added.json()["id"]
+
+    weaker = client.put(f"/allergies/{chicken}", json={"groomer_id": groomer(client), "severity": 1,
+                                                       "source": "owner_reported", "note": "Treats only"})
+    assert weaker.status_code == 409 and weaker.json()["code"] == "GR025"
+    removed = client.post(f"/allergies/{chicken}/remove", json={"groomer_id": groomer(client),
+                                                                "reason": "Owner says it was the beef"})
+    assert removed.status_code == 200
+    assert "Chicken" not in [a["allergen"] for a in client.get(f"/dogs/{tank}").json()["allergies"]]
+
+    waiting = client.get("/admin/reviews").json()
+    assert [(r["dog"], r["summary"], r["reason"]) for r in waiting] == [
+        ("Tank", "Chicken (Moderate) taken off", "Owner says it was the beef")]
+    not_manager = client.post(f"/admin/reviews/{waiting[0]['id']}/reviewed", json={"groomer_id": groomer(client)})
+    assert not_manager.status_code == 409 and not_manager.json()["code"] == "GR026"
+    done = client.post(f"/admin/reviews/{waiting[0]['id']}/reviewed", json={"groomer_id": groomer(client, "Nadia")})
+    assert done.status_code == 200 and client.get("/admin/reviews").json() == []
+
+
+def test_a_handling_note_is_added_and_a_typo_in_it_put_right(client):
+    moose = dog_named(client, "Moose")["id"]
+    r = client.post(f"/dogs/{moose}/behaviour", json={"groomer_id": groomer(client), "difficulty": 3,
+                                                     "trigger": "scissors", "zone": "feet:back", "note": "Kiks"})
+    assert r.status_code == 201
+    latest = client.get(f"/dogs/{moose}").json()["behaviour"][0]
+    assert (latest["trigger"], latest["zone"], latest["observed_by"]) == ("scissors", "Back feet", "Tanya")
+    assert latest["zone_code"] == "feet:back", "what the edit form starts from"
+    fixed = client.put(f"/behaviour/{latest['id']}", json={"groomer_id": groomer(client), "difficulty": 3,
+                                                          "trigger": "scissors", "zone": "feet:back", "note": "Kicks"})
+    assert fixed.json()["changed"] == {"note": {"old": "Kiks", "new": "Kicks"}}

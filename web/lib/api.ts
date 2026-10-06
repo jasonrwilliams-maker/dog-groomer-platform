@@ -37,9 +37,8 @@ export type CheckInCard = {
   can_start: boolean;
   blocking: string[];
   vaccines: VaccineLine[];
-  allergies: { allergen: string; severity: number; severity_label: string; source: string; note: string | null }[];
-  behaviour: { difficulty: number; difficulty_label: string; zone: string | null; trigger: string | null;
-               note: string | null; observed_on: string }[];
+  allergies: Allergy[];
+  behaviour: BehaviourNote[];
   last_visit: { visit_date: string; groomer: string; note: string | null } | null;
   open_visit: { id: string; check_in: string; groomer: string } | null;
   paperwork_requests: { vaccine: string; status: string; channel: string; next_reminder_on: string | null }[];
@@ -58,10 +57,28 @@ export type ComplianceLine = {
 
 export type ComplianceSummary = { dogs: number; cleared: number; blocked: number; lines: ComplianceLine[] };
 
+export type AllergyType = "contact" | "flea" | "environmental" | "food";
+export type AllergySource = "owner_reported" | "observed" | "vet_documented";
+export type Allergy = {
+  id: string; allergen: string; type: AllergyType; severity: number; severity_label: string;
+  source: AllergySource; note: string | null;
+};
+export type BehaviourNote = {
+  id: string; difficulty: number; difficulty_label: string; zone: string | null; zone_code: string | null;
+  trigger: string | null; note: string | null; observed_on: string; observed_by: string | null;
+};
+export type NewBehaviour = { difficulty: number; trigger: string | null; zone: string | null; note: string | null };
+export type Review = {
+  id: string; dog_id: string; dog: string; owner: string; summary: string; reason: string;
+  changed_by: string; changed_at: string;
+};
+
 export type WalkInOptions = {
   coats: { code: string; name: string }[];
   breeds: { name: string; coat: string }[];
   vaccines: { code: string; name: string; required: boolean }[];
+  allergens: { name: string; type: AllergyType }[];
+  zones: { code: string; name: string }[];
 };
 
 export type NewOwner = { first_name: string; last_name: string; phone: string | null; email: string | null };
@@ -119,6 +136,22 @@ export const api = {
     send<{ changed: Changed }>("PUT", `/owners/${ownerId}`, { groomer_id: groomerId, ...owner }),
   editDog: (dogId: string, groomerId: string, dog: NewDog) =>
     send<{ changed: Changed }>("PUT", `/dogs/${dogId}`, { groomer_id: groomerId, ...dog }),
+  suggestAllergens: (q: string) => get<{ name: string; type: AllergyType }[]>(`/allergens/suggest?q=${encodeURIComponent(q)}`),
+  addAllergy: (dogId: string, groomerId: string, a: {
+    allergen: string; severity: number; source: AllergySource; note: string | null;
+    new_allergen: boolean; type: AllergyType | null;
+  }) => post<{ id: string }>(`/dogs/${dogId}/allergies`, { groomer_id: groomerId, ...a }),
+  editAllergy: (id: string, groomerId: string, a: { severity: number; source: AllergySource; note: string | null; reason: string | null }) =>
+    send<{ changed: Changed }>("PUT", `/allergies/${id}`, { groomer_id: groomerId, ...a }),
+  removeAllergy: (id: string, groomerId: string, reason: string) =>
+    post<{ removed: boolean }>(`/allergies/${id}/remove`, { groomer_id: groomerId, reason }),
+  addBehaviour: (dogId: string, groomerId: string, b: NewBehaviour) =>
+    post<{ id: string }>(`/dogs/${dogId}/behaviour`, { groomer_id: groomerId, ...b }),
+  correctBehaviour: (id: string, groomerId: string, b: NewBehaviour) =>
+    send<{ changed: Changed }>("PUT", `/behaviour/${id}`, { groomer_id: groomerId, ...b }),
+  reviews: () => get<Review[]>("/admin/reviews"),
+  markReviewed: (id: string, groomerId: string) =>
+    post<{ reviewed: boolean }>(`/admin/reviews/${id}/reviewed`, { groomer_id: groomerId }),
   /** A new dog, for an owner on file (ownerId) or a new one (owner). */
   addWalkIn: (groomerId: string, dog: NewDog, owner: { id: string } | NewOwner) =>
     post<{ owner_id: string; dog_id: string }>("/walk-ins", {

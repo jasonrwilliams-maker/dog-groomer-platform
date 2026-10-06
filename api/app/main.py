@@ -151,14 +151,21 @@ def check_in_card(dog_id: UUID):
         SELECT vaccine_code AS code, vaccine, state::text AS state, label, expires_on,
                days_until_expiry, blocks_service, regulatory_required
           FROM v_check_in_vaccine WHERE dog_id = %s ORDER BY sort_order, vaccine""", (dog_id,))
+    # Contact allergies first: they are the ones a groom can set off.
     allergies = db.rows("""
-        SELECT al.name AS allergen, a.severity_ordinal AS severity, a.source::text AS source, a.note
+        SELECT a.id, al.name AS allergen, al.allergy_type AS type, a.severity_ordinal AS severity,
+               a.source::text AS source, a.note
           FROM allergy a JOIN allergen al ON al.id = a.allergen_id
-         WHERE a.dog_id = %s ORDER BY a.severity_ordinal DESC, al.name""", (dog_id,))
+         WHERE a.dog_id = %s AND a.removed_at IS NULL
+         ORDER BY allergy_type_order(al.allergy_type), a.severity_ordinal DESC, al.name""", (dog_id,))
     behaviour = db.rows("""
-        SELECT n.handling_difficulty_ordinal AS difficulty, bz.plain_language_label AS zone,
-               n.trigger_kind AS trigger, n.note, n.observed_at::date AS observed_on
-          FROM behavior_note n LEFT JOIN body_zone bz ON bz.id = n.body_zone_id
+        SELECT n.id, n.handling_difficulty_ordinal AS difficulty, spot_label(n.body_zone_id, n.side) AS zone,
+               bz.code || COALESCE(':' || n.side, '') AS zone_code, n.trigger_kind AS trigger, n.note,
+               n.observed_at::date AS observed_on,
+               g.display_name AS observed_by
+          FROM behavior_note n
+          LEFT JOIN body_zone bz ON bz.id = n.body_zone_id
+          LEFT JOIN groomer g    ON g.id = n.observed_by
          WHERE n.dog_id = %s ORDER BY n.observed_at DESC LIMIT 5""", (dog_id,))
     last_visit = db.row("""
         SELECT v.visit_date, g.display_name AS groomer, v.overall_note AS note
@@ -239,7 +246,25 @@ def walk_in_options():
         "vaccines": db.rows("""SELECT code, name, regulatory_required AS required FROM vaccine_type
                                 WHERE regulatory_required OR required_by_policy
                                 ORDER BY regulatory_required DESC, name"""),
+        "allergens": db.rows("""SELECT name, allergy_type AS type FROM allergen
+                                 ORDER BY allergy_type_order(allergy_type), name"""),
+        # Where on the dog a handling note can say, sides included.
+        "zones": db.rows("SELECT code, label AS name FROM v_handling_spot ORDER BY sort_order"),
     }
+
+
+@app.get("/allergens/suggest")
+def allergen_suggestions(q: str = ""):
+    """The nearest names on the allergy list, for "did you mean"."""
+    if db.row("SELECT 1 AS ok FROM allergen WHERE lower(name) = lower(btrim(%s))", (q,)):
+        return []
+    return db.rows("SELECT name, allergy_type AS type FROM suggest_allergens(%s, 4)", (q,))
+
+
+@app.get("/admin/reviews")
+def reviews():
+    """Changes that left a dog less protected, waiting for a manager."""
+    return db.rows("SELECT * FROM v_change_review_open")
 
 
 # --------------------------------------------------------------- writing
@@ -384,3 +409,99 @@ def edit_dog(dog_id: UUID, body: DogEdit):
         if "not an active client" in str(e):
             raise HTTPException(404, "No active dog with that id.") from None
         raise
+
+
+# --------------------------------------------------------------- allergies and handling
+
+def _write(sql: str, params: tuple, missing: str = "No such record."):
+    """One database call that may refuse; its refusal goes back in its own words."""
+    try:
+        with db.connect() as conn:
+            return conn.execute(sql, params).fetchone()
+    except psycopg.Error as e:
+        if (r := refusal_from(e, form=True)) is not None:
+            raise r from None
+        if "not an active client" in str(e):
+            raise HTTPException(404, missing) from None
+        raise
+
+
+Severity = Literal[1, 2, 3, 4]
+Source = Literal["owner_reported", "observed", "vet_documented"]
+
+
+class NewAllergy(BaseModel):
+    groomer_id: UUID
+    allergen: str
+    severity: Severity
+    source: Source = "owner_reported"
+    note: str | None = None
+    new_allergen: bool = False                 # the groomer says the list lacks it
+    type: Literal["contact", "flea", "environmental", "food"] | None = None
+
+
+@app.post("/dogs/{dog_id}/allergies", status_code=201)
+def add_allergy(dog_id: UUID, body: NewAllergy):
+    return _write("SELECT add_allergy(%s, %s, %s, %s::allergy_source, %s, %s, %s, %s) AS id",
+                  (dog_id, body.allergen, body.severity, body.source, body.note, body.groomer_id,
+                   body.new_allergen, body.type), "No active dog with that id.")
+
+
+class AllergyEdit(BaseModel):
+    groomer_id: UUID
+    severity: Severity
+    source: Source
+    note: str | None = None
+    reason: str | None = None                  # needed when it becomes less severe
+
+
+@app.put("/allergies/{allergy_id}")
+def edit_allergy(allergy_id: UUID, body: AllergyEdit):
+    return _write("SELECT update_allergy(%s, %s, %s::allergy_source, %s, %s, %s) AS changed",
+                  (allergy_id, body.severity, body.source, body.note, body.groomer_id, body.reason))
+
+
+class Removal(BaseModel):
+    groomer_id: UUID
+    reason: str
+
+
+@app.post("/allergies/{allergy_id}/remove")
+def remove_allergy(allergy_id: UUID, body: Removal):
+    _write("SELECT remove_allergy(%s, %s, %s) AS ok", (allergy_id, body.reason, body.groomer_id))
+    return {"removed": True}
+
+
+Trigger = Literal["dryer", "clippers", "scissors", "nail_grinder", "brushing", "bath", "water",
+                  "restraint", "table", "other_dogs", "noise", "other"]
+
+
+class BehaviourNote(BaseModel):
+    groomer_id: UUID
+    difficulty: Literal[1, 2, 3, 4, 5]
+    trigger: Trigger | None = None
+    zone: str | None = None
+    note: str | None = None
+
+
+@app.post("/dogs/{dog_id}/behaviour", status_code=201)
+def add_behaviour(dog_id: UUID, body: BehaviourNote):
+    return _write("SELECT add_behavior_note(%s, %s, %s, %s, %s, %s) AS id",
+                  (dog_id, body.difficulty, body.trigger, body.zone, body.note, body.groomer_id),
+                  "No active dog with that id.")
+
+
+@app.put("/behaviour/{note_id}")
+def correct_behaviour(note_id: UUID, body: BehaviourNote):
+    return _write("SELECT correct_behavior_note(%s, %s, %s, %s, %s, %s) AS changed",
+                  (note_id, body.difficulty, body.trigger, body.zone, body.note, body.groomer_id))
+
+
+class Reviewer(BaseModel):
+    groomer_id: UUID
+
+
+@app.post("/admin/reviews/{review_id}/reviewed")
+def review_done(review_id: UUID, body: Reviewer):
+    _write("SELECT mark_reviewed(%s, %s) AS ok", (review_id, body.groomer_id))
+    return {"reviewed": True}
