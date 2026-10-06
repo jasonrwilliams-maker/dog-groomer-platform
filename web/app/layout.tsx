@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Check-in · Paws & Polish",
-  description: "The groomer's check-in screen: is this dog cleared for today's groom?",
+  description: "The shop's front screen: who's grooming, every dog, and whether each is cleared for today's groom.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

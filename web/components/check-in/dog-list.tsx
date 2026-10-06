@@ -2,28 +2,57 @@
 
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import type { DogSummary } from "@/lib/api";
+import type { DogSummary, SearchBy } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
+const MODES: { by: SearchBy; label: string; placeholder: string }[] = [
+  { by: "any", label: "Both", placeholder: "Dog or owner name" },
+  { by: "dog", label: "Dog", placeholder: "Dog's name" },
+  { by: "owner", label: "Owner", placeholder: "Owner's name" },
+];
+
 export function DogList({
-  query, onQuery, dogs, selectedId, onSelect, loading,
+  query, onQuery, by, onBy, dogs, selectedId, onSelect, loading,
 }: {
   query: string;
   onQuery: (q: string) => void;
+  by: SearchBy;
+  onBy: (by: SearchBy) => void;
   dogs: DogSummary[];
   selectedId: string | null;
   onSelect: (id: string) => void;
   loading: boolean;
 }) {
+  const mode = MODES.find((m) => m.by === by)!;
   return (
     <div className="flex flex-col gap-3">
+      <div role="radiogroup" aria-label="Search by" className="flex rounded-[var(--radius)] bg-muted p-1 text-sm">
+        {MODES.map((m) => (
+          <button
+            key={m.by}
+            role="radio"
+            aria-checked={m.by === by}
+            onClick={() => onBy(m.by)}
+            className={cn(
+              "flex-1 rounded-[calc(var(--radius)-0.2rem)] px-3 py-1.5 font-medium transition-colors",
+              m.by === by ? "bg-card shadow-sm" : "text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {m.label}
+          </button>
+        ))}
+      </div>
       <Input
         autoFocus
+        type="search"
         value={query}
         onChange={(e) => onQuery(e.target.value)}
-        placeholder="Dog or owner name"
-        aria-label="Find a dog by its name or its owner's name"
+        placeholder={mode.placeholder}
+        aria-label={`Search by ${mode.placeholder.toLowerCase()}`}
       />
+      <p className="px-1 text-xs text-muted-foreground" aria-live="polite">
+        {loading ? "Searching…" : query ? `${dogs.length} found` : `All dogs · ${dogs.length}`}
+      </p>
       <ul className="flex flex-col gap-1.5" aria-busy={loading}>
         {dogs.map((d) => (
           <li key={d.id}>
@@ -36,14 +65,7 @@ export function DogList({
             >
               <span className="min-w-0">
                 <span className="block font-medium">{d.name}</span>
-                <span className="block truncate text-sm text-muted-foreground">
-                  {d.breed ?? "Breed not recorded"} · {d.owner}
-                </span>
-                {d.attention && (
-                  <span className={cn("block truncate text-sm", d.blocks_service ? "text-stop" : "text-warn")}>
-                    {d.attention}
-                  </span>
-                )}
+                <span className="block truncate text-sm text-muted-foreground">{d.owner}</span>
               </span>
               <Badge tone={d.blocks_service ? "stop" : "ok"}>
                 {d.blocks_service ? "Can't groom" : "Cleared"}
@@ -52,7 +74,9 @@ export function DogList({
           </li>
         ))}
         {!loading && dogs.length === 0 && (
-          <li className="px-3 py-6 text-sm text-muted-foreground">No dog or owner by that name.</li>
+          <li className="px-3 py-6 text-sm text-muted-foreground">
+            {by === "dog" ? "No dog by that name." : by === "owner" ? "No owner by that name." : "No dog or owner by that name."}
+          </li>
         )}
       </ul>
     </div>

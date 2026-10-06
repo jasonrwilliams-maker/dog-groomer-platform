@@ -99,3 +99,28 @@ def test_unknown_dog_and_unknown_groomer_are_plain_errors(client):
     assert client.get(f"/dogs/{missing}").status_code == 404
     moose = dog_named(client, "Moose")["id"]
     assert client.post(f"/dogs/{moose}/visits", json={"groomer_id": missing}).status_code == 422
+
+
+def test_staff_list_says_who_is_a_manager(client):
+    roles = {g["name"]: g["role"] for g in client.get("/groomers").json()}
+    assert roles == {"Nadia": "manager", "Tanya": "groomer"}
+
+
+def test_search_can_look_at_only_the_dog_or_only_the_owner(client):
+    assert [d["name"] for d in client.get("/dogs", params={"q": "Williams", "by": "owner"}).json()] == ["Jaddi"]
+    assert client.get("/dogs", params={"q": "Williams", "by": "dog"}).json() == []
+    assert [d["name"] for d in client.get("/dogs", params={"q": "Jaddi", "by": "dog"}).json()] == ["Jaddi"]
+    assert client.get("/dogs", params={"by": "breed"}).status_code == 422
+
+
+def test_compliance_summary_counts_the_book_and_lists_what_needs_doing(client):
+    summary = client.get("/admin/compliance").json()
+    assert summary["dogs"] == 11
+    assert summary["cleared"] + summary["blocked"] == summary["dogs"]
+    lines = summary["lines"]
+    blocks = [l["blocks_service"] for l in lines]
+    assert blocks == sorted(blocks, reverse=True), "what stops a groom comes first"
+    assert {"dog": "Jaddi", "vaccine": "Rabies", "state": "expired"}.items() <= next(
+        l for l in lines if l["dog"] == "Jaddi").items()
+    assert any(l["state"] == "received_unverified" and not l["blocks_service"] for l in lines)
+    assert not any(l["state"] in ("current", "not_yet_due") for l in lines)

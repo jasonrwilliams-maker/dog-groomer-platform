@@ -58,15 +58,29 @@ def health():
 
 @app.get("/groomers")
 def groomers():
-    return db.rows("SELECT id, display_name AS name FROM groomer WHERE is_active ORDER BY display_name")
+    """Who can sign in at the counter. A manager also gets the Admin view; the
+    screen decides what to show, so this is a convenience, not a lock."""
+    return db.rows("""SELECT id, display_name AS name, role::text AS role
+                        FROM groomer WHERE is_active ORDER BY display_name""")
+
+
+# What a search looks in: the dog's name, the owner's name, or either.
+SEARCH_IN = {
+    "dog":   "d.name ILIKE %(like)s",
+    "owner": "(o.first_name ILIKE %(like)s OR o.last_name ILIKE %(like)s"
+             " OR (o.first_name || ' ' || o.last_name) ILIKE %(like)s)",
+}
+SEARCH_IN["any"] = f"({SEARCH_IN['dog']} OR {SEARCH_IN['owner']})"
 
 
 @app.get("/dogs")
-def find_dogs(q: str = ""):
+def find_dogs(q: str = "", by: str = "any"):
     """Active dogs whose name, or whose owner's name, contains q — those that
-    cannot be groomed today first, then by name."""
-    like = f"%{q.strip()}%"
-    return db.rows("""
+    cannot be groomed today first, then by name. `by` narrows the search to
+    the dog's name or the owner's."""
+    if by not in SEARCH_IN:
+        raise HTTPException(422, "Search by 'dog', 'owner' or 'any'.")
+    return db.rows(f"""
         SELECT d.id, d.name, b.name AS breed,
                o.first_name || ' ' || o.last_name AS owner,
                c.state::text AS state, c.plain_language_label AS label,
@@ -80,11 +94,9 @@ def find_dogs(q: str = ""):
           JOIN owner o ON o.id = d.owner_id
           LEFT JOIN breed b ON b.id = d.breed_id
           LEFT JOIN v_compliance_dashboard c ON c.dog_id = d.id
-         WHERE d.is_active
-           AND (d.name ILIKE %s OR o.first_name ILIKE %s OR o.last_name ILIKE %s
-                OR (o.first_name || ' ' || o.last_name) ILIKE %s)
+         WHERE d.is_active AND {SEARCH_IN[by]}
          ORDER BY COALESCE(c.blocks_service, false) DESC, d.name
-         LIMIT 50""", (like, like, like, like))
+         LIMIT 200""", {"like": f"%{q.strip()}%"})
 
 
 def _age(born: date | None) -> str | None:
@@ -153,6 +165,32 @@ def check_in_card(dog_id: UUID):
         "open_visit": open_visit,
         "paperwork_requests": requests,
     }
+
+
+@app.get("/admin/compliance")
+def compliance():
+    """The manager's view of the whole book: how many dogs are cleared, and
+    every vaccine line that needs someone to do something, worst first."""
+    counts = db.row("""
+        SELECT count(*)                                              AS dogs,
+               count(*) FILTER (WHERE NOT COALESCE(c.blocks_service, false)) AS cleared,
+               count(*) FILTER (WHERE c.blocks_service)                AS blocked
+          FROM dog d LEFT JOIN v_compliance_dashboard c ON c.dog_id = d.id
+         WHERE d.is_active""")
+    lines = db.rows("""
+        SELECT d.id AS dog_id, d.name AS dog, o.first_name || ' ' || o.last_name AS owner,
+               l.vaccine, l.state::text AS state, l.label, l.expires_on, l.days_until_expiry,
+               l.blocks_service,
+               (SELECT rr.status::text FROM record_request rr JOIN vaccine_type vt ON vt.id = rr.vaccine_type_id
+                 WHERE rr.dog_id = d.id AND vt.code = l.vaccine_code
+                   AND rr.status IN ('queued', 'sent', 'responded', 'insufficient')
+                 ORDER BY rr.created_at DESC LIMIT 1) AS request_status
+          FROM v_check_in_vaccine l
+          JOIN dog d   ON d.id = l.dog_id
+          JOIN owner o ON o.id = d.owner_id
+         WHERE l.state NOT IN ('current', 'not_yet_due')
+         ORDER BY l.blocks_service DESC, l.sort_order, l.days_until_expiry NULLS LAST, d.name, l.vaccine""")
+    return {**counts, "lines": lines}
 
 
 # --------------------------------------------------------------- writing

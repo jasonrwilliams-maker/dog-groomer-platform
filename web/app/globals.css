@@ -1,25 +1,36 @@
 @import "tailwindcss";
 
-/* shadcn-style tokens. Plain on purpose: this screen's job is to be read at a
-   glance across a counter, and the colours that matter are the three that
-   mean something for today's groom. */
-:root {
-  --background: oklch(0.985 0 0);
-  --foreground: oklch(0.21 0.01 260);
-  --card: oklch(1 0 0);
-  --muted: oklch(0.96 0.004 260);
-  --muted-foreground: oklch(0.5 0.015 260);
-  --border: oklch(0.91 0.005 260);
-  --primary: oklch(0.32 0.03 260);
-  --primary-foreground: oklch(0.985 0 0);
-  --ring: oklch(0.6 0.02 260);
+/* shadcn-style tokens. The shop's own colours come from the "Spaniel dog with
+   yellow eyes" palette (color-hex.com): coat mauve, a deeper mauve, a pale
+   warm grey, the amber eyes, and a near-black aubergine.
 
-  --ok: oklch(0.52 0.13 150);
-  --ok-soft: oklch(0.96 0.04 150);
-  --warn: oklch(0.55 0.12 75);
-  --warn-soft: oklch(0.97 0.05 85);
-  --stop: oklch(0.53 0.19 27);
-  --stop-soft: oklch(0.96 0.03 27);
+     #6f4f5c  primary          #edeaeb  background
+     #624651  primary-hover    #ffb44e  accent (the eyes)
+     #231d2c  foreground
+
+   The amber is decoration only: the logo, focus rings, the active tab. The
+   three colours that mean something for today's groom (ok, warn, stop) stay
+   separate, so a brand colour is never mistaken for a warning. */
+:root {
+  --background: #edeaeb;
+  --foreground: #231d2c;
+  --card: #fbfafa;
+  --muted: #e3dde0;
+  --muted-foreground: #66545d;
+  --border: #d9d0d4;
+  --primary: #6f4f5c;
+  --primary-hover: #624651;
+  --primary-foreground: #fbfafa;
+  --accent: #ffb44e;
+  --accent-foreground: #231d2c;
+  --ring: #ffb44e;
+
+  --ok: oklch(0.5 0.12 150);
+  --ok-soft: oklch(0.95 0.04 150);
+  --warn: oklch(0.52 0.11 65);
+  --warn-soft: oklch(0.95 0.05 80);
+  --stop: oklch(0.52 0.19 25);
+  --stop-soft: oklch(0.95 0.035 25);
 }
 
 @theme inline {
@@ -30,7 +41,10 @@
   --color-muted-foreground: var(--muted-foreground);
   --color-border: var(--border);
   --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
   --color-primary-foreground: var(--primary-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
   --color-ring: var(--ring);
   --color-ok: var(--ok);
   --color-ok-soft: var(--ok-soft);
