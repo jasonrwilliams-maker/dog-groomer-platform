@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { BreedPicker } from "@/components/check-in/breed-picker";
+import { useMemo, useState } from "react";
+import { ListPicker, NotOnList } from "@/components/check-in/list-picker";
 import { useWalkInOptions } from "@/components/check-in/paperwork-form";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { api, type BreedSuggestion, type NewDog, type NewOwner } from "@/lib/api";
+import { api, type NewDog, type NewOwner } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 // The owner and dog fields, shared by signing up a walk-in and by putting a
@@ -80,8 +80,8 @@ export function DogFields({ dog, onChange, autoFocus, coatTouched = false }: {
         <div className="flex flex-col gap-2">
           <BreedInput label={dog.is_mixed ? "Main breed" : "Breed"} value={dog.breed ?? ""} onChange={setBreed}
                       note={dog.is_mixed ? "Leave blank if nobody knows." : "Pick from the list, or leave it blank."} />
-          {dog.breed && !dog.new_breed && <NotOnList value={dog.breed} onPick={setBreed}
-                                                     onNew={() => onChange({ ...dog, new_breed: true })} />}
+          {dog.breed && !dog.new_breed && <BreedNotOnList value={dog.breed} onPick={setBreed}
+                                                          onNew={() => onChange({ ...dog, new_breed: true })} />}
           {dog.new_breed && (
             <p className="text-xs text-muted-foreground">
               &ldquo;{dog.breed}&rdquo; will be added to the breed list.{" "}
@@ -109,7 +109,7 @@ export function DogFields({ dog, onChange, autoFocus, coatTouched = false }: {
               <div className="flex max-w-sm flex-col gap-2">
                 <BreedInput label="Other breed" value={dog.second_breed} autoFocus
                             onChange={(second_breed) => onChange({ ...dog, second_breed })} />
-                {dog.second_breed && <NotOnList value={dog.second_breed}
+                {dog.second_breed && <BreedNotOnList value={dog.second_breed}
                                                 onPick={(second_breed) => onChange({ ...dog, second_breed })} />}
               </div>
             )}
@@ -136,55 +136,20 @@ function BreedInput({ label, value, onChange, note, autoFocus }: {
   label: string; value: string; onChange: (v: string) => void; note?: string; autoFocus?: boolean;
 }) {
   const opts = useWalkInOptions();
-  const breeds = useMemo(() => (opts?.breeds ?? []).map((b) => b.name), [opts]);
+  const breeds = useMemo(() => (opts?.breeds ?? []).map((b) => ({ name: b.name })), [opts]);
   return (
     // A group, not a label: a click on the open list would otherwise be passed
     // on to the box and open the list again.
     <Field group label={label} note={note}>
-      <BreedPicker label={label} value={value} onChange={onChange} breeds={breeds} autoFocus={autoFocus} />
+      <ListPicker label={label} value={value} onChange={onChange} options={breeds} autoFocus={autoFocus} />
     </Field>
   );
 }
 
-/**
- * "Did you mean…?" — shown once the typing stops on a name that is not on the
- * list. Nothing shows for a name that is. `onNew` offers adding it as a new
- * breed; without it (the second breed of a mix) the groomer picks from the list.
- */
-function NotOnList({ value, onPick, onNew }: { value: string; onPick: (name: string) => void; onNew?: () => void }) {
-  const [near, setNear] = useState<BreedSuggestion[] | null>(null);
-  useEffect(() => {
-    setNear(null);
-    const t = setTimeout(() => { api.suggestBreeds(value).then(setNear).catch(() => setNear(null)); }, 350);
-    return () => clearTimeout(t);
-  }, [value]);
-
+function BreedNotOnList({ value, onPick, onNew }: { value: string; onPick: (n: string) => void; onNew?: () => void }) {
   const opts = useWalkInOptions();
-  const onList = opts?.breeds.some((b) => b.name.toLowerCase() === value.trim().toLowerCase());
-  if (onList || near === null) return null;
-
-  return (
-    <div className="flex flex-col gap-2 rounded-[var(--radius)] border border-warn/30 bg-warn-soft p-3 text-sm">
-      <p className="font-medium text-warn">&ldquo;{value}&rdquo; isn&apos;t on the breed list.</p>
-      {near.length > 0 && (
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-muted-foreground">Did you mean</span>
-          {near.map((b) => (
-            <button key={b.name} type="button" onClick={() => onPick(b.name)}
-                    className="rounded-full border border-primary/40 bg-card px-3 py-1 font-medium hover:bg-muted">
-              {b.name}
-            </button>
-          ))}
-        </div>
-      )}
-      {onNew && (
-        <button type="button" onClick={onNew}
-                className="self-start text-muted-foreground underline underline-offset-2 hover:text-foreground">
-          No, it&apos;s a breed the list doesn&apos;t have
-        </button>
-      )}
-    </div>
-  );
+  const known = useMemo(() => (opts?.breeds ?? []).map((b) => b.name), [opts]);
+  return <NotOnList value={value} known={known} suggest={api.suggestBreeds} what="breed list" onPick={onPick} onNew={onNew} />;
 }
 
 export function Heading({ title, note }: { title: string; note: string }) {
@@ -198,7 +163,7 @@ export function Heading({ title, note }: { title: string; note: string }) {
 
 // A label around one input; a plain group around a row of choice buttons,
 // since a label would pass a click on its text to the first button.
-function Field({ label, note, group = false, className, children }: {
+export function Field({ label, note, group = false, className, children }: {
   label: string; note?: string; group?: boolean; className?: string; children: React.ReactNode;
 }) {
   const Tag = group ? "div" : "label";
@@ -211,7 +176,7 @@ function Field({ label, note, group = false, className, children }: {
   );
 }
 
-function Choice<T extends string>({ options, value, onChange }: {
+export function Choice<T extends string>({ options, value, onChange }: {
   options: { value: T; label: string }[]; value: T | null; onChange: (v: T) => void;
 }) {
   return (

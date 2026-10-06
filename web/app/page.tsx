@@ -127,7 +127,7 @@ export default function CheckInPage() {
         {trouble}
 
         {view === "admin" && manager ? (
-          <AdminView onOpenDog={(id) => { select(id); setView("check-in"); }} />
+          <AdminView groomerId={me.id} onOpenDog={(id) => { select(id); setView("check-in"); }} />
         ) : (
           <div className="grid gap-6 md:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]">
             {/* On a phone the list and the card take turns; side by side from tablet up. */}

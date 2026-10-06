@@ -35,12 +35,7 @@ INSERT INTO owner (id, first_name, last_name, email, phone) VALUES
   ('00000000-0000-0000-0000-0000000d0a09', 'Grace',  'Kim',      NULL,                  '410-555-0134'),
   ('00000000-0000-0000-0000-0000000d0a10', 'Diego',  'Alvarez',  'diego@example.test',  '410-555-0195');
 
--- --- Allergens the demo needs (breeds come from sql/23_breed_seed.sql) --------
-INSERT INTO allergen (name, category) VALUES
-  ('Chlorhexidine shampoo', 'shampoo'),
-  ('Oatmeal shampoo',       'shampoo'),
-  ('Added fragrance',       'fragrance'),
-  ('Tea tree oil',          'topical');
+-- Breeds and allergens come from their lists (sql/23_breed_seed.sql, sql/25_allergen_seed.sql).
 
 -- --- Dogs ---------------------------------------------------------------------------
 -- A helper keeps the rows readable: breed by name, coat from the breed.

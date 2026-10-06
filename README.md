@@ -5,8 +5,8 @@
 A system of record for a small grooming practice, with the business rules
 enforced **in the database** rather than in the application.
 
-Twenty-three numbered rules, each with a dedicated error code, each proven by a test
-that asserts the *refusal* — not the happy path. 304 assertions, all passing.
+Twenty-six numbered rules, each with a dedicated error code, each proven by a test
+that asserts the *refusal* — not the happy path. 328 assertions, all passing.
 How strictly each groom-time rule is enforced (block, warn, or off) is itself a
 row of data, changed by `UPDATE` and recorded in the audit log — not a migration.
 
@@ -79,9 +79,9 @@ for a better copy instead of recording a guess.
 
 | Component | State |
 |---|---|
-| Schema | Sections 0–14 stable, in one file; later sections appended as separate files (15–23) |
-| Business rules | 23, codes `GR001`–`GR023` |
-| Test suite | 20 files, 304 pgTAP assertions, passing; 13 API tests |
+| Schema | Sections 0–14 stable, in one file; later sections appended as separate files (15–25) |
+| Business rules | 26, codes `GR001`–`GR026` |
+| Test suite | 21 files, 328 pgTAP assertions, passing; 15 API tests |
 | Document vocabulary (§15) | 29 rulings seeded from the labelled corpus; `resolve_term()` fails closed |
 | Extraction line items (§16) | One row per printed line; review views; the shape the harness loads |
 | Confirmation — Layer 3 (§18) | `confirm_extraction()` turns a fully reviewed page into verified records, records every line's outcome, and asks the owner for what the page is missing |
@@ -91,7 +91,9 @@ for a better copy instead of recording a guess.
 | Style templates (§21) | 148 rows from `reference/style_tier_mapping.md`: four styles at three lengths, plus the shave-down at coat levels 4 and 5. Tests check each style's identity (a Teddy Bear head stays longer than the body; a Poodle face stays shaved; Kennel is one length), not a copy of the rows. Every style edit is recorded in the audit log, before and after |
 | Walk-ins (§22) | `add_client()`, `add_dog()` and `record_counter_shot()`: a new client and dog added at the counter, and the shots on their paper typed in as unverified records, which are fit to groom until a manager verifies them. No expiry on the paper, no record (GR021); a shot that disagrees with one on file is left for a manager (GR022). `update_client()` and `update_dog()` put a typo right and record each changed field before and after. A dog can be a mix: its main breed, and the other one if the owner knows it |
 | Breed list (§23) | 199 breeds, each with the coat it usually has, in `sql/23_breed_seed.sql`, the one file to edit to change the list; safe to run again. A breed not on the list is refused with the nearest names ("Did you mean Shih Tzu?") unless the groomer says it is new (GR023) |
-| Groomer interface | **Check-in screen** (`web/`, Next.js + Tailwind, shadcn-style components) on a thin FastAPI backend (`api/`): pick who's grooming, find a dog by its name or its owner's, see whether today's groom can start and why not, allergies, handling notes; start the groom; sign up a walk-in and type in the paperwork they brought; put right a typo in a dog's or an owner's details. Managers also get an Admin view: the whole book's compliance at a glance and the way into the records tool. Runs on its own demo database, `grooming_demo` |
+| Allergies and handling (§24) | Groomers add, change and take off a dog's allergies from the card, picked from a list grouped by what each changes for the groom (contact, flea, environmental, food), with "did you mean" (GR024). Anything that leaves the dog less protected, an allergy taken off or made less severe, needs a reason (GR025) and goes on the manager's list; only a manager clears it (GR026). An allergy taken off is kept, marked removed. Handling notes stay a dated history: new notes are added, typos corrected |
+| Allergen list (§25) | 45 allergens in `sql/25_allergen_seed.sql`, the one file to edit to change the list; safe to run again |
+| Groomer interface | **Check-in screen** (`web/`, Next.js + Tailwind, shadcn-style components) on a thin FastAPI backend (`api/`): pick who's grooming, find a dog by its name or its owner's, see whether today's groom can start and why not, allergies, handling notes; start the groom; sign up a walk-in and type in the paperwork they brought; put right a typo in a dog's or an owner's details; keep its allergies and handling notes. Managers see allergy changes to review. Managers also get an Admin view: the whole book's compliance at a glance and the way into the records tool. Runs on its own demo database, `grooming_demo` |
 | Extraction harness | Built — scores a model run against the answer keys; self-check passing |
 | Photo preparation | Built — a photo is turned upright, stripped of EXIF and GPS, and downscaled before it is sent |
 | Labelling & review tool | Built — Streamlit; writes answer keys from a form, and reconciles a run against its key |
@@ -151,7 +153,7 @@ docker compose exec db psql -U postgres -d grooming_test -f sql/seed/fixture.sql
 docker compose exec db pg_prove -U postgres -d grooming_test tests/*.sql
 ```
 
-Expected: `Files=20, Tests=304, Result: PASS`. The backend's tests build their own copy of the demo database:
+Expected: `Files=21, Tests=328, Result: PASS`. The backend's tests build their own copy of the demo database:
 
 ```bash
 docker compose exec -w /repo/api api python -m pytest -q
@@ -270,6 +272,9 @@ Lamb ones.
 | `GR021` | A shot typed in at the counter needs both dates off the paper, and the expiry after the shot: no expiry printed, no record |
 | `GR022` | A shot typed in at the counter that disagrees with one on file is not saved over it; a manager compares them |
 | `GR023` | A breed that is not on the list is not added by accident: a misspelling gets the nearest names, and a new breed has to be said to be new |
+| `GR024` | The same for an allergen, which also has to say which group it belongs to |
+| `GR025` | An allergy is not taken off, or made less severe, without a reason — and the change waits for a manager |
+| `GR026` | Only a manager clears a change from the manager's list |
 
 Each raises its own SQLSTATE so tests assert on a stable identifier rather than on
 error prose, and the API layer can map codes to user-facing messages without
