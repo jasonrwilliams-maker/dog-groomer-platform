@@ -13,6 +13,10 @@ export type ListOption = { name: string; group?: string };
  * typed. Arrow keys move, Enter picks, Escape closes. A name not on the list
  * can still be typed: NotOnList, below, handles it.
  *
+ * A list with headings (groupLabels) opens folded: just the headings, in bold,
+ * each opening with a tap. The group of what is already chosen opens by
+ * itself. Typing searches every group and shows the matches unfolded.
+ *
  * (The browser's own suggestion list was used for breeds at first. It only
  * shows names matching what is already in the box, so changing a chosen breed
  * showed that one breed and nothing else.)
@@ -31,18 +35,40 @@ export function ListPicker({ label, value, onChange, options, groupLabels, autoF
   const [open, setOpen] = useState(false);
   const [typed, setTyped] = useState(false);          // narrowing, or the whole list?
   const [active, setActive] = useState(-1);
+  const [unfolded, setUnfolded] = useState<Set<string>>(new Set());
   const input = useRef<HTMLInputElement>(null);
   const list = useRef<HTMLUListElement>(null);
 
-  const shown = useMemo(() => {
+  const searching = typed && value.trim() !== "";
+  const matches = useMemo(() => {
     const q = value.trim().toLowerCase();
-    return typed && q ? options.filter((o) => o.name.toLowerCase().includes(q)) : options;
-  }, [options, value, typed]);
+    return searching ? options.filter((o) => o.name.toLowerCase().includes(q)) : options;
+  }, [options, value, searching]);
+  const groups = useMemo(() => [...new Set(options.map((o) => o.group ?? ""))], [options]);
+  const folding = !!groupLabels && !searching;
+  // The choices the arrow keys walk through: only those in unfolded groups.
+  const shown = useMemo(
+    () => (folding ? matches.filter((o) => unfolded.has(o.group ?? "")) : matches),
+    [matches, folding, unfolded]);
+
+  const isChosen = (o: ListOption) => o.name.toLowerCase() === value.trim().toLowerCase();
 
   function show() {
+    const chosen = options.find(isChosen);
+    const openGroups = new Set(chosen ? [chosen.group ?? ""] : []);
     setTyped(false);
-    setActive(options.findIndex((o) => o.name.toLowerCase() === value.trim().toLowerCase()));
+    setUnfolded(openGroups);
+    setActive(chosen ? (groupLabels ? options.filter((o) => openGroups.has(o.group ?? "")) : options).indexOf(chosen) : -1);
     setOpen(true);
+  }
+
+  function toggle(group: string) {
+    setUnfolded((u) => {
+      const next = new Set(u);
+      if (next.has(group)) next.delete(group); else next.add(group);
+      return next;
+    });
+    setActive(-1);
   }
 
   function pick(name: string) {
@@ -116,41 +142,74 @@ export function ListPicker({ label, value, onChange, options, groupLabels, autoF
           onMouseDown={(e) => e.preventDefault()}          // a click picks before the box loses focus
           className="absolute z-20 mt-1 max-h-64 w-full overflow-y-auto rounded-[var(--radius)] border border-border bg-card py-1 text-sm shadow-lg"
         >
-          {shown.map((o, i) => {
-            const chosen = o.name.toLowerCase() === value.trim().toLowerCase();
-            const heading = groupLabels && o.group && o.group !== shown[i - 1]?.group ? groupLabels[o.group] : null;
-            return (
-              <li key={o.name} role="none">
-                {heading && (
-                  <div role="presentation" className="px-3 pt-2 pb-1 text-xs font-semibold uppercase tracking-wide text-primary">
-                    {heading}
-                  </div>
-                )}
-                <div
-                  id={`${id}-${i}`}
-                  data-index={i}
-                  role="option"
-                  aria-selected={chosen}
-                  onMouseEnter={() => setActive(i)}
-                  onClick={() => pick(o.name)}
-                  className={cn(
-                    "flex cursor-pointer items-center justify-between gap-2 px-3 py-2",
-                    i === active && "bg-muted",
-                    chosen && "font-semibold text-primary",
-                  )}
-                >
-                  {o.name}
-                  {chosen && <span aria-hidden>✓</span>}
-                </div>
-              </li>
-            );
-          })}
-          {shown.length === 0 && (
+          {groupLabels
+            ? groups.map((g) => {
+                const items = matches.filter((o) => (o.group ?? "") === g);
+                if (items.length === 0) return null;
+                const isOpen = !folding || unfolded.has(g);
+                return (
+                  <li key={g} role="none">
+                    <div
+                      role={folding ? "button" : "presentation"}
+                      aria-expanded={folding ? isOpen : undefined}
+                      onClick={folding ? () => toggle(g) : undefined}
+                      className={cn(
+                        "flex items-center gap-2 px-3 py-2 text-xs font-bold uppercase tracking-wide text-foreground",
+                        folding && "cursor-pointer hover:bg-muted",
+                      )}
+                    >
+                      {folding && (
+                        <span aria-hidden className={cn("inline-block text-primary transition-transform", isOpen && "rotate-90")}>▸</span>
+                      )}
+                      {groupLabels[g] ?? g}
+                      {folding && <span className="ml-auto font-normal normal-case tracking-normal text-muted-foreground">{items.length}</span>}
+                    </div>
+                    {isOpen && (
+                      <ul role="group" aria-label={groupLabels[g] ?? g}>
+                        {items.map((o) => (
+                          <OptionRow key={o.name} id={id} option={o} index={shown.indexOf(o)} active={active}
+                                  chosen={isChosen(o)} onHover={setActive} onPick={pick} indent />
+                        ))}
+                      </ul>
+                    )}
+                  </li>
+                );
+              })
+            : shown.map((o, i) => (
+                <OptionRow key={o.name} id={id} option={o} index={i} active={active}
+                        chosen={isChosen(o)} onHover={setActive} onPick={pick} />
+              ))}
+          {matches.length === 0 && (
             <li className="px-3 py-2 text-muted-foreground">Nothing on the list contains &ldquo;{value.trim()}&rdquo;.</li>
           )}
         </ul>
       )}
     </div>
+  );
+}
+
+function OptionRow({ id, option, index, active, chosen, onHover, onPick, indent = false }: {
+  id: string; option: ListOption; index: number; active: number; chosen: boolean;
+  onHover: (i: number) => void; onPick: (name: string) => void; indent?: boolean;
+}) {
+  return (
+    <li
+      id={`${id}-${index}`}
+      data-index={index}
+      role="option"
+      aria-selected={chosen}
+      onMouseEnter={() => onHover(index)}
+      onClick={() => onPick(option.name)}
+      className={cn(
+        "flex cursor-pointer items-center justify-between gap-2 py-2 pr-3",
+        indent ? "pl-8" : "pl-3",
+        index === active && "bg-muted",
+        chosen && "font-semibold text-primary",
+      )}
+    >
+      {option.name}
+      {chosen && <span aria-hidden>✓</span>}
+    </li>
   );
 }
 
