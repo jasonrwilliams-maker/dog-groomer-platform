@@ -51,7 +51,7 @@ export function HandlingCard({ dogId, notes, groomerId, onChanged }: {
           {notes.map((b, i) => (
             <li key={b.id}>
               {editing === b.id ? (
-                <NoteForm groomerId={groomerId} start={b} saveLabel="Save correction"
+                <NoteForm groomerId={groomerId} start={b} saveLabel="Save change"
                           save={(n) => api.correctBehaviour(b.id, groomerId, n)}
                           onDone={() => { setEditing(null); onChanged(); }} onCancel={() => setEditing(null)} />
               ) : (
@@ -61,13 +61,15 @@ export function HandlingCard({ dogId, notes, groomerId, onChanged }: {
                     <span className="text-sm text-muted-foreground">
                       {[b.trigger && TRIGGER_WORDS[b.trigger], b.zone].filter(Boolean).join(" · ")}
                     </span>
-                    <button className="ml-auto text-sm font-medium text-primary underline-offset-2 hover:underline"
-                            onClick={() => setEditing(b.id)}>Correct</button>
                   </div>
                   {b.note && <p className="mt-1 text-sm">{b.note}</p>}
-                  <p className="text-xs text-muted-foreground">
-                    {formatDate(b.observed_on)}{b.observed_by && ` · ${b.observed_by}`}{i === 0 && notes.length > 1 && " · latest"}
-                  </p>
+                  <div className="flex items-baseline justify-between gap-2">
+                    <p className="text-xs text-muted-foreground">
+                      {formatDate(b.observed_on)}{b.observed_by && ` · ${b.observed_by}`}{i === 0 && notes.length > 1 && " · latest"}
+                    </p>
+                    <button className="text-sm font-medium text-primary underline-offset-2 hover:underline"
+                            onClick={() => setEditing(b.id)}>Change</button>
+                  </div>
                 </div>
               )}
             </li>
@@ -115,7 +117,7 @@ function NoteForm({ start, saveLabel, save, onDone, onCancel }: {
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-3 rounded-[var(--radius)] border border-border bg-muted/40 p-3">
-      {start && <p className="text-xs text-muted-foreground">Correcting a typo. If the dog has changed, add a new note instead.</p>}
+      {start && <p className="text-xs text-muted-foreground">For putting right what was typed wrong. If the dog has changed, add a new note instead, so the history shows it.</p>}
       <Field group label="How hard to handle">
         <Choice options={DIFFICULTY} value={difficulty} onChange={setDifficulty} />
       </Field>

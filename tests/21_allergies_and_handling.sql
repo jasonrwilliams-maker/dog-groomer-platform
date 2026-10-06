@@ -11,12 +11,13 @@
 --      removed, flags it — and the allergy can be added again.
 --   6. A manager's own change is reviewed as it is made.
 --   7. Only a manager can mark a change reviewed (GR026).
---   8. A handling note is added with the new triggers, and a typo in it is
---      corrected with only the change audited.
+--   8. A handling note is added with the new triggers and a side (front
+--      feet, left ear), and a typo in it is corrected with only the change
+--      audited.
 
 BEGIN;
 SET search_path = groom, public;
-SELECT plan(24);
+SELECT plan(26);
 
 -- Jaddi (d001) and Luna (d002); Nadia (b001) is the manager, Tanya (b002) is not.
 
@@ -135,8 +136,11 @@ SELECT is((SELECT count(*) FROM v_change_review_open), 0::bigint, 'A manager can
 
 -- --- 8. Handling notes ------------------------------------------------------------------------------------
 CREATE TEMP TABLE t_note AS
-SELECT add_behavior_note('00000000-0000-0000-0000-00000000d001', 3, 'scissors', 'feet',
+SELECT add_behavior_note('00000000-0000-0000-0000-00000000d001', 3, 'scissors', 'feet:front',
                          'Pulls his feet away from the scisors', '00000000-0000-0000-0000-00000000b002') AS id;
+
+SELECT is((SELECT spot_label(body_zone_id, side) FROM behavior_note WHERE id = (SELECT id FROM t_note)),
+  'Front feet', 'A note can say which feet');
 
 SELECT throws_ok(
   $$ SELECT add_behavior_note('00000000-0000-0000-0000-00000000d001', 2, 'dryer', 'wings', NULL,
@@ -144,10 +148,16 @@ SELECT throws_ok(
   '23514', 'Unknown body part: wings', 'A body part not in the list is refused');
 
 SELECT is(
-  correct_behavior_note((SELECT id FROM t_note), 3, 'scissors', 'feet', 'Pulls his feet away from the scissors',
+  correct_behavior_note((SELECT id FROM t_note), 3, 'scissors', 'feet:front', 'Pulls his feet away from the scissors',
                         '00000000-0000-0000-0000-00000000b002'),
   '{"note": {"old": "Pulls his feet away from the scisors", "new": "Pulls his feet away from the scissors"}}'::jsonb,
   'A typo in a note is corrected, and only the change is recorded');
+
+SELECT is(
+  correct_behavior_note((SELECT id FROM t_note), 3, 'scissors', 'ears:left', 'Pulls his feet away from the scissors',
+                        '00000000-0000-0000-0000-00000000b002'),
+  '{"where": {"old": "Front feet", "new": "Left ear"}}'::jsonb,
+  'Which side is recorded in words when it changes');
 
 SELECT * FROM finish();
 ROLLBACK;

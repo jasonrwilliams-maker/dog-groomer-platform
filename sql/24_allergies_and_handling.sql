@@ -24,7 +24,10 @@
 --
 -- Handling notes are a history: what a groomer saw, on a day. A note is not
 -- deleted when it stops being true; a newer note says what is true now. A typo
--- in a note can be corrected, and the correction is audited.
+-- in a note can be corrected, and the correction is audited. A note can say
+-- which side: front or back feet and paw pads, left or right ear. The side
+-- lives on the note, not in the body-zone list, because that list is shared
+-- with the style templates, where a cut is the same on both sides.
 --
 --   GR024  an allergen that is not on the list, without saying it is a new one
 --   GR025  an allergy taken off, or made less severe, without a reason
@@ -313,24 +316,55 @@ ALTER TABLE behavior_note ADD CONSTRAINT behavior_note_trigger_kind_check CHECK 
     ('dryer', 'clippers', 'scissors', 'nail_grinder', 'brushing', 'bath', 'water', 'restraint',
      'table', 'other_dogs', 'noise', 'other'));
 
+-- Which side, where it matters for handling. NULL is all of them.
+ALTER TABLE behavior_note
+    ADD COLUMN side text CHECK (side IN ('front', 'back', 'left', 'right'));
+
+-- The spots a groomer can pick for a handling note: a body zone, and for feet,
+-- paw pads and ears, a side. code is what the screen sends ('feet:front').
+CREATE VIEW v_handling_spot AS
+WITH sided (zone, side, label, n) AS (VALUES
+    ('feet',     NULL,    'All feet',        0), ('feet',     'front', 'Front feet',     1),
+    ('feet',     'back',  'Back feet',       2),
+    ('paw_pads', NULL,    'All paw pads',    0), ('paw_pads', 'front', 'Front paw pads', 1),
+    ('paw_pads', 'back',  'Back paw pads',   2),
+    ('ears',     NULL,    'Both ears',       0), ('ears',     'left',  'Left ear',       1),
+    ('ears',     'right', 'Right ear',       2))
+SELECT bz.code || COALESCE(':' || s.side, '') AS code,
+       COALESCE(s.label, bz.plain_language_label) AS label,
+       bz.id AS body_zone_id, bz.code AS zone_code, s.side,
+       bz.display_order * 10 + COALESCE(s.n, 0) AS sort_order
+  FROM body_zone bz
+  LEFT JOIN sided s ON s.zone = bz.code
+ -- The ones a groomer names for a reaction. The hair-only zones, and the
+ -- parts of an ear the two ears already cover, are left out.
+ WHERE bz.code NOT IN ('sanitary', 'tail_pom', 'top_knot', 'base_of_tail', 'ear_tips', 'inside_ears');
+
+-- The spot a note names, read back the same way.
+CREATE FUNCTION spot_label(p_body_zone_id uuid, p_side text) RETURNS text
+  LANGUAGE sql STABLE AS $$
+    SELECT COALESCE(
+      (SELECT label FROM v_handling_spot WHERE body_zone_id = p_body_zone_id AND side IS NOT DISTINCT FROM p_side),
+      (SELECT initcap(p_side) || ' ' || lower(plain_language_label) FROM body_zone WHERE id = p_body_zone_id AND p_side IS NOT NULL),
+      (SELECT plain_language_label FROM body_zone WHERE id = p_body_zone_id)) $$;
+
 CREATE FUNCTION behavior_details(p_note_id uuid) RETURNS jsonb LANGUAGE sql STABLE AS $$
     SELECT jsonb_build_object('difficulty', n.handling_difficulty_ordinal, 'trigger', n.trigger_kind,
-                              'body_zone', bz.code, 'note', n.note)
-      FROM behavior_note n LEFT JOIN body_zone bz ON bz.id = n.body_zone_id WHERE n.id = p_note_id
+                              'where', spot_label(n.body_zone_id, n.side), 'note', n.note)
+      FROM behavior_note n WHERE n.id = p_note_id
 $$;
 
-CREATE FUNCTION zone_id(p_code text) RETURNS uuid LANGUAGE plpgsql STABLE AS $$
-DECLARE
-    v_id uuid;
+-- A spot's code ('ears:left'), as the zone and side to store. A blank is none.
+CREATE FUNCTION resolve_spot(p_code text, OUT body_zone_id uuid, OUT side text)
+LANGUAGE plpgsql STABLE AS $$
 BEGIN
     IF nullif_blank(p_code) IS NULL THEN
-        RETURN NULL;
+        RETURN;
     END IF;
-    SELECT id INTO v_id FROM body_zone WHERE code = p_code;
+    SELECT v.body_zone_id, v.side INTO body_zone_id, side FROM v_handling_spot v WHERE v.code = p_code;
     IF NOT FOUND THEN
         RAISE EXCEPTION 'Unknown body part: %', p_code USING ERRCODE = 'check_violation';
     END IF;
-    RETURN v_id;
 END $$;
 
 CREATE FUNCTION add_behavior_note(p_dog_id uuid, p_difficulty integer, p_trigger text, p_zone text,
@@ -347,8 +381,9 @@ BEGIN
     IF NOT FOUND THEN
         RAISE EXCEPTION 'No such groomer: %', p_observed_by USING ERRCODE = 'foreign_key_violation';
     END IF;
-    INSERT INTO behavior_note (dog_id, handling_difficulty_ordinal, body_zone_id, trigger_kind, note, observed_by)
-    VALUES (p_dog_id, p_difficulty, zone_id(p_zone), nullif_blank(p_trigger), nullif_blank(p_note), p_observed_by)
+    INSERT INTO behavior_note (dog_id, handling_difficulty_ordinal, body_zone_id, side, trigger_kind, note, observed_by)
+    SELECT p_dog_id, p_difficulty, s.body_zone_id, s.side, nullif_blank(p_trigger), nullif_blank(p_note), p_observed_by
+      FROM resolve_spot(p_zone) s
     RETURNING id INTO v_id;
     INSERT INTO audit_log (actor_id, actor_label, action, entity_type, entity_id, changed_fields)
     VALUES (p_observed_by, v_actor, 'create', 'behavior_note', v_id,
@@ -373,10 +408,11 @@ BEGIN
     IF NOT FOUND THEN
         RAISE EXCEPTION 'No such groomer: %', p_edited_by USING ERRCODE = 'foreign_key_violation';
     END IF;
-    UPDATE behavior_note
+    UPDATE behavior_note n
        SET handling_difficulty_ordinal = p_difficulty, trigger_kind = nullif_blank(p_trigger),
-           body_zone_id = zone_id(p_zone), note = nullif_blank(p_note)
-     WHERE id = p_note_id;
+           body_zone_id = s.body_zone_id, side = s.side, note = nullif_blank(p_note)
+      FROM resolve_spot(p_zone) s
+     WHERE n.id = p_note_id;
     v_diff := jsonb_diff(v_before, behavior_details(p_note_id));
     IF v_diff <> '{}' THEN
         INSERT INTO audit_log (actor_id, actor_label, action, entity_type, entity_id, changed_fields)

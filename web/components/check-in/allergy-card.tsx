@@ -43,6 +43,16 @@ export function AllergyCard({ dogId, allergies, groomerId, onChanged }: {
 }) {
   const [adding, setAdding] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
+  // Every group starts open: an allergy should never be hidden by default.
+  const [folded, setFolded] = useState<Set<AllergyType>>(new Set());
+  const groups = (Object.keys(ALLERGY_TYPES) as AllergyType[])
+    .map((type) => ({ type, items: allergies.filter((a) => a.type === type) }))
+    .filter((g) => g.items.length > 0);
+  const fold = (t: AllergyType) => setFolded((f) => {
+    const next = new Set(f);
+    if (next.has(t)) next.delete(t); else next.add(t);
+    return next;
+  });
 
   return (
     <Card className={cn(allergies.length > 0 && "border-stop/30")}>
@@ -52,30 +62,46 @@ export function AllergyCard({ dogId, allergies, groomerId, onChanged }: {
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         {allergies.length === 0 && !adding && <p className="text-sm text-muted-foreground">No known allergies.</p>}
-        <ul className="flex flex-col gap-3">
-          {allergies.map((a, i) => (
-            <li key={a.id}>
-              {a.type !== allergies[i - 1]?.type && (
-                <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  {ALLERGY_TYPES[a.type].label} · {ALLERGY_TYPES[a.type].hint.toLowerCase()}
-                </p>
+        {groups.map(({ type, items }) => {
+          const open = !folded.has(type);
+          return (
+            <section key={type}>
+              <button
+                type="button"
+                aria-expanded={open}
+                onClick={() => fold(type)}
+                className="flex w-full items-center gap-2 py-1 text-left text-xs font-semibold uppercase tracking-wide text-muted-foreground hover:text-foreground"
+              >
+                <span aria-hidden className={cn("inline-block transition-transform", open && "rotate-90")}>▸</span>
+                {ALLERGY_TYPES[type].label} · {ALLERGY_TYPES[type].hint.toLowerCase()}
+                <span className="ml-auto font-normal normal-case tracking-normal">
+                  {open ? "" : `${items.length} ${items.length === 1 ? "allergy" : "allergies"}: ${items.map((a) => a.allergen).join(", ")}`}
+                </span>
+              </button>
+              {open && (
+                <ul className="mt-1 flex flex-col gap-3">
+                  {items.map((a) => (
+                    <li key={a.id}>
+                      {editing === a.id ? (
+                        <EditAllergy allergy={a} groomerId={groomerId}
+                                     onDone={() => { setEditing(null); onChanged(); }} onCancel={() => setEditing(null)} />
+                      ) : (
+                        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                          <span className="font-medium">{a.allergen}</span>
+                          <Badge tone={a.severity >= 3 ? "stop" : "warn"}>{a.severity_label}</Badge>
+                          <span className="text-xs text-muted-foreground">{SOURCE_WORDS[a.source]}</span>
+                          <button className="ml-auto text-sm font-medium text-primary underline-offset-2 hover:underline"
+                                  onClick={() => setEditing(a.id)}>Change</button>
+                          {a.note && <span className="w-full text-sm text-muted-foreground">{a.note}</span>}
+                        </div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
               )}
-              {editing === a.id ? (
-                <EditAllergy allergy={a} groomerId={groomerId}
-                             onDone={() => { setEditing(null); onChanged(); }} onCancel={() => setEditing(null)} />
-              ) : (
-                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                  <span className="font-medium">{a.allergen}</span>
-                  <Badge tone={a.severity >= 3 ? "stop" : "warn"}>{a.severity_label}</Badge>
-                  <span className="text-xs text-muted-foreground">{SOURCE_WORDS[a.source]}</span>
-                  <button className="ml-auto text-sm font-medium text-primary underline-offset-2 hover:underline"
-                          onClick={() => setEditing(a.id)}>Change</button>
-                  {a.note && <span className="w-full text-sm text-muted-foreground">{a.note}</span>}
-                </div>
-              )}
-            </li>
-          ))}
-        </ul>
+            </section>
+          );
+        })}
         {adding && <AddAllergy dogId={dogId} groomerId={groomerId} taken={allergies.map((a) => a.allergen)}
                                onDone={() => { setAdding(false); onChanged(); }} onCancel={() => setAdding(false)} />}
       </CardContent>

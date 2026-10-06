@@ -64,7 +64,7 @@ export function DogCard({
       <div>
         <div className="flex items-start justify-between gap-3">
           <h2 className="text-3xl font-semibold tracking-tight">{dog.name}</h2>
-          <Button variant="outline" size="sm" onClick={() => setEditing(true)}>Edit</Button>
+          <Button variant="outline" size="sm" onClick={() => setEditing(true)}>Edit profile</Button>
         </div>
         <p className="text-muted-foreground">{details}</p>
         <p className="mt-1 text-sm">

@@ -240,10 +240,11 @@ def test_allergies_are_kept_from_the_counter_and_a_weaker_one_waits_for_a_manage
 def test_a_handling_note_is_added_and_a_typo_in_it_put_right(client):
     moose = dog_named(client, "Moose")["id"]
     r = client.post(f"/dogs/{moose}/behaviour", json={"groomer_id": groomer(client), "difficulty": 3,
-                                                     "trigger": "scissors", "zone": "feet", "note": "Kiks"})
+                                                     "trigger": "scissors", "zone": "feet:back", "note": "Kiks"})
     assert r.status_code == 201
     latest = client.get(f"/dogs/{moose}").json()["behaviour"][0]
-    assert (latest["trigger"], latest["zone"], latest["observed_by"]) == ("scissors", "Feet", "Tanya")
+    assert (latest["trigger"], latest["zone"], latest["observed_by"]) == ("scissors", "Back feet", "Tanya")
+    assert latest["zone_code"] == "feet:back", "what the edit form starts from"
     fixed = client.put(f"/behaviour/{latest['id']}", json={"groomer_id": groomer(client), "difficulty": 3,
-                                                          "trigger": "scissors", "zone": "feet", "note": "Kicks"})
+                                                          "trigger": "scissors", "zone": "feet:back", "note": "Kicks"})
     assert fixed.json()["changed"] == {"note": {"old": "Kiks", "new": "Kicks"}}

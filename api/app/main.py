@@ -159,8 +159,9 @@ def check_in_card(dog_id: UUID):
          WHERE a.dog_id = %s AND a.removed_at IS NULL
          ORDER BY allergy_type_order(al.allergy_type), a.severity_ordinal DESC, al.name""", (dog_id,))
     behaviour = db.rows("""
-        SELECT n.id, n.handling_difficulty_ordinal AS difficulty, bz.plain_language_label AS zone,
-               bz.code AS zone_code, n.trigger_kind AS trigger, n.note, n.observed_at::date AS observed_on,
+        SELECT n.id, n.handling_difficulty_ordinal AS difficulty, spot_label(n.body_zone_id, n.side) AS zone,
+               bz.code || COALESCE(':' || n.side, '') AS zone_code, n.trigger_kind AS trigger, n.note,
+               n.observed_at::date AS observed_on,
                g.display_name AS observed_by
           FROM behavior_note n
           LEFT JOIN body_zone bz ON bz.id = n.body_zone_id
@@ -247,10 +248,8 @@ def walk_in_options():
                                 ORDER BY regulatory_required DESC, name"""),
         "allergens": db.rows("""SELECT name, allergy_type AS type FROM allergen
                                  ORDER BY allergy_type_order(allergy_type), name"""),
-        # Only the body parts a groomer would name for a reaction.
-        "zones": db.rows("""SELECT code, plain_language_label AS name FROM body_zone
-                             WHERE code NOT IN ('sanitary', 'tail_pom', 'top_knot', 'base_of_tail')
-                             ORDER BY display_order"""),
+        # Where on the dog a handling note can say, sides included.
+        "zones": db.rows("SELECT code, label AS name FROM v_handling_spot ORDER BY sort_order"),
     }
 
 
