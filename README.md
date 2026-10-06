@@ -5,8 +5,8 @@
 A system of record for a small grooming practice, with the business rules
 enforced **in the database** rather than in the application.
 
-Twenty numbered rules, each with a dedicated error code, each proven by a test
-that asserts the *refusal* — not the happy path. 270 assertions, all passing.
+Twenty-two numbered rules, each with a dedicated error code, each proven by a test
+that asserts the *refusal* — not the happy path. 291 assertions, all passing.
 How strictly each groom-time rule is enforced (block, warn, or off) is itself a
 row of data, changed by `UPDATE` and recorded in the audit log — not a migration.
 
@@ -79,9 +79,9 @@ for a better copy instead of recording a guess.
 
 | Component | State |
 |---|---|
-| Schema | Sections 0–14 stable, in one file; later sections appended as separate files (15–21) |
-| Business rules | 20, codes `GR001`–`GR020` |
-| Test suite | 19 files, 270 pgTAP assertions, passing; 7 API tests |
+| Schema | Sections 0–14 stable, in one file; later sections appended as separate files (15–22) |
+| Business rules | 22, codes `GR001`–`GR022` |
+| Test suite | 20 files, 291 pgTAP assertions, passing; 12 API tests |
 | Document vocabulary (§15) | 29 rulings seeded from the labelled corpus; `resolve_term()` fails closed |
 | Extraction line items (§16) | One row per printed line; review views; the shape the harness loads |
 | Confirmation — Layer 3 (§18) | `confirm_extraction()` turns a fully reviewed page into verified records, records every line's outcome, and asks the owner for what the page is missing |
@@ -89,7 +89,8 @@ for a better copy instead of recording a guess.
 | Owner outreach (§19) | Opt-in consent per channel, kept as a history; one message per owner per dog naming every certificate needed; spaced, capped reminders; an outbox and a sender. **Test mode**: nothing is delivered yet — a real email or text provider plugs into `extraction/review/outreach.py` |
 | Check-in (§20) | `start_visit()` opens a groom and refuses (GR020) while a service-blocking vaccine is expired, missing, disputed or still being chased. Past visits can still be recorded as history |
 | Style templates (§21) | 148 rows from `reference/style_tier_mapping.md`: four styles at three lengths, plus the shave-down at coat levels 4 and 5. Tests check each style's identity (a Teddy Bear head stays longer than the body; a Poodle face stays shaved; Kennel is one length), not a copy of the rows. Every style edit is recorded in the audit log, before and after |
-| Groomer interface | **Check-in screen** (`web/`, Next.js + Tailwind, shadcn-style components) on a thin FastAPI backend (`api/`): pick who's grooming, find a dog by its name or its owner's, see whether today's groom can start and why not, allergies, handling notes; start the groom. Managers also get an Admin view: the whole book's compliance at a glance and the way into the records tool. Runs on its own demo database, `grooming_demo` |
+| Walk-ins (§22) | `add_client()`, `add_dog()` and `record_counter_shot()`: a new client and dog added at the counter, and the shots on their paper typed in as unverified records, which are fit to groom until a manager verifies them. No expiry on the paper, no record (GR021); a shot that disagrees with one on file is left for a manager (GR022) |
+| Groomer interface | **Check-in screen** (`web/`, Next.js + Tailwind, shadcn-style components) on a thin FastAPI backend (`api/`): pick who's grooming, find a dog by its name or its owner's, see whether today's groom can start and why not, allergies, handling notes; start the groom; sign up a walk-in and type in the paperwork they brought. Managers also get an Admin view: the whole book's compliance at a glance and the way into the records tool. Runs on its own demo database, `grooming_demo` |
 | Extraction harness | Built — scores a model run against the answer keys; self-check passing |
 | Photo preparation | Built — a photo is turned upright, stripped of EXIF and GPS, and downscaled before it is sent |
 | Labelling & review tool | Built — Streamlit; writes answer keys from a form, and reconciles a run against its key |
@@ -149,7 +150,7 @@ docker compose exec db psql -U postgres -d grooming_test -f sql/seed/fixture.sql
 docker compose exec db pg_prove -U postgres -d grooming_test tests/*.sql
 ```
 
-Expected: `Files=19, Tests=270, Result: PASS`. The backend's tests build their own copy of the demo database:
+Expected: `Files=20, Tests=291, Result: PASS`. The backend's tests build their own copy of the demo database:
 
 ```bash
 docker compose exec -w /repo/api api python -m pytest -q
@@ -265,6 +266,8 @@ Lamb ones.
 | `GR018` | A date goes on a record only if it is a real date, not in the future, and the expiry follows the shot |
 | `GR019` | No automated message to an owner who has not agreed to that channel — checked when it is queued and again when it is sent |
 | `GR020` | A groom does not start while a vaccine that blocks service is expired, missing, disputed or still being chased — but a past visit can still be recorded |
+| `GR021` | A shot typed in at the counter needs both dates off the paper, and the expiry after the shot: no expiry printed, no record |
+| `GR022` | A shot typed in at the counter that disagrees with one on file is not saved over it; a manager compares them |
 
 Each raises its own SQLSTATE so tests assert on a stable identifier rather than on
 error prose, and the API layer can map codes to user-facing messages without

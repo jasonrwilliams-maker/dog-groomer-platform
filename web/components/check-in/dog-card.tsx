@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Badge, toneFor } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PaperworkForm } from "@/components/check-in/paperwork-form";
 import { api, Refusal, type CheckInCard } from "@/lib/api";
 import { cn, formatDate, formatTime } from "@/lib/utils";
 
@@ -14,11 +15,13 @@ const TRIGGER = {
 } as Record<string, string>;
 
 export function DogCard({
-  card, groomerId, onChanged, detailsOpen = false,
+  card, groomerId, onChanged, onAddDog, detailsOpen = false,
 }: {
   card: CheckInCard;
-  groomerId: string | null;
+  groomerId: string;
   onChanged: () => void;
+  /** Start a walk-in for another dog of this owner. */
+  onAddDog: (ownerId: string, ownerName: string) => void;
   /** Managers see everything unfolded; groomers get the short card. */
   detailsOpen?: boolean;
 }) {
@@ -26,9 +29,9 @@ export function DogCard({
   const [busy, setBusy] = useState(false);
   const [refusal, setRefusal] = useState<Refusal | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [paperwork, setPaperwork] = useState(false);
 
   async function start() {
-    if (!groomerId) return;
     setBusy(true); setRefusal(null); setError(null);
     try {
       await api.startGroom(dog.id, groomerId);
@@ -81,7 +84,7 @@ export function DogCard({
             <ul className="mt-1 text-stop">
               {card.blocking.map((b) => <li key={b}>{b}</li>)}
             </ul>
-            <p className="mt-2 text-sm">Ask the owner for a current certificate. Once it is confirmed, check the dog in again.</p>
+            <p className="mt-2 text-sm">Ask the owner for a current certificate, and type it in below.</p>
           </>
         )}
         {card.paperwork_requests.length > 0 && (
@@ -98,9 +101,14 @@ export function DogCard({
 
         {!card.open_visit && (
           <div className="mt-4 flex flex-wrap items-center gap-3">
-            <Button variant="go" size="lg" disabled={!card.can_start || !groomerId || busy} onClick={start}>
+            <Button variant="go" size="lg" disabled={!card.can_start || busy} onClick={start}>
               {busy ? "Starting…" : "Start groom"}
             </Button>
+            {!paperwork && (
+              <Button variant="outline" size="lg" onClick={() => setPaperwork(true)}>
+                Type in paperwork
+              </Button>
+            )}
           </div>
         )}
         {refusal && (
@@ -112,6 +120,16 @@ export function DogCard({
         )}
         {error && <p className="mt-3 text-sm text-stop" role="alert">{error}</p>}
       </div>
+
+      {paperwork && (
+        <Card className="border-primary/40">
+          <CardHeader><CardTitle>Paperwork the owner brought</CardTitle></CardHeader>
+          <CardContent>
+            <PaperworkForm dogId={dog.id} dogName={dog.name} groomerId={groomerId}
+                           onSaved={onChanged} onClose={() => setPaperwork(false)} />
+          </CardContent>
+        </Card>
+      )}
 
       {/* Allergies first among the details: they change what goes on the dog. */}
       {card.allergies.length > 0 && (
@@ -196,6 +214,13 @@ export function DogCard({
                 {dog.phone && <a className="block underline-offset-2 hover:underline" href={`tel:${dog.phone}`}>{dog.phone}</a>}
                 {dog.email && <a className="block underline-offset-2 hover:underline" href={`mailto:${dog.email}`}>{dog.email}</a>}
               </p>
+              {card.household.other_dogs.length > 0 && (
+                <p className="mt-2 text-sm text-muted-foreground">Also brings {card.household.other_dogs.join(", ")}.</p>
+              )}
+              <Button variant="outline" size="sm" className="mt-3"
+                      onClick={() => onAddDog(card.household.owner_id, dog.owner)}>
+                + Add another dog for {dog.owner.split(" ")[0]}
+              </Button>
             </CardContent>
           </Card>
         </div>
