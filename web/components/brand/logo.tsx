@@ -5,15 +5,20 @@ import { cn } from "@/lib/utils";
 // here; every screen uses this one component.
 export const SHOP_NAME = "Paws & Polish";
 
-export function Logo({ size = "sm", className }: { size?: "sm" | "lg"; className?: string }) {
+// The shop's colours: an amber paw (the spaniel's eyes) on coat mauve. On a
+// mauve header bar, `onBrand` turns the badge dark so it still stands out.
+export function Logo({ size = "sm", onBrand = false, className }: {
+  size?: "sm" | "lg"; onBrand?: boolean; className?: string;
+}) {
   const big = size === "lg";
   return (
     <div className={cn("flex items-center gap-3", big && "flex-col gap-4 text-center", className)}>
       <span
         aria-hidden
         className={cn(
-          "grid shrink-0 place-items-center rounded-full bg-primary text-primary-foreground",
-          big ? "size-24" : "size-10",
+          "grid shrink-0 place-items-center rounded-full text-accent",
+          onBrand ? "bg-foreground" : "bg-primary",
+          big ? "size-24 shadow-lg ring-4 ring-accent/40" : "size-10",
         )}
       >
         <svg viewBox="0 0 24 24" className={big ? "size-12" : "size-5"} fill="currentColor">
@@ -28,7 +33,8 @@ export function Logo({ size = "sm", className }: { size?: "sm" | "lg"; className
         <span className={cn("block font-semibold tracking-tight", big ? "text-3xl" : "text-lg leading-tight")}>
           {SHOP_NAME}
         </span>
-        <span className={cn("block text-muted-foreground", big ? "text-base" : "text-xs")}>Grooming</span>
+        <span className={cn("block font-medium uppercase tracking-[0.2em]", onBrand ? "text-accent" : "text-primary",
+                             big ? "text-sm" : "text-[0.65rem]")}>Grooming</span>
       </span>
     </div>
   );

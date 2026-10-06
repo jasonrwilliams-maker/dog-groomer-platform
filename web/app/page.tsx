@@ -79,61 +79,66 @@ export default function CheckInPage() {
   if (!me) return <>{trouble}<Welcome groomers={groomers} onPick={signIn} /></>;
 
   return (
-    <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-6 md:px-8">
-      <header className="flex flex-wrap items-center justify-between gap-4 border-b border-border pb-4">
-        <Logo />
-        <div className="flex flex-wrap items-center gap-3">
-          {manager && (
-            <nav className="flex rounded-[var(--radius)] bg-muted p-1 text-sm" aria-label="Screens">
-              {(["check-in", "admin"] as View[]).map((v) => (
-                <button
-                  key={v}
-                  onClick={() => setView(v)}
-                  aria-current={view === v ? "page" : undefined}
-                  className={cn(
-                    "rounded-[calc(var(--radius)-0.2rem)] px-3 py-1.5 font-medium transition-colors",
-                    view === v ? "bg-card shadow-sm" : "text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {v === "check-in" ? "Check-in" : "Admin"}
-                </button>
-              ))}
-            </nav>
-          )}
-          <span className="text-sm">
-            <span className="text-muted-foreground">Grooming: </span>
-            <span className="font-medium">{me.name}</span>
-          </span>
-          <Button variant="outline" size="sm" onClick={signOut}>Switch</Button>
+    <div className="min-h-screen">
+      <header className="bg-primary text-primary-foreground shadow-md">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-3 md:px-8">
+          <Logo onBrand />
+          <div className="flex flex-wrap items-center gap-3">
+            {manager && (
+              <nav className="flex rounded-[var(--radius)] bg-primary-hover p-1 text-sm" aria-label="Screens">
+                {(["check-in", "admin"] as View[]).map((v) => (
+                  <button
+                    key={v}
+                    onClick={() => setView(v)}
+                    aria-current={view === v ? "page" : undefined}
+                    className={cn(
+                      "rounded-[calc(var(--radius)-0.2rem)] px-3 py-1.5 font-medium transition-colors",
+                      view === v ? "bg-accent text-accent-foreground shadow-sm" : "text-primary-foreground/80 hover:text-primary-foreground",
+                    )}
+                  >
+                    {v === "check-in" ? "Check-in" : "Admin"}
+                  </button>
+                ))}
+              </nav>
+            )}
+            <span className="text-sm">
+              <span className="text-primary-foreground/70">Grooming: </span>
+              <span className="font-medium">{me.name}</span>
+            </span>
+            <Button variant="ghost" size="sm" className="border border-primary-foreground/30 hover:bg-primary-hover"
+                    onClick={signOut}>Switch</Button>
+          </div>
         </div>
       </header>
 
-      {trouble}
+      <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-6 md:px-8">
+        {trouble}
 
-      {view === "admin" && manager ? (
-        <AdminView onOpenDog={(id) => { setSelectedId(id); setView("check-in"); }} />
-      ) : (
-        <div className="grid gap-6 md:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]">
-          {/* On a phone the list and the card take turns; side by side from tablet up. */}
-          <aside className={cn(selectedId && "hidden md:block")}>
-            <DogList query={query} onQuery={setQuery} by={by} onBy={setBy} dogs={dogs}
-                     selectedId={selectedId} onSelect={setSelectedId} loading={loading} />
-          </aside>
-          <main className={cn(!selectedId && "hidden md:block")}>
-            <Button variant="ghost" size="sm" className="mb-3 md:hidden" onClick={() => setSelectedId(null)}>
-              ← All dogs
-            </Button>
-            {card ? (
-              <DogCard key={card.dog.id} card={card} groomerId={me.id} detailsOpen={manager}
-                       onChanged={() => { loadCard(card.dog.id); api.findDogs(query, by).then(setDogs); }} />
-            ) : (
-              <div className="flex h-64 items-center justify-center rounded-[var(--radius)] border border-dashed border-border px-6 text-center text-muted-foreground">
-                Pick a dog to see whether they&apos;re cleared for today&apos;s groom.
-              </div>
-            )}
-          </main>
-        </div>
-      )}
+        {view === "admin" && manager ? (
+          <AdminView onOpenDog={(id) => { setSelectedId(id); setView("check-in"); }} />
+        ) : (
+          <div className="grid gap-6 md:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]">
+            {/* On a phone the list and the card take turns; side by side from tablet up. */}
+            <aside className={cn(selectedId && "hidden md:block")}>
+              <DogList query={query} onQuery={setQuery} by={by} onBy={setBy} dogs={dogs}
+                       selectedId={selectedId} onSelect={setSelectedId} loading={loading} />
+            </aside>
+            <main className={cn(!selectedId && "hidden md:block")}>
+              <Button variant="ghost" size="sm" className="mb-3 md:hidden" onClick={() => setSelectedId(null)}>
+                ← All dogs
+              </Button>
+              {card ? (
+                <DogCard key={card.dog.id} card={card} groomerId={me.id} detailsOpen={manager}
+                         onChanged={() => { loadCard(card.dog.id); api.findDogs(query, by).then(setDogs); }} />
+              ) : (
+                <div className="flex h-64 items-center justify-center rounded-[var(--radius)] border border-dashed border-border px-6 text-center text-muted-foreground">
+                  Pick a dog to see whether they&apos;re cleared for today&apos;s groom.
+                </div>
+              )}
+            </main>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
