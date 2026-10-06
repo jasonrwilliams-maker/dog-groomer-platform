@@ -5,6 +5,7 @@ import { Badge, toneFor } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PaperworkForm } from "@/components/check-in/paperwork-form";
+import { ProfileEditForm } from "@/components/check-in/profile-edit-form";
 import { api, Refusal, type CheckInCard } from "@/lib/api";
 import { cn, formatDate, formatTime } from "@/lib/utils";
 
@@ -30,6 +31,7 @@ export function DogCard({
   const [refusal, setRefusal] = useState<Refusal | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [paperwork, setPaperwork] = useState(false);
+  const [editing, setEditing] = useState(false);
 
   async function start() {
     setBusy(true); setRefusal(null); setError(null);
@@ -52,11 +54,19 @@ export function DogCard({
 
   const details = [dog.breed, SEX[dog.sex], dog.age, `${dog.coat} coat`].filter(Boolean).join(" · ");
 
+  if (editing) {
+    return <ProfileEditForm card={card} groomerId={groomerId} onCancel={() => setEditing(false)}
+                            onDone={() => { setEditing(false); onChanged(); }} />;
+  }
+
   return (
     <div className="flex flex-col gap-4">
       {/* Who */}
       <div>
-        <h2 className="text-3xl font-semibold tracking-tight">{dog.name}</h2>
+        <div className="flex items-start justify-between gap-3">
+          <h2 className="text-3xl font-semibold tracking-tight">{dog.name}</h2>
+          <Button variant="outline" size="sm" onClick={() => setEditing(true)}>Edit</Button>
+        </div>
         <p className="text-muted-foreground">{details}</p>
         <p className="mt-1 text-sm">
           {dog.owner}

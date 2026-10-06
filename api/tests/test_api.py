@@ -131,6 +131,7 @@ def test_a_walk_in_is_added_and_held_to_the_same_rule_until_its_paper_is_typed_i
     options = client.get("/walk-in/options").json()
     assert [v["code"] for v in options["vaccines"]][0] == "rabies", "the one the law requires comes first"
     assert {"name": "Shih Tzu", "coat": "silky"} in options["breeds"]
+    assert len(options["breeds"]) >= 199, "the whole list, not just the demo's breeds"
 
     r = client.post("/walk-ins", json={
         "groomer_id": groomer(client),
@@ -173,6 +174,33 @@ def test_a_second_dog_joins_its_owner_and_form_problems_come_back_in_plain_words
     assert client.get("/dogs", params={"q": "Rolo"}).json() == [], "neither the owner nor the dog is saved"
 
     no_coat = client.post("/walk-ins", json={"groomer_id": groomer(client), "owner_id": jaddi["household"]["owner_id"],
-                                             "dog": {"name": "Rolo", "breed": "Not sure"}})
+                                             "dog": {"name": "Rolo"}})
     assert no_coat.status_code == 409
     assert no_coat.json()["message"] == "Choose the dog's coat type"
+
+
+def test_a_misspelt_breed_is_caught_and_a_typo_can_be_put_right(client):
+    assert client.get("/breeds/suggest", params={"q": "Shitzu"}).json()[0] == {"name": "Shih Tzu", "coat": "silky"}
+    assert client.get("/breeds/suggest", params={"q": "shih tzu"}).json() == [], "already a name on the list"
+
+    jaddi_id = dog_named(client, "Jaddi")["id"]
+    owner_id = client.get(f"/dogs/{jaddi_id}").json()["household"]["owner_id"]
+    typo = client.put(f"/dogs/{jaddi_id}", json={"groomer_id": groomer(client), "name": "Jaddi",
+                                               "breed": "Shitzu", "coat": "silky", "sex": "male"})
+    assert typo.status_code == 409
+    assert typo.json()["code"] == "GR023"
+    assert typo.json()["hint"].startswith("Did you mean Shih Tzu")
+
+    mix = client.put(f"/dogs/{jaddi_id}", json={"groomer_id": groomer(client), "name": "Jaddi", "breed": "Shih Tzu",
+                                              "is_mixed": True, "second_breed": "Maltese", "coat": "silky",
+                                              "sex": "male"})
+    assert mix.json()["changed"] == {"breed": {"old": "Shih Tzu", "new": "Shih Tzu × Maltese"}}
+    card = client.get(f"/dogs/{jaddi_id}").json()
+    assert card["dog"]["breed"] == "Shih Tzu × Maltese"
+    assert card["profile"]["second_breed"] == "Maltese"
+
+    renamed = client.put(f"/owners/{owner_id}", json={"groomer_id": groomer(client), "first_name": "Jayson",
+                                                      "last_name": "Williams", "phone": "410-555-0100",
+                                                      "email": "jason@example.test"})
+    assert renamed.json()["changed"] == {"first_name": {"old": "Jason", "new": "Jayson"}}
+    assert client.get(f"/dogs/{jaddi_id}").json()["dog"]["owner"] == "Jayson Williams"

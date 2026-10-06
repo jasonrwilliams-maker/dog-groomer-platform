@@ -1,11 +1,10 @@
--- Walk-ins: a new client and their dog are added at the counter, and the
--- shots on the paper they brought are typed in.
+-- Walk-ins: a new client and their dog are added at the counter, the shots on
+-- the paper they brought are typed in, and a typo is put right afterwards.
 --
--- Eight things are proven:
+-- Ten things are proven:
 --   1. A new client is added and audited; the same email twice is one owner,
 --      and an owner the shop cannot reach is refused.
---   2. A dog of a breed the shop has never seen adds the breed, with the
---      dog's coat as its usual coat; a known breed fills in the coat when it
+--   2. A breed comes from the list, in any case, and fills in the coat when it
 --      is left blank; no coat at all is refused.
 --   3. A walk-in with no paperwork cannot be groomed (GR020, as for anyone).
 --   4. A shot typed in off the paper is manual and unverified, and the dog
@@ -16,10 +15,14 @@
 --      same shot is GR022 and leaves the record on file alone.
 --   8. A current shot answers the shop's open request for it, and the entry
 --      is audited with who typed it.
+--   9. A misspelt breed is refused with the nearest names (GR023), and is
+--      only added to the list when the groomer says it is new. A mix is the
+--      main breed and, if known, the other one.
+--  10. Editing an owner or a dog records only what changed, before and after.
 
 BEGIN;
 SET search_path = groom, public;
-SELECT plan(21);
+SELECT plan(34);
 
 -- --- 1. The owner --------------------------------------------------------------------
 CREATE TEMP TABLE t_owner AS
@@ -49,11 +52,9 @@ CREATE TEMP TABLE t_dog AS
 SELECT add_dog((SELECT id FROM t_owner), 'Biscuit', 'Cavapoo', 'curly', 'female',
                CURRENT_DATE - 800, '00000000-0000-0000-0000-00000000b002') AS id;
 
-SELECT results_eq(
-  $$ SELECT b.name, ct.code FROM breed b JOIN coat_type ct ON ct.id = b.default_coat_type_id
-      WHERE b.id = (SELECT breed_id FROM dog WHERE id = (SELECT id FROM t_dog)) $$,
-  $$ VALUES ('Cavapoo'::text, 'curly'::text) $$,
-  'A breed the shop has not seen is added, with this dog''s coat as its usual coat');
+SELECT is(
+  (SELECT breed_label(breed_id, is_mixed, second_breed_id) FROM dog WHERE id = (SELECT id FROM t_dog)),
+  'Cavapoo', 'A cross with a name of its own is a breed on the list, not a mix');
 
 CREATE TEMP TABLE t_mochi AS
 SELECT add_dog((SELECT id FROM t_owner), 'Mochi', 'shih tzu', NULL, NULL, NULL,
@@ -64,12 +65,9 @@ SELECT is(
   'silky', 'A known breed, in any case, fills in the coat when it is left blank');
 
 SELECT throws_ok(
-  $$ SELECT add_dog((SELECT id FROM t_owner), 'Rolo', 'Not sure', NULL, NULL, NULL,
+  $$ SELECT add_dog((SELECT id FROM t_owner), 'Rolo', NULL, NULL, NULL, NULL,
                     '00000000-0000-0000-0000-00000000b002') $$,
-  '23514', 'Choose the dog''s coat type', 'No coat and no known breed to take one from: refused');
-
-SELECT is((SELECT count(*) FROM breed WHERE name = 'Not sure'), 0::bigint,
-  'A refused dog leaves no breed behind');
+  '23514', 'Choose the dog''s coat type', 'No coat and no breed to take one from: refused');
 
 -- --- 3. No paperwork, no groom ---------------------------------------------------------------
 SELECT throws_ok(
@@ -145,6 +143,86 @@ SELECT results_eq(
       WHERE entity_type = 'vaccination_record' AND entity_id = (SELECT id FROM t_shot) $$,
   $$ VALUES ('Tanya'::text, 'counter'::text) $$,
   'The entry is audited once, with who typed it and that it came from the counter');
+
+-- --- 9. The breed list --------------------------------------------------------------------------
+SELECT throws_ok(
+  $$ SELECT add_dog((SELECT id FROM t_owner), 'Rolo', 'Shitzu', 'silky', NULL, NULL,
+                    '00000000-0000-0000-0000-00000000b002') $$,
+  'GR023', '"Shitzu" is not on the breed list',
+  'A misspelt breed is refused, not added to the list');
+
+SELECT is((SELECT name FROM suggest_breeds('Shitzu') LIMIT 1), 'Shih Tzu',
+  'And the nearest name on the list is the one it meant');
+
+SELECT ok('Siberian Husky' IN (SELECT name FROM suggest_breeds('husky')),
+  'Part of a name finds the whole of it');
+
+SELECT is((SELECT count(*) FROM breed WHERE name = 'Shitzu'), 0::bigint,
+  'The refusal leaves no breed behind');
+
+CREATE TEMP TABLE t_mudi AS
+SELECT add_dog((SELECT id FROM t_owner), 'Rolo', 'Mudi', 'curly', NULL, NULL,
+               '00000000-0000-0000-0000-00000000b002', false, NULL, true) AS id;
+
+SELECT is(
+  (SELECT breed_label(d.breed_id, d.is_mixed, d.second_breed_id) FROM dog d WHERE d.id = (SELECT id FROM t_mudi)),
+  'Mudi', 'A breed the list lacks is added when the groomer says it is new');
+SELECT is((SELECT ct.code FROM breed b JOIN coat_type ct ON ct.id = b.default_coat_type_id WHERE b.name = 'Mudi'),
+  'curly', 'With this dog''s coat as its usual coat');
+
+CREATE TEMP TABLE t_mix AS
+SELECT add_dog((SELECT id FROM t_owner), 'Pickles', 'Shih Tzu', NULL, NULL, NULL,
+               '00000000-0000-0000-0000-00000000b002', false, 'toy poodle') AS a,
+       add_dog((SELECT id FROM t_owner), 'Scout', 'Shih Tzu', NULL, NULL, NULL,
+               '00000000-0000-0000-0000-00000000b002', true, NULL) AS b,
+       add_dog((SELECT id FROM t_owner), 'Muffin', NULL, 'double', NULL, NULL,
+               '00000000-0000-0000-0000-00000000b002', true, NULL) AS c;
+
+SELECT results_eq(
+  $$ SELECT breed_label(d.breed_id, d.is_mixed, d.second_breed_id)
+       FROM t_mix, unnest(ARRAY[a, b, c]) WITH ORDINALITY u(id, n) JOIN dog d ON d.id = u.id ORDER BY n $$,
+  $$ VALUES ('Shih Tzu × Toy Poodle'), ('Shih Tzu mix'), ('Mixed breed') $$,
+  'A mix of two known breeds, of one and something unknown, and of nothing known');
+
+SELECT throws_ok(
+  $$ SELECT add_dog((SELECT id FROM t_owner), 'Twice', 'Shih Tzu', NULL, NULL, NULL,
+                    '00000000-0000-0000-0000-00000000b002', true, 'Shih Tzu') $$,
+  '23514', NULL, 'A mix of a breed with itself is refused');
+
+-- --- 10. Putting a typo right -------------------------------------------------------------------------
+UPDATE owner SET first_name = 'Jayson' WHERE id = '00000000-0000-0000-0000-00000000a001';
+
+SELECT is(
+  update_client('00000000-0000-0000-0000-00000000a001', 'Jason', 'Williams', '410-555-0100',
+                'jason@example.test', '00000000-0000-0000-0000-00000000b002'),
+  '{"first_name": {"old": "Jayson", "new": "Jason"}}'::jsonb,
+  'Correcting a name changes only the name');
+
+SELECT is(
+  (SELECT changed_fields FROM audit_log WHERE entity_type = 'owner' AND action = 'update'
+      AND entity_id = '00000000-0000-0000-0000-00000000a001'),
+  '{"first_name": {"old": "Jayson", "new": "Jason"}}'::jsonb,
+  'And the audit log says what it was before and after');
+
+SELECT is(
+  update_client('00000000-0000-0000-0000-00000000a001', 'Jason', 'Williams', '410-555-0100',
+                'jason@example.test', '00000000-0000-0000-0000-00000000b002'),
+  '{}'::jsonb, 'Saving with nothing changed changes nothing');
+
+SELECT throws_ok(
+  $$ SELECT update_client('00000000-0000-0000-0000-00000000a001', 'Jason', 'Williams', NULL,
+                          'maria@example.test', '00000000-0000-0000-0000-00000000b002') $$,
+  '23505', NULL, 'An owner cannot be given another owner''s email');
+
+SELECT is(
+  update_dog('00000000-0000-0000-0000-00000000d001', 'Jaddi', 'Shih Tzu', 'silky', 'male', NULL,
+             '00000000-0000-0000-0000-00000000b002', true, NULL),
+  '{"breed": {"old": "Shih Tzu", "new": "Shih Tzu mix"}}'::jsonb,
+  'A dog''s edit is recorded in words: the breed as it reads, not an id');
+
+SELECT is(
+  (SELECT count(*) FROM audit_log WHERE action = 'update' AND entity_id = '00000000-0000-0000-0000-00000000d001'),
+  1::bigint, 'Once');
 
 SELECT * FROM finish();
 ROLLBACK;
