@@ -24,16 +24,12 @@ INSERT INTO groomer (id, display_name, email, role) VALUES
   ('00000000-0000-0000-0000-00000000b001', 'Nadia', 'nadia@example.test', 'manager'),
   ('00000000-0000-0000-0000-00000000b002', 'Tanya', 'tanya@example.test', 'groomer');
 
-INSERT INTO breed (id, name, default_coat_type_id) VALUES
-  ('00000000-0000-0000-0000-00000000c001', 'Shih Tzu',
-   (SELECT id FROM coat_type WHERE code = 'silky'));
-
 INSERT INTO dog (id, owner_id, name, breed_id, coat_type_id, sex) VALUES
   ('00000000-0000-0000-0000-00000000d001', '00000000-0000-0000-0000-00000000a001',
-   'Jaddi', '00000000-0000-0000-0000-00000000c001',
+   'Jaddi', (SELECT id FROM breed WHERE name = 'Shih Tzu'),
    (SELECT id FROM coat_type WHERE code = 'silky'), 'male'),
   ('00000000-0000-0000-0000-00000000d002', '00000000-0000-0000-0000-00000000a001',
-   'Luna',  '00000000-0000-0000-0000-00000000c001',
+   'Luna',  (SELECT id FROM breed WHERE name = 'Shih Tzu'),
    (SELECT id FROM coat_type WHERE code = 'silky'), 'female'),
   ('00000000-0000-0000-0000-00000000d003', '00000000-0000-0000-0000-00000000a002',
    'Biscuit', NULL,

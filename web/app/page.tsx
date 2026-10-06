@@ -5,6 +5,7 @@ import { Logo } from "@/components/brand/logo";
 import { AdminView } from "@/components/check-in/admin-view";
 import { DogCard } from "@/components/check-in/dog-card";
 import { DogList } from "@/components/check-in/dog-list";
+import { WalkInForm, type WalkInFor } from "@/components/check-in/walk-in-form";
 import { Welcome } from "@/components/check-in/welcome";
 import { Button } from "@/components/ui/button";
 import { api, type CheckInCard, type DogSummary, type Groomer, type SearchBy } from "@/lib/api";
@@ -35,6 +36,7 @@ export default function CheckInPage() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [card, setCard] = useState<CheckInCard | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
+  const [walkIn, setWalkIn] = useState<WalkInFor | null>(null);
 
   useEffect(() => {
     api.groomers()
@@ -66,7 +68,17 @@ export default function CheckInPage() {
   }, [selectedId, loadCard]);
 
   function signIn(g: Groomer) { remember(g.id); setMe(g); setView("check-in"); }
-  function signOut() { remember(null); setMe(null); setSelectedId(null); setQuery(""); }
+  function signOut() { remember(null); setMe(null); setSelectedId(null); setWalkIn(null); setQuery(""); }
+  function select(id: string | null) { setWalkIn(null); setSelectedId(id); }
+  // A search that found no one is usually the new client's name: carry it over.
+  function newClient() {
+    setSelectedId(null);
+    setWalkIn({ prefill: by === "dog" ? { dog: query } : by === "owner" ? { owner: query } : {} });
+  }
+  function walkInDone(dogId: string) {
+    setWalkIn(null); setQuery(""); setSelectedId(dogId);
+    api.findDogs("", by).then(setDogs);
+  }
 
   const manager = me?.role === "manager";
   const trouble = problem && (
@@ -115,20 +127,24 @@ export default function CheckInPage() {
         {trouble}
 
         {view === "admin" && manager ? (
-          <AdminView onOpenDog={(id) => { setSelectedId(id); setView("check-in"); }} />
+          <AdminView onOpenDog={(id) => { select(id); setView("check-in"); }} />
         ) : (
           <div className="grid gap-6 md:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]">
             {/* On a phone the list and the card take turns; side by side from tablet up. */}
-            <aside className={cn(selectedId && "hidden md:block")}>
+            <aside className={cn((selectedId || walkIn) && "hidden md:block")}>
               <DogList query={query} onQuery={setQuery} by={by} onBy={setBy} dogs={dogs}
-                       selectedId={selectedId} onSelect={setSelectedId} loading={loading} />
+                       selectedId={selectedId} onSelect={select} loading={loading} onNewClient={newClient} />
             </aside>
-            <main className={cn(!selectedId && "hidden md:block")}>
-              <Button variant="ghost" size="sm" className="mb-3 md:hidden" onClick={() => setSelectedId(null)}>
+            <main className={cn(!selectedId && !walkIn && "hidden md:block")}>
+              <Button variant="ghost" size="sm" className="mb-3 md:hidden" onClick={() => select(null)}>
                 ← All dogs
               </Button>
-              {card ? (
+              {walkIn ? (
+                <WalkInForm key={JSON.stringify(walkIn)} walkIn={walkIn} groomerId={me.id}
+                            onDone={walkInDone} onCancel={() => setWalkIn(null)} />
+              ) : card ? (
                 <DogCard key={card.dog.id} card={card} groomerId={me.id} detailsOpen={manager}
+                         onAddDog={(ownerId, ownerName) => { setSelectedId(null); setWalkIn({ ownerId, ownerName }); }}
                          onChanged={() => { loadCard(card.dog.id); api.findDogs(query, by).then(setDogs); }} />
               ) : (
                 <div className="flex h-64 items-center justify-center rounded-[var(--radius)] border border-dashed border-border px-6 text-center text-muted-foreground">

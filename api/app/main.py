@@ -13,6 +13,7 @@ job is two translations:
 from __future__ import annotations
 
 from datetime import date
+from typing import Literal
 from uuid import UUID
 
 import psycopg
@@ -41,10 +42,19 @@ async def refusal_handler(_: Request, r: Refusal):
     return JSONResponse(status_code=409, content={"code": r.code, "message": r.message, "hint": r.hint})
 
 
-def refusal_from(e: psycopg.Error) -> Refusal | None:
+# A form answer the database turned down — a missing name, an email already
+# on file, no way to reach the owner. Not a rule's refusal, but the same
+# shape, so the screen shows the database's own words beside the form.
+FORM_PROBLEMS = {"23505", "23514", "23503", "23502", "22007", "22008"}
+
+
+def refusal_from(e: psycopg.Error, form: bool = False) -> Refusal | None:
     code = e.sqlstate or ""
-    if code.startswith("GR"):
-        return Refusal(code, e.diag.message_primary or str(e), e.diag.message_hint)
+    if code.startswith("GR") or (form and code in FORM_PROBLEMS):
+        message = e.diag.message_primary or str(e)
+        if code == "23514" and "owner_contactable" in message:
+            message = "Add a phone number or an email, so the shop can reach the owner."
+        return Refusal(code, message, e.diag.message_hint)
     return None
 
 
@@ -81,7 +91,7 @@ def find_dogs(q: str = "", by: str = "any"):
     if by not in SEARCH_IN:
         raise HTTPException(422, "Search by 'dog', 'owner' or 'any'.")
     return db.rows(f"""
-        SELECT d.id, d.name, b.name AS breed,
+        SELECT d.id, d.name, breed_label(d.breed_id, d.is_mixed, d.second_breed_id) AS breed,
                o.first_name || ' ' || o.last_name AS owner,
                c.state::text AS state, c.plain_language_label AS label,
                COALESCE(c.blocks_service, false) AS blocks_service,
@@ -92,7 +102,6 @@ def find_dogs(q: str = "", by: str = "any"):
                  ORDER BY l.blocks_service DESC, l.sort_order, l.vaccine LIMIT 1) AS attention
           FROM dog d
           JOIN owner o ON o.id = d.owner_id
-          LEFT JOIN breed b ON b.id = d.breed_id
           LEFT JOIN v_compliance_dashboard c ON c.dog_id = d.id
          WHERE d.is_active AND {SEARCH_IN[by]}
          ORDER BY COALESCE(c.blocks_service, false) DESC, d.name
@@ -113,7 +122,7 @@ def _age(born: date | None) -> str | None:
 def check_in_card(dog_id: UUID):
     dog = db.row("""
         SELECT d.id, d.name, d.sex::text AS sex, d.date_of_birth, d.is_altered,
-               b.name AS breed, ct.name AS coat,
+               breed_label(d.breed_id, d.is_mixed, d.second_breed_id) AS breed, ct.name AS coat,
                o.first_name || ' ' || o.last_name AS owner, o.phone, o.email
           FROM dog d
           JOIN owner o      ON o.id = d.owner_id
@@ -122,6 +131,21 @@ def check_in_card(dog_id: UUID):
          WHERE d.id = %s AND d.is_active""", (dog_id,))
     if dog is None:
         raise HTTPException(404, "No active dog with that id.")
+    profile = db.row("""
+        SELECT o.first_name, o.last_name, o.phone, o.email,
+               d.name, b.name AS breed, d.is_mixed, b2.name AS second_breed, ct.code AS coat,
+               d.sex::text AS sex, d.date_of_birth
+          FROM dog d
+          JOIN owner o      ON o.id = d.owner_id
+          JOIN coat_type ct ON ct.id = d.coat_type_id
+          LEFT JOIN breed b  ON b.id = d.breed_id
+          LEFT JOIN breed b2 ON b2.id = d.second_breed_id
+         WHERE d.id = %s""", (dog_id,))
+    household = db.row("""
+        SELECT o.id AS owner_id,
+               ARRAY(SELECT d2.name FROM dog d2 WHERE d2.owner_id = o.id AND d2.is_active
+                       AND d2.id <> %s ORDER BY d2.name) AS other_dogs
+          FROM dog d JOIN owner o ON o.id = d.owner_id WHERE d.id = %s""", (dog_id, dog_id))
 
     vaccines = db.rows("""
         SELECT vaccine_code AS code, vaccine, state::text AS state, label, expires_on,
@@ -156,6 +180,8 @@ def check_in_card(dog_id: UUID):
     blocking = [v for v in vaccines if v["blocks_service"]]
     return {
         "dog": {**dog, "age": _age(dog["date_of_birth"])},
+        "household": household,
+        "profile": profile,
         "can_start": not blocking,
         "blocking": [f"{v['vaccine']}: {v['label'].lower()}" for v in blocking],
         "vaccines": vaccines,
@@ -193,6 +219,29 @@ def compliance():
     return {**counts, "lines": lines}
 
 
+@app.get("/breeds/suggest")
+def breed_suggestions(q: str = ""):
+    """The nearest names on the breed list to what has been typed, for "did
+    you mean". Nothing when it is already a name on the list."""
+    if db.row("SELECT 1 AS ok FROM breed WHERE lower(name) = lower(btrim(%s))", (q,)):
+        return []
+    return db.rows("SELECT name, coat FROM suggest_breeds(%s, 4)", (q,))
+
+
+@app.get("/walk-in/options")
+def walk_in_options():
+    """The choices the walk-in form offers: coats, the breeds the shop knows
+    (with the coat each usually has), and the vaccines it tracks."""
+    return {
+        "coats": db.rows("SELECT code, name FROM coat_type ORDER BY name"),
+        "breeds": db.rows("""SELECT b.name, ct.code AS coat FROM breed b
+                               JOIN coat_type ct ON ct.id = b.default_coat_type_id ORDER BY b.name"""),
+        "vaccines": db.rows("""SELECT code, name, regulatory_required AS required FROM vaccine_type
+                                WHERE regulatory_required OR required_by_policy
+                                ORDER BY regulatory_required DESC, name"""),
+    }
+
+
 # --------------------------------------------------------------- writing
 
 class StartVisit(BaseModel):
@@ -216,6 +265,122 @@ def start_groom(dog_id: UUID, body: StartVisit):
             raise r from None
         if e.sqlstate == "23503":                       # unknown groomer
             raise HTTPException(422, "No such groomer.") from None
+        if "not an active client" in str(e):
+            raise HTTPException(404, "No active dog with that id.") from None
+        raise
+
+
+class NewOwner(BaseModel):
+    first_name: str
+    last_name: str
+    phone: str | None = None
+    email: str | None = None
+
+
+class NewDog(BaseModel):
+    name: str
+    breed: str | None = None
+    is_mixed: bool = False
+    second_breed: str | None = None
+    new_breed: bool = False                 # the groomer says the list lacks it
+    coat: str | None = None
+    sex: Literal["male", "female", "unknown"] | None = None
+    date_of_birth: date | None = None
+
+
+class WalkIn(BaseModel):
+    groomer_id: UUID
+    owner_id: UUID | None = None          # an owner already on file, or
+    owner: NewOwner | None = None         # a new one
+    dog: NewDog
+
+
+@app.post("/walk-ins", status_code=201)
+def walk_in(body: WalkIn):
+    """A new dog, and its owner if they are new too, in one go: both are
+    saved or neither is."""
+    if (body.owner_id is None) == (body.owner is None):
+        raise HTTPException(422, "Give either an owner already on file or a new owner.")
+    try:
+        with db.connect() as conn:
+            owner_id = body.owner_id
+            if owner_id is None:
+                o = body.owner
+                owner_id = conn.execute("SELECT add_client(%s, %s, %s, %s, %s) AS id",
+                                        (o.first_name, o.last_name, o.phone, o.email, body.groomer_id)).fetchone()["id"]
+            d = body.dog
+            dog_id = conn.execute("SELECT add_dog(%s, %s, %s, %s, %s::dog_sex, %s, %s, %s, %s, %s) AS id",
+                                  (owner_id, d.name, d.breed, d.coat, d.sex or "unknown", d.date_of_birth,
+                                   body.groomer_id, d.is_mixed, d.second_breed, d.new_breed)).fetchone()["id"]
+        return {"owner_id": owner_id, "dog_id": dog_id}
+    except psycopg.Error as e:
+        if (r := refusal_from(e, form=True)) is not None:
+            raise r from None
+        raise
+
+
+class CounterShot(BaseModel):
+    groomer_id: UUID
+    vaccine: str
+    administered_on: date | None = None
+    expires_on: date | None = None
+
+
+@app.post("/dogs/{dog_id}/shots", status_code=201)
+def counter_shot(dog_id: UUID, body: CounterShot):
+    """One vaccine typed in off the owner's paper. Saved as awaiting
+    verification; no expiry date is the database's refusal (GR021)."""
+    try:
+        with db.connect() as conn:
+            row = conn.execute("SELECT record_counter_shot(%s, %s, %s, %s, %s) AS id",
+                               (dog_id, body.vaccine, body.administered_on, body.expires_on,
+                                body.groomer_id)).fetchone()
+        return row
+    except psycopg.Error as e:
+        if (r := refusal_from(e, form=True)) is not None:
+            raise r from None
+        if "not an active client" in str(e):
+            raise HTTPException(404, "No active dog with that id.") from None
+        raise
+
+
+class OwnerEdit(NewOwner):
+    groomer_id: UUID
+
+
+@app.put("/owners/{owner_id}")
+def edit_owner(owner_id: UUID, body: OwnerEdit):
+    """A typo in the owner's details put right. Returns what changed, as the
+    audit log records it."""
+    try:
+        with db.connect() as conn:
+            row = conn.execute("SELECT update_client(%s, %s, %s, %s, %s, %s) AS changed",
+                               (owner_id, body.first_name, body.last_name, body.phone, body.email,
+                                body.groomer_id)).fetchone()
+        return row
+    except psycopg.Error as e:
+        if (r := refusal_from(e, form=True)) is not None:
+            raise r from None
+        raise
+
+
+class DogEdit(NewDog):
+    groomer_id: UUID
+
+
+@app.put("/dogs/{dog_id}")
+def edit_dog(dog_id: UUID, body: DogEdit):
+    """The same for the dog: name, breed, coat, sex, birthday."""
+    try:
+        with db.connect() as conn:
+            row = conn.execute("SELECT update_dog(%s, %s, %s, %s, %s::dog_sex, %s, %s, %s, %s, %s) AS changed",
+                               (dog_id, body.name, body.breed, body.coat, body.sex or "unknown",
+                                body.date_of_birth, body.groomer_id, body.is_mixed, body.second_breed,
+                                body.new_breed)).fetchone()
+        return row
+    except psycopg.Error as e:
+        if (r := refusal_from(e, form=True)) is not None:
+            raise r from None
         if "not an active client" in str(e):
             raise HTTPException(404, "No active dog with that id.") from None
         raise

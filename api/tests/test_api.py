@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+from datetime import date, timedelta
 from pathlib import Path
 from urllib.parse import urlparse, urlunparse
 
@@ -124,3 +125,82 @@ def test_compliance_summary_counts_the_book_and_lists_what_needs_doing(client):
         l for l in lines if l["dog"] == "Jaddi").items()
     assert any(l["state"] == "received_unverified" and not l["blocks_service"] for l in lines)
     assert not any(l["state"] in ("current", "not_yet_due") for l in lines)
+
+
+def test_a_walk_in_is_added_and_held_to_the_same_rule_until_its_paper_is_typed_in(client):
+    options = client.get("/walk-in/options").json()
+    assert [v["code"] for v in options["vaccines"]][0] == "rabies", "the one the law requires comes first"
+    assert {"name": "Shih Tzu", "coat": "silky"} in options["breeds"]
+    assert len(options["breeds"]) >= 199, "the whole list, not just the demo's breeds"
+
+    r = client.post("/walk-ins", json={
+        "groomer_id": groomer(client),
+        "owner": {"first_name": "Maria", "last_name": "Lopez", "phone": "410-555-0300"},
+        "dog": {"name": "Biscuit", "breed": "Cavapoo", "coat": "curly", "sex": "female"},
+    })
+    assert r.status_code == 201
+    biscuit = r.json()["dog_id"]
+    assert dog_named(client, "Biscuit")["owner"] == "Maria Lopez"
+    assert client.get(f"/dogs/{biscuit}").json()["can_start"] is False
+
+    given, expires = str(date.today() - timedelta(days=30)), str(date.today() + timedelta(days=1065))
+    no_expiry = client.post(f"/dogs/{biscuit}/shots", json={
+        "groomer_id": groomer(client), "vaccine": "rabies", "administered_on": given})
+    assert no_expiry.status_code == 409
+    assert no_expiry.json()["code"] == "GR021"
+    assert no_expiry.json()["message"] == "Rabies: no expiry date, so it cannot be recorded"
+
+    shot = client.post(f"/dogs/{biscuit}/shots", json={
+        "groomer_id": groomer(client), "vaccine": "rabies",
+        "administered_on": given, "expires_on": expires})
+    assert shot.status_code == 201
+    card = client.get(f"/dogs/{biscuit}").json()
+    assert card["can_start"] is True
+    assert next(v for v in card["vaccines"] if v["code"] == "rabies")["state"] == "received_unverified"
+
+
+def test_a_second_dog_joins_its_owner_and_form_problems_come_back_in_plain_words(client):
+    jaddi = client.get(f"/dogs/{dog_named(client, 'Jaddi')['id']}").json()
+    r = client.post("/walk-ins", json={"groomer_id": groomer(client), "owner_id": jaddi["household"]["owner_id"],
+                                       "dog": {"name": "Ziggy", "breed": "Shih Tzu"}})
+    assert r.status_code == 201
+    assert "Ziggy" in client.get(f"/dogs/{jaddi['dog']['id']}").json()["household"]["other_dogs"]
+
+    nowhere = client.post("/walk-ins", json={"groomer_id": groomer(client),
+                                             "owner": {"first_name": "Sam", "last_name": "Nobody"},
+                                             "dog": {"name": "Rolo", "coat": "smooth"}})
+    assert nowhere.status_code == 409
+    assert nowhere.json()["message"] == "Add a phone number or an email, so the shop can reach the owner."
+    assert client.get("/dogs", params={"q": "Rolo"}).json() == [], "neither the owner nor the dog is saved"
+
+    no_coat = client.post("/walk-ins", json={"groomer_id": groomer(client), "owner_id": jaddi["household"]["owner_id"],
+                                             "dog": {"name": "Rolo"}})
+    assert no_coat.status_code == 409
+    assert no_coat.json()["message"] == "Choose the dog's coat type"
+
+
+def test_a_misspelt_breed_is_caught_and_a_typo_can_be_put_right(client):
+    assert client.get("/breeds/suggest", params={"q": "Shitzu"}).json()[0] == {"name": "Shih Tzu", "coat": "silky"}
+    assert client.get("/breeds/suggest", params={"q": "shih tzu"}).json() == [], "already a name on the list"
+
+    jaddi_id = dog_named(client, "Jaddi")["id"]
+    owner_id = client.get(f"/dogs/{jaddi_id}").json()["household"]["owner_id"]
+    typo = client.put(f"/dogs/{jaddi_id}", json={"groomer_id": groomer(client), "name": "Jaddi",
+                                               "breed": "Shitzu", "coat": "silky", "sex": "male"})
+    assert typo.status_code == 409
+    assert typo.json()["code"] == "GR023"
+    assert typo.json()["hint"].startswith("Did you mean Shih Tzu")
+
+    mix = client.put(f"/dogs/{jaddi_id}", json={"groomer_id": groomer(client), "name": "Jaddi", "breed": "Shih Tzu",
+                                              "is_mixed": True, "second_breed": "Maltese", "coat": "silky",
+                                              "sex": "male"})
+    assert mix.json()["changed"] == {"breed": {"old": "Shih Tzu", "new": "Shih Tzu × Maltese"}}
+    card = client.get(f"/dogs/{jaddi_id}").json()
+    assert card["dog"]["breed"] == "Shih Tzu × Maltese"
+    assert card["profile"]["second_breed"] == "Maltese"
+
+    renamed = client.put(f"/owners/{owner_id}", json={"groomer_id": groomer(client), "first_name": "Jayson",
+                                                      "last_name": "Williams", "phone": "410-555-0100",
+                                                      "email": "jason@example.test"})
+    assert renamed.json()["changed"] == {"first_name": {"old": "Jason", "new": "Jayson"}}
+    assert client.get(f"/dogs/{jaddi_id}").json()["dog"]["owner"] == "Jayson Williams"

@@ -35,19 +35,7 @@ INSERT INTO owner (id, first_name, last_name, email, phone) VALUES
   ('00000000-0000-0000-0000-0000000d0a09', 'Grace',  'Kim',      NULL,                  '410-555-0134'),
   ('00000000-0000-0000-0000-0000000d0a10', 'Diego',  'Alvarez',  'diego@example.test',  '410-555-0195');
 
--- --- Breeds and allergens the demo needs ----------------------------------------
-INSERT INTO breed (name, default_coat_type_id, is_mixed) VALUES
-  ('Shih Tzu',             (SELECT id FROM coat_type WHERE code = 'silky'),  false),
-  ('Labradoodle',          (SELECT id FROM coat_type WHERE code = 'curly'),  true),
-  ('Bernese Mountain Dog', (SELECT id FROM coat_type WHERE code = 'double'), false),
-  ('Miniature Schnauzer',  (SELECT id FROM coat_type WHERE code = 'wiry'),   false),
-  ('Golden Retriever',     (SELECT id FROM coat_type WHERE code = 'double'), false),
-  ('Cavalier King Charles Spaniel', (SELECT id FROM coat_type WHERE code = 'silky'), false),
-  ('Border Collie',        (SELECT id FROM coat_type WHERE code = 'double'), false),
-  ('Toy Poodle',           (SELECT id FROM coat_type WHERE code = 'curly'),  false),
-  ('French Bulldog',       (SELECT id FROM coat_type WHERE code = 'smooth'), false),
-  ('Pit Bull mix',         (SELECT id FROM coat_type WHERE code = 'smooth'), true);
-
+-- --- Allergens the demo needs (breeds come from sql/23_breed_seed.sql) --------
 INSERT INTO allergen (name, category) VALUES
   ('Chlorhexidine shampoo', 'shampoo'),
   ('Oatmeal shampoo',       'shampoo'),
@@ -67,12 +55,15 @@ INSERT INTO demo_dog VALUES
   ('00000000-0000-0000-0000-0000000d0d07', '00000000-0000-0000-0000-0000000d0a07', 'Rocket', 'Border Collie',        'male',   CURRENT_DATE - 1280),
   ('00000000-0000-0000-0000-0000000d0d08', '00000000-0000-0000-0000-0000000d0a08', 'Noodle', 'Toy Poodle',           'female', CURRENT_DATE - 77),
   ('00000000-0000-0000-0000-0000000d0d09', '00000000-0000-0000-0000-0000000d0a09', 'Gus',    'French Bulldog',       'male',   CURRENT_DATE - 900),
-  ('00000000-0000-0000-0000-0000000d0d10', '00000000-0000-0000-0000-0000000d0a10', 'Tank',   'Pit Bull mix',         'male',   CURRENT_DATE - 3100),
+  ('00000000-0000-0000-0000-0000000d0d10', '00000000-0000-0000-0000-0000000d0a10', 'Tank',   'American Pit Bull Terrier', 'male',   CURRENT_DATE - 3100),
   ('00000000-0000-0000-0000-0000000d0d11', '00000000-0000-0000-0000-0000000d0a02', 'Willow', 'Shih Tzu',             'female', CURRENT_DATE - 2000);
 
 INSERT INTO dog (id, owner_id, name, breed_id, coat_type_id, sex, date_of_birth)
 SELECT d.id, d.owner, d.name, b.id, b.default_coat_type_id, d.sex, d.born
   FROM demo_dog d JOIN breed b ON b.name = d.breed;
+
+-- Tank is a pit bull mix; his owner doesn't know what else.
+UPDATE dog SET is_mixed = true WHERE id = '00000000-0000-0000-0000-0000000d0d10';
 
 -- --- Vaccination records ---------------------------------------------------------------
 -- (dog, vaccine, given days ago, expires in days, verification). Negative
