@@ -19,14 +19,28 @@ const REQUEST = {
   insufficient: "Paperwork received wasn't enough",
 } as Record<string, string>;
 
+type Tone = "ok" | "stop" | "warn" | "info";
+
 // Each group is a different job for the manager, in the order they matter.
-const GROUPS: { title: string; note: string; match: (l: ComplianceLine) => boolean }[] = [
-  { title: "Can't groom", note: "These stop today's groom until paperwork is confirmed.", match: (l) => l.blocks_service },
-  { title: "Waiting to be verified", note: "Typed in with no copy of the paperwork. Groomable now; check them against the paper.",
-    match: (l) => !l.blocks_service && l.state === "received_unverified" },
-  { title: "Expiring soon", note: "Ask for updated paperwork at the next visit.",
-    match: (l) => !l.blocks_service && l.state === "expiring_soon" },
+// The count cards at the top point at them by id.
+const GROUPS: { id: string; title: string; note: string; tone?: Tone; match: (l: ComplianceLine) => boolean }[] = [
+  { id: "cant-groom", title: "Can't groom", note: "These stop today's groom until paperwork is confirmed.",
+    tone: "stop", match: (l) => l.blocks_service },
+  { id: "waiting", title: "Waiting to be verified", note: "Typed in with no copy of the paperwork. Groomable now; check them against the paper.",
+    tone: "info", match: (l) => !l.blocks_service && l.state === "received_unverified" },
+  { id: "expiring", title: "Expiring soon", note: "Ask for updated paperwork at the next visit.",
+    tone: "warn", match: (l) => !l.blocks_service && l.state === "expiring_soon" },
 ];
+const OTHER = { id: "other", title: "Other", note: "Not blocking, but not complete either." };
+
+/** How many dogs a list of vaccine lines is about. */
+const dogsIn = (lines: ComplianceLine[]) => new Set(lines.map((l) => l.dog_id)).size;
+const dogs = (n: number) => `${n} ${n === 1 ? "dog" : "dogs"}`;
+
+/** Bring a section into view, below the page's top edge. */
+function goTo(id: string) {
+  document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+}
 
 export function AdminView({ groomerId, onOpenDog }: { groomerId: string; onOpenDog: (dogId: string) => void }) {
   const [summary, setSummary] = useState<ComplianceSummary | null>(null);
@@ -59,32 +73,41 @@ export function AdminView({ groomerId, onOpenDog }: { groomerId: string; onOpenD
   const grouped = GROUPS.map((g) => ({ ...g, lines: summary.lines.filter(g.match) }));
   const other = summary.lines.filter((l) => !GROUPS.some((g) => g.match(l)));
 
+  const byId = Object.fromEntries(grouped.map((g) => [g.id, g]));
+
   return (
     <div className="flex flex-col gap-6">
-      <div className="grid gap-3 sm:grid-cols-3">
+      {/* The book at a glance. A card with a list behind it opens that list. */}
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
         <Stat label="Dogs on the books" value={summary.dogs} />
         <Stat label="Cleared to groom" value={summary.cleared} tone="ok" />
-        <Stat label="Can't groom" value={summary.blocked} tone={summary.blocked ? "stop" : undefined} />
+        <Stat label="Can't groom" value={dogsIn(byId["cant-groom"].lines)} tone="stop" target="cant-groom" />
+        <Stat label="Expiring soon" value={dogsIn(byId["expiring"].lines)} tone="warn" target="expiring" />
+        <Stat label="Waiting to be verified" value={dogsIn(byId["waiting"].lines)} tone="info" target="waiting" />
+        <Stat label="Other" value={dogsIn(other)} target="other" />
       </div>
 
-      <Card>
-        <CardContent className="flex flex-wrap items-center justify-between gap-4 pt-5">
-          <div>
-            <p className="font-semibold">Vaccination records</p>
-            <p className="text-sm text-muted-foreground">
-              Label, review and confirm paperwork, and manage owner reminders.
-            </p>
-          </div>
-          <a
-            href={RECORDS_URL}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex h-10 items-center rounded-[var(--radius)] bg-primary px-4 text-sm font-medium text-primary-foreground hover:bg-primary-hover"
-          >
-            Open records tool ↗
-          </a>
-        </CardContent>
-      </Card>
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card>
+          <CardContent className="flex h-full flex-col justify-between gap-4 pt-5">
+            <div>
+              <p className="font-semibold">Vaccination records</p>
+              <p className="text-sm text-muted-foreground">
+                The test bench: label sample paperwork, compare AI prompts and models, and manage owner reminders.
+              </p>
+            </div>
+            <a
+              href={RECORDS_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex h-10 items-center self-start rounded-[var(--radius)] border border-border bg-card px-4 text-sm font-medium hover:bg-muted"
+            >
+              Open records tool ↗
+            </a>
+          </CardContent>
+        </Card>
+        <AiScoreboard rows={aiScore} />
+      </div>
 
       {checking && (
         <Card className="border-primary/40">
@@ -181,8 +204,6 @@ export function AdminView({ groomerId, onOpenDog }: { groomerId: string; onOpenD
         </Card>
       )}
 
-      <AiScoreboard rows={aiScore} />
-
       {reviews.length > 0 && (
         <Card className="border-warn/40">
           <CardHeader>
@@ -216,10 +237,12 @@ export function AdminView({ groomerId, onOpenDog }: { groomerId: string; onOpenD
       )}
 
       {grouped.map((g) => g.lines.length > 0 && (
-        <Group key={g.title} title={`${g.title} · ${g.lines.length}`} note={g.note} lines={g.lines} onOpenDog={onOpenDog} />
+        <Group key={g.id} id={g.id} title={`${g.title} · ${dogs(dogsIn(g.lines))}`} note={g.note} lines={g.lines}
+               onOpenDog={onOpenDog} />
       ))}
       {other.length > 0 && (
-        <Group title={`Other · ${other.length}`} note="Not blocking, but not complete either." lines={other} onOpenDog={onOpenDog} />
+        <Group id={OTHER.id} title={`${OTHER.title} · ${dogs(dogsIn(other))}`} note={OTHER.note} lines={other}
+               onOpenDog={onOpenDog} />
       )}
       {summary.lines.length === 0 && (
         <p className="text-muted-foreground">Every dog&apos;s vaccinations are in order.</p>
@@ -233,14 +256,13 @@ function AiScoreboard({ rows }: { rows: AiAccuracy[] }) {
   const kinds = { pdf: "Emailed PDFs", photo: "Photos" } as const;
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>How the AI is doing</CardTitle>
-        <p className="text-sm text-muted-foreground">
-          Every copy checked after the AI read it is a graded example: the dates it got right, read wrong, missed,
-          or made up. This is the shop&apos;s own measure, from its own customers&apos; paperwork.
-        </p>
-      </CardHeader>
-      <CardContent>
+      <CardContent className="flex h-full flex-col gap-3 pt-5">
+        <div>
+          <p className="font-semibold">How the AI is doing</p>
+          <p className="text-sm text-muted-foreground">
+            Graded by whoever checked each copy it read: on the shop&apos;s own paperwork.
+          </p>
+        </div>
         {rows.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             Nothing graded yet. Use &ldquo;Have the AI read it&rdquo; when checking a copy, and the score starts here.
@@ -251,18 +273,21 @@ function AiScoreboard({ rows }: { rows: AiAccuracy[] }) {
               const graded = r.right_first_time + r.read_wrong + r.missed + r.made_up;
               const pct = graded ? Math.round((100 * r.right_first_time) / graded) : 0;
               return (
-                <li key={r.copy_kind} className="flex flex-wrap items-baseline justify-between gap-2 py-2.5">
-                  <span>
+                <li key={r.copy_kind} className="flex items-baseline justify-between gap-3 py-2">
+                  <span className="min-w-0">
                     <span className="font-medium">{kinds[r.copy_kind]}</span>
-                    <span className="text-muted-foreground"> · {r.readings} {r.readings === 1 ? "copy" : "copies"} read</span>
-                    <span className="block text-sm text-muted-foreground">
+                    <span className="text-muted-foreground"> · {r.readings} read</span>
+                    <span className="block text-xs text-muted-foreground">
                       {r.right_first_time} right · {r.read_wrong} read wrong · {r.missed} missed · {r.made_up} made up
                     </span>
                   </span>
-                  <span className={`text-2xl font-semibold ${pct >= 95 ? "text-ok" : pct >= 80 ? "text-warn" : "text-stop"}`}>
-                    {graded ? `${pct}%` : "—"}
-                    <span className="block text-right text-xs font-normal text-muted-foreground">dates right</span>
-                  </span>
+                  {graded ? (
+                    <span className={`shrink-0 text-xl font-semibold ${pct >= 95 ? "text-ok" : pct >= 80 ? "text-warn" : "text-stop"}`}>
+                      {pct}%
+                    </span>
+                  ) : (
+                    <span className="shrink-0 text-sm text-muted-foreground">not graded yet</span>
+                  )}
                 </li>
               );
             })}
@@ -276,23 +301,34 @@ function AiScoreboard({ rows }: { rows: AiAccuracy[] }) {
 const when = (at: string) =>
   new Date(at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
-function Stat({ label, value, tone }: { label: string; value: number; tone?: "ok" | "stop" }) {
-  const colour = tone === "ok" ? "text-ok" : tone === "stop" ? "text-stop" : "";
+const TONE: Record<Tone, string> = { ok: "text-ok", stop: "text-stop", warn: "text-warn", info: "text-primary" };
+
+function Stat({ label, value, tone, target }: { label: string; value: number; tone?: Tone; target?: string }) {
+  const colour = tone && value > 0 ? TONE[tone] : "";
+  const body = (
+    <>
+      <p className={`text-3xl font-semibold ${colour}`}>{value}</p>
+      <p className="text-sm text-muted-foreground">{label}</p>
+    </>
+  );
+  // Nothing behind it, or nothing in the list: a plain count.
+  if (!target || value === 0) {
+    return <Card><CardContent className="pt-5">{body}</CardContent></Card>;
+  }
   return (
-    <Card>
-      <CardContent className="pt-5">
-        <p className={`text-3xl font-semibold ${colour}`}>{value}</p>
-        <p className="text-sm text-muted-foreground">{label}</p>
-      </CardContent>
-    </Card>
+    <button onClick={() => goTo(target)}
+            className="group flex flex-col items-start justify-start rounded-[var(--radius)] border border-border bg-card p-5 text-left shadow-sm transition-colors hover:border-primary hover:bg-muted">
+      {body}
+      <p className="mt-1 text-xs font-medium text-primary group-hover:underline">See the list ↓</p>
+    </button>
   );
 }
 
-function Group({ title, note, lines, onOpenDog }: {
-  title: string; note: string; lines: ComplianceLine[]; onOpenDog: (dogId: string) => void;
+function Group({ id, title, note, lines, onOpenDog }: {
+  id: string; title: string; note: string; lines: ComplianceLine[]; onOpenDog: (dogId: string) => void;
 }) {
   return (
-    <Card>
+    <Card id={id} className="scroll-mt-6">
       <CardHeader>
         <CardTitle>{title}</CardTitle>
         <p className="text-sm text-muted-foreground">{note}</p>
