@@ -2,11 +2,13 @@
 
 import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Camera, wantsLiveCamera } from "@/components/check-in/camera";
 import { PaperworkForm } from "@/components/check-in/paperwork-form";
 import { api, paperworkUrl, type ReceivedCopy } from "@/lib/api";
 
 type Step =
   | { at: "pick" }
+  | { at: "camera" }
   | { at: "choose"; copy: ReceivedCopy }
   | { at: "check"; documentId: string; mimeType: string }
   | { at: "later" }
@@ -42,6 +44,7 @@ export function PaperworkIntake({
 
   async function send(file: File | undefined) {
     if (!file) return;
+    setStep({ at: "pick" });
     setBusy(true); setError(null);
     try {
       const copy = await api.sendPaperwork(dogId, groomerId, file);
@@ -70,6 +73,25 @@ export function PaperworkIntake({
 
   const problem = error && <p role="alert" className="text-sm text-stop">{error}</p>;
 
+  // Two inputs: on a tablet, capture opens the camera app; the other offers files.
+  const inputs = (
+    <>
+      <input ref={camera} type="file" accept="image/*" capture="environment" className="hidden"
+             onChange={(e) => send(e.target.files?.[0])} />
+      <input ref={picker} type="file" accept="image/*,application/pdf,.heic" className="hidden"
+             onChange={(e) => send(e.target.files?.[0])} />
+    </>
+  );
+
+  if (step.at === "camera") {
+    return (
+      <>
+        {inputs}
+        <Camera onPhoto={send} onCancel={() => setStep({ at: "pick" })} onChooseFile={() => picker.current?.click()} />
+      </>
+    );
+  }
+
   if (step.at === "pick") {
     return (
       <div className="flex flex-col gap-4">
@@ -77,25 +99,25 @@ export function PaperworkIntake({
           Take a photo of {dogName}&apos;s paperwork, or of the owner&apos;s phone screen. If they emailed it, choose
           the file instead. The copy is kept with {dogName}&apos;s records.
         </p>
-        {/* Two inputs: on a tablet, capture opens the camera; the other offers files. */}
-        <input ref={camera} type="file" accept="image/*" capture="environment" className="hidden"
-               onChange={(e) => send(e.target.files?.[0])} />
-        <input ref={picker} type="file" accept="image/*,application/pdf,.heic" className="hidden"
-               onChange={(e) => send(e.target.files?.[0])} />
+        {inputs}
         <div className="flex flex-wrap gap-3">
-          <Button size="lg" disabled={busy} onClick={() => camera.current?.click()}>
+          <Button size="lg" disabled={busy}
+                  onClick={() => wantsLiveCamera() ? setStep({ at: "camera" }) : camera.current?.click()}>
             {busy ? "Saving…" : "Take a photo"}
           </Button>
           <Button variant="outline" size="lg" disabled={busy} onClick={() => picker.current?.click()}>
             Choose a file
           </Button>
+          <Button variant="outline" size="lg" disabled={busy} onClick={() => setStep({ at: "typed" })}>
+            Type the dates in
+          </Button>
           <Button variant="ghost" size="lg" disabled={busy} onClick={onClose}>{cancelLabel}</Button>
         </div>
+        <p className="-mt-2 text-sm text-muted-foreground">
+          No copy to keep? <span className="font-medium text-foreground">Type the dates in</span> without one;
+          a manager verifies them later.
+        </p>
         {problem}
-        <button className="self-start text-sm text-muted-foreground underline-offset-2 hover:underline"
-                onClick={() => setStep({ at: "typed" })}>
-          No copy to keep? Type the dates in without one (a manager verifies them later)
-        </button>
       </div>
     );
   }
@@ -126,7 +148,8 @@ export function PaperworkIntake({
           <CopyPreview documentId={copy.document_id} mimeType={copy.mime_type} small />
           <p className="text-sm text-muted-foreground">
             <span className="block font-medium text-ok">Copy saved.</span>
-            {copy.saved_size && copy.original_bytes > copy.saved_bytes
+            {/* Only when it was actually made smaller, not just re-saved. */}
+            {copy.saved_size && copy.original_size && copy.saved_size[0] < copy.original_size[0]
               ? `Shrunk from ${mb(copy.original_bytes)} to ${mb(copy.saved_bytes)} to save space.`
               : `${mb(copy.saved_bytes)}.`}
           </p>
