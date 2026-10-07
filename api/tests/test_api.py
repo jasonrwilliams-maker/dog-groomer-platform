@@ -388,3 +388,78 @@ def test_a_copy_shots_were_checked_against_stays(client):
     r = client.post(f"/dogs/{jaddi}/paperwork/{rabies['hand_checked']['document_id']}/remove",
                     json={"groomer_id": groomer(client)})
     assert r.status_code == 409 and r.json()["code"] == "GR029"
+
+
+class FakeReply:
+    """What the SDK's final message looks like, enough for app/reader.py."""
+    def __init__(self, text: str, stop_reason: str = "end_turn"):
+        self.content = [type("Block", (), {"type": "text", "text": text})()]
+        self.stop_reason = stop_reason
+        self.model = "claude-test-1"
+        self.usage = type("Usage", (), {"input_tokens": 1200, "output_tokens": 800})()
+
+
+def fake_reading(term_2: str = "Kennel Cough Nasal") -> str:
+    import json
+    line = lambda n, term, given, expires: {
+        "n": n, "term": term, "source_region": None, "administered_on_raw": given, "administered_on": given,
+        "expires_on_raw": expires, "expires_on": expires}
+    given = (date.today() - timedelta(days=7)).isoformat()
+    return json.dumps({
+        "document": {}, "clinic": {"name": "Harbor Vet"}, "owner": {}, "patient": {"name": "Gus"},
+        "line_items": [line(1, "Rabies Vaccine 3 Year", given, (date.today() + timedelta(days=1088)).isoformat()),
+                       line(2, term_2, given, (date.today() + timedelta(days=358)).isoformat())]})
+
+
+def test_the_ai_fills_the_form_in_and_what_is_saved_grades_it(client, monkeypatch):
+    from app import reader
+    gus = dog_named(client, "Gus")["id"]
+    tanya = groomer(client)
+    monkeypatch.setenv("EXTRACTION_MODEL", "claude-test")
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    sent = {}
+    def fake_call(name, system, content):
+        sent.update(name=name, kinds=[b["type"] for b in content], system=system)
+        return FakeReply(fake_reading())
+    monkeypatch.setattr(reader, "call_model", fake_call)
+
+    assert client.get("/ai/status").json()["available"] is True
+    doc = client.post(f"/dogs/{gus}/paperwork", data={"groomer_id": tanya},
+                      files={"files": ("emailed.pdf", two_page_pdf(), "application/pdf")}).json()["document_id"]
+    assert client.get(f"/paperwork/{doc}/ai").json() == {"reading": None}
+
+    state = client.post(f"/paperwork/{doc}/ai", json={"groomer_id": tanya}).json()
+    assert sent["kinds"] == ["document"], "an emailed PDF goes to the model as a PDF"
+    assert "Transcribe" in sent["system"] or len(sent["system"]) > 1000, "the harness's prompt"
+    rabies = state["suggestions"]["rabies"]
+    assert rabies["expires_on"] == (date.today() + timedelta(days=1088)).isoformat()
+    assert [u["term"] for u in state["unfamiliar"]] == ["Kennel Cough Nasal"]
+
+    state = client.post(f"/paperwork/{doc}/ai/terms",
+                        json={"groomer_id": tanya, "term": "Kennel Cough Nasal", "vaccine": "bordetella"}).json()
+    assert "bordetella" in state["suggestions"] and state["unfamiliar"] == []
+
+    # Rabies saved one day off what the AI read; Bordetella said not to be there.
+    saved = client.post(f"/dogs/{gus}/checked-shots", json={
+        "groomer_id": tanya, "document_id": doc, "vaccine": "rabies",
+        "administered_on": rabies["administered_on"], "expires_on": (date.today() + timedelta(days=1087)).isoformat(),
+        "ai_extraction_id": state["reading"]["id"], "ai_line_item_id": rabies["line_item_id"]})
+    assert saved.status_code == 201, saved.text
+    asked = client.post(f"/dogs/{gus}/ask-owner", json={
+        "groomer_id": tanya, "vaccine": "bordetella",
+        "ai_extraction_id": state["reading"]["id"], "ai_line_item_id": state["suggestions"]["bordetella"]["line_item_id"]})
+    assert asked.status_code == 201, asked.text
+
+    score = {r["copy_kind"]: r for r in client.get("/admin/ai-accuracy").json()}
+    assert score["pdf"]["right_first_time"] == 1 and score["pdf"]["read_wrong"] == 1
+    assert score["pdf"]["made_up"] == 2
+
+
+def test_the_ai_says_plainly_when_it_is_not_set_up(client, monkeypatch):
+    monkeypatch.delenv("EXTRACTION_MODEL", raising=False)
+    olive = dog_named(client, "Olive")["id"]
+    doc = client.post(f"/dogs/{olive}/paperwork", data={"groomer_id": groomer(client)},
+                      files={"files": ("p.jpg", tablet_photo(800, 600), "image/jpeg")}).json()["document_id"]
+    assert client.get("/ai/status").json()["available"] is False
+    r = client.post(f"/paperwork/{doc}/ai", json={"groomer_id": groomer(client)})
+    assert r.status_code == 503 and "isn't set up" in r.json()["detail"]

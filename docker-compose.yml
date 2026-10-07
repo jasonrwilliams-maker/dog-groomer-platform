@@ -71,6 +71,7 @@ services:
   api:
     build:
       context: ./api
+    env_file: .env                  # ANTHROPIC_API_KEY and EXTRACTION_MODEL, for "Have the AI read it"
     environment:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/grooming_demo
       PGHOST: db                    # psql, for building the demo database

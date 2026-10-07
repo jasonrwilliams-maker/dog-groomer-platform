@@ -58,10 +58,36 @@ export type ReceivedCopy = {
 export type WaitingCopy = {
   document_id: string; dog_id: string; dog: string; owner: string; mime_type: string;
   page_count: number | null; received_by: string; received_at: string;
+  /** The AI has read it, so the form will come filled in. */
+  ai_read: boolean;
 };
 export type HandChecked = {
   id: string; dog_id: string; dog: string; owner: string; vaccine: string; administered_on: string;
   expires_on: string; document_id: string; mime_type: string; checked_by: string; checked_at: string;
+};
+
+/** What the AI read for one vaccine, to fill the form in from. */
+export type AiSuggestion = {
+  vaccine_code: string; line_item_id: string; term: string;
+  administered_on: string | null; administered_on_raw: string | null;
+  expires_on: string | null; expires_on_raw: string | null;
+  /** The page prints less than a full date, or nothing, behind the date the AI gave. */
+  given_doubtful: boolean; expires_doubtful: boolean;
+};
+/** A name the AI found that nobody has said which vaccine it is. */
+export type AiUnfamiliar = { line_item_id: string; term: string; administered_on_raw: string | null; expires_on_raw: string | null };
+export type AiState =
+  | { reading: null }
+  | {
+      reading: { id: string; extracted_at: string; model_version: string; status: string; failed: boolean };
+      suggestions: Record<string, AiSuggestion>;
+      unfamiliar: AiUnfamiliar[];
+    };
+/** Which AI reading, and which of its lines, a saved vaccine answers. */
+export type AiVerdict = { ai_extraction_id: string; ai_line_item_id: string | null };
+export type AiAccuracy = {
+  copy_kind: "photo" | "pdf"; readings: number; dates_checked: number;
+  right_first_time: number; read_wrong: number; missed: number; made_up: number;
 };
 
 /** Where the screen shows a copy from. */
@@ -183,6 +209,15 @@ export const api = {
     post<{ owner_id: string; dog_id: string }>("/walk-ins", {
       groomer_id: groomerId, dog, ...("id" in owner ? { owner_id: owner.id } : { owner }),
     }),
+  aiStatus: () => get<{ available: boolean; why_not: string | null }>("/ai/status"),
+  aiState: (documentId: string) => get<AiState>(`/paperwork/${documentId}/ai`),
+  /** Send the copy to the AI. Up to a minute or so. */
+  aiRead: (documentId: string, groomerId: string) =>
+    post<AiState>(`/paperwork/${documentId}/ai`, { groomer_id: groomerId }),
+  /** Say which vaccine a name the AI found is (null: not one the shop tracks). */
+  ruleOnTerm: (documentId: string, groomerId: string, term: string, vaccine: string | null) =>
+    post<AiState>(`/paperwork/${documentId}/ai/terms`, { groomer_id: groomerId, term, vaccine }),
+  aiAccuracy: () => get<AiAccuracy[]>("/admin/ai-accuracy"),
   addShot: (dogId: string, groomerId: string, vaccine: string, administeredOn: string | null, expiresOn: string | null) =>
     post<{ id: string }>(`/dogs/${dogId}/shots`, {
       groomer_id: groomerId, vaccine, administered_on: administeredOn, expires_on: expiresOn,
@@ -203,13 +238,14 @@ export const api = {
     post<{ removed: boolean }>(`/dogs/${dogId}/paperwork/${documentId}/remove`, { groomer_id: groomerId }),
   /** A shot typed in while reading the photo: verified, and marked checked by hand. */
   addCheckedShot: (dogId: string, groomerId: string, documentId: string, vaccine: string,
-                   administeredOn: string | null, expiresOn: string | null) =>
+                   administeredOn: string | null, expiresOn: string | null, ai?: AiVerdict) =>
     post<{ id: string }>(`/dogs/${dogId}/checked-shots`, {
       groomer_id: groomerId, document_id: documentId, vaccine, administered_on: administeredOn, expires_on: expiresOn,
+      ...ai,
     }),
   /** A vaccine the paperwork doesn't show: the shop asks the owner for it. */
-  askOwner: (dogId: string, groomerId: string, vaccine: string) =>
-    post<{ id: string }>(`/dogs/${dogId}/ask-owner`, { groomer_id: groomerId, vaccine }),
+  askOwner: (dogId: string, groomerId: string, vaccine: string, ai?: AiVerdict) =>
+    post<{ id: string }>(`/dogs/${dogId}/ask-owner`, { groomer_id: groomerId, vaccine, ...ai }),
   paperworkDone: (dogId: string, documentId: string, groomerId: string) =>
     post<{ done: boolean }>(`/dogs/${dogId}/paperwork/${documentId}/done`, { groomer_id: groomerId }),
   paperworkWaiting: () => get<WaitingCopy[]>("/admin/paperwork"),

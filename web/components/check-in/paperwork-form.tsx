@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { api, Refusal, type WalkInOptions } from "@/lib/api";
-import { cn } from "@/lib/utils";
+import { api, Refusal, type AiState, type AiSuggestion, type AiVerdict, type WalkInOptions } from "@/lib/api";
+import { cn, formatDate } from "@/lib/utils";
 import { useIsManager } from "@/lib/viewer";
 
 // The vaccines and choices the forms offer change only when the shop's
@@ -30,7 +30,7 @@ const blank: Line = { given: "", expires: "", saved: false, asked: false, refusa
 /** One line per vaccine the shop tracks: the two dates, typed off the paper.
  *  With a documentId, they are being read off a photo of it, and count as
  *  verified (checked by hand); without one, they await a manager. */
-export function PaperworkForm({ dogId, dogName, groomerId, documentId, onSaved, onClose, closeLabel = "Done", actions }: {
+export function PaperworkForm({ dogId, dogName, groomerId, documentId, onSaved, onClose, closeLabel = "Done", actions, ai }: {
   dogId: string;
   dogName: string;
   groomerId: string;
@@ -40,6 +40,8 @@ export function PaperworkForm({ dogId, dogName, groomerId, documentId, onSaved, 
   closeLabel?: string;
   /** More buttons for the same row, after the form's own. */
   actions?: React.ReactNode;
+  /** What the AI read off the copy: it fills the form in, and what is saved grades it. */
+  ai?: AiState;
 }) {
   const manager = useIsManager();
   const opts = useWalkInOptions();
@@ -51,6 +53,27 @@ export function PaperworkForm({ dogId, dogName, groomerId, documentId, onSaved, 
   const set = (code: string, patch: Partial<Line>) =>
     setLines((ls) => ({ ...ls, [code]: { ...(ls[code] ?? blank), ...patch } }));
 
+  // The AI's reading fills in every line nobody has started on.
+  const reading = ai && ai.reading && !ai.reading.failed ? ai : null;
+  const suggestion = (code: string): AiSuggestion | undefined => reading?.suggestions[code];
+  useEffect(() => {
+    if (!reading) return;
+    setLines((ls) => {
+      const next = { ...ls };
+      for (const [code, sug] of Object.entries(reading.suggestions)) {
+        const l = next[code] ?? blank;
+        if (l.saved || l.asked || l.given || l.expires) continue;
+        next[code] = { ...l, given: sug.administered_on ?? "", expires: sug.expires_on ?? "" };
+      }
+      return next;
+    });
+    // Filled again only when the reading or the names it knows change.
+  }, [reading?.reading.id, Object.keys(reading?.suggestions ?? {}).join()]);
+
+  /** What this vaccine's save says about the AI: which reading, which of its lines (none: it missed it). */
+  const verdict = (code: string): AiVerdict | undefined =>
+    reading ? { ai_extraction_id: reading.reading.id, ai_line_item_id: suggestion(code)?.line_item_id ?? null } : undefined;
+
   const toSave = (opts?.vaccines ?? []).filter((v) => {
     const l = line(v.code);
     return !l.saved && !l.asked && (l.given || l.expires);
@@ -59,7 +82,7 @@ export function PaperworkForm({ dogId, dogName, groomerId, documentId, onSaved, 
   async function ask(code: string) {
     set(code, { refusal: null, error: null });
     try {
-      await api.askOwner(dogId, groomerId, code);
+      await api.askOwner(dogId, groomerId, code, verdict(code));
       set(code, { asked: true, given: "", expires: "" });
       onSaved();
     } catch (e) {
@@ -76,7 +99,7 @@ export function PaperworkForm({ dogId, dogName, groomerId, documentId, onSaved, 
       set(v.code, { refusal: null, error: null });
       try {
         await (documentId
-          ? api.addCheckedShot(dogId, groomerId, documentId, v.code, l.given || null, l.expires || null)
+          ? api.addCheckedShot(dogId, groomerId, documentId, v.code, l.given || null, l.expires || null, verdict(v.code))
           : api.addShot(dogId, groomerId, v.code, l.given || null, l.expires || null));
         set(v.code, { saved: true });
         any = true;
@@ -142,11 +165,13 @@ export function PaperworkForm({ dogId, dogName, groomerId, documentId, onSaved, 
                       <span className="text-muted-foreground">Given</span>
                       <Input type="date" max={today} value={l.given}
                              onChange={(e) => set(v.code, { given: e.target.value, refusal: null })} />
+                      <AiHint sug={suggestion(v.code)} value={l.given} which="given" />
                     </label>
                     <label className="flex flex-col gap-1 text-sm">
                       <span className="text-muted-foreground">Expires</span>
                       <Input type="date" value={l.expires}
                              onChange={(e) => set(v.code, { expires: e.target.value, refusal: null })} />
+                      <AiHint sug={suggestion(v.code)} value={l.expires} which="expires" />
                     </label>
                   </div>
                 )}
@@ -171,5 +196,29 @@ export function PaperworkForm({ dogId, dogName, groomerId, documentId, onSaved, 
         {actions}
       </div>
     </div>
+  );
+}
+
+/** Under a date the AI had something to say about: that it filled it in, what
+ *  it read if the date has since been changed, and when to look closer. */
+function AiHint({ sug, value, which }: { sug?: AiSuggestion; value: string; which: "given" | "expires" }) {
+  if (!sug) return null;
+  const read = which === "given" ? sug.administered_on : sug.expires_on;
+  const raw = which === "given" ? sug.administered_on_raw : sug.expires_on_raw;
+  const doubtful = which === "given" ? sug.given_doubtful : sug.expires_doubtful;
+  if (!read) {
+    return raw
+      ? <span className="text-xs text-warn">AI saw &ldquo;{raw}&rdquo;, which isn&apos;t a full date. Check the page.</span>
+      : null;
+  }
+  if (value !== read) {
+    return <span className="text-xs text-muted-foreground">AI read {formatDate(read)}</span>;
+  }
+  return doubtful ? (
+    <span className="text-xs text-warn">
+      AI filled this in, but the page {raw ? <>prints &ldquo;{raw}&rdquo;</> : "doesn't print a date here"}. Check closely.
+    </span>
+  ) : (
+    <span className="text-xs text-primary">AI filled this in · check it against the page</span>
   );
 }

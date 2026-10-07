@@ -2,9 +2,10 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { AiPanel } from "@/components/check-in/ai-panel";
 import { Camera, wantsLiveCamera } from "@/components/check-in/camera";
 import { PaperworkForm } from "@/components/check-in/paperwork-form";
-import { api, pageUrl, paperworkUrl, Refusal, type ReceivedCopy } from "@/lib/api";
+import { api, pageUrl, paperworkUrl, Refusal, type AiState, type ReceivedCopy } from "@/lib/api";
 import { useIsManager } from "@/lib/viewer";
 
 type Step =
@@ -47,6 +48,13 @@ export function PaperworkIntake({
   const [step, setStep] = useState<Step>(resume ? { at: "check", ...resume } : { at: "pick" });
   // Bumped when a page is taken out, so the pages are fetched again.
   const [pagesVersion, setPagesVersion] = useState(0);
+  // What the AI has read off the copy being checked, if anyone asked it to.
+  const checkingId = step.at === "check" ? step.documentId : null;
+  const [aiState, setAiState] = useState<AiState | null>(null);
+  useEffect(() => {
+    setAiState(null);
+    if (checkingId) api.aiState(checkingId).then(setAiState).catch(() => setAiState({ reading: null }));
+  }, [checkingId]);
   const [pending, setPending] = useState<Pending[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -293,7 +301,8 @@ export function PaperworkIntake({
       <CopyPages documentId={step.documentId} version={pagesVersion}
                  onRemovePage={busy ? undefined : (n) => removePage(step.documentId, n)} />
       {problem}
-      <PaperworkForm dogId={dogId} dogName={dogName} groomerId={groomerId} documentId={step.documentId}
+      <AiPanel documentId={step.documentId} groomerId={groomerId} state={aiState} onState={setAiState} />
+      <PaperworkForm dogId={dogId} dogName={dogName} groomerId={groomerId} documentId={step.documentId} ai={aiState ?? undefined}
                      onSaved={onChanged} onClose={() => done(step.documentId)} closeLabel={closeLabel ?? "Done checking"}
                      actions={<>
                        <Button variant="outline" size="lg" disabled={busy} onClick={onClose}>Save for later</Button>

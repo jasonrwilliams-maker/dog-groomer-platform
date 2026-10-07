@@ -6,7 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { CopyPages, PaperworkIntake } from "@/components/check-in/paperwork-intake";
 import {
-  api, paperworkUrl, type ComplianceLine, type ComplianceSummary, type HandChecked, type Review, type WaitingCopy,
+  api, paperworkUrl, type AiAccuracy, type ComplianceLine, type ComplianceSummary, type HandChecked, type Review,
+  type WaitingCopy,
 } from "@/lib/api";
 import { formatDate } from "@/lib/utils";
 
@@ -35,12 +36,14 @@ export function AdminView({ groomerId, onOpenDog }: { groomerId: string; onOpenD
   const [waiting, setWaiting] = useState<WaitingCopy[]>([]);
   const [handChecked, setHandChecked] = useState<HandChecked[]>([]);
   const [checking, setChecking] = useState<WaitingCopy | null>(null);
+  const [aiScore, setAiScore] = useState<AiAccuracy[]>([]);
 
   const fail = (e: { message?: string }) => setProblem(String(e.message ?? e));
   const loadReviews = () => api.reviews().then(setReviews).catch(fail);
   const loadPaperwork = () => {
     api.paperworkWaiting().then(setWaiting).catch(fail);
     api.handChecked().then(setHandChecked).catch(fail);
+    api.aiAccuracy().then(setAiScore).catch(fail);
     api.compliance().then(setSummary).catch(fail);
   };
   useEffect(() => {
@@ -117,7 +120,10 @@ export function AdminView({ groomerId, onOpenDog }: { groomerId: string; onOpenD
                     <span>
                       <button className="font-medium hover:underline" onClick={() => onOpenDog(w.dog_id)}>{w.dog}</button>
                       <span className="text-muted-foreground"> · {w.owner}</span>
-                      <span className="block text-sm text-muted-foreground">Received by {w.received_by}, {when(w.received_at)}</span>
+                      <span className="block text-sm text-muted-foreground">
+                        Received by {w.received_by}, {when(w.received_at)}
+                        {w.ai_read && <span className="ml-2 font-medium text-primary">· AI has read it</span>}
+                      </span>
                     </span>
                   </span>
                   <span className="flex gap-2">
@@ -175,6 +181,8 @@ export function AdminView({ groomerId, onOpenDog }: { groomerId: string; onOpenD
         </Card>
       )}
 
+      <AiScoreboard rows={aiScore} />
+
       {reviews.length > 0 && (
         <Card className="border-warn/40">
           <CardHeader>
@@ -217,6 +225,51 @@ export function AdminView({ groomerId, onOpenDog }: { groomerId: string; onOpenD
         <p className="text-muted-foreground">Every dog&apos;s vaccinations are in order.</p>
       )}
     </div>
+  );
+}
+
+/** How the AI has done on real paperwork, graded by whoever checked each copy. */
+function AiScoreboard({ rows }: { rows: AiAccuracy[] }) {
+  const kinds = { pdf: "Emailed PDFs", photo: "Photos" } as const;
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>How the AI is doing</CardTitle>
+        <p className="text-sm text-muted-foreground">
+          Every copy checked after the AI read it is a graded example: the dates it got right, read wrong, missed,
+          or made up. This is the shop&apos;s own measure, from its own customers&apos; paperwork.
+        </p>
+      </CardHeader>
+      <CardContent>
+        {rows.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            Nothing graded yet. Use &ldquo;Have the AI read it&rdquo; when checking a copy, and the score starts here.
+          </p>
+        ) : (
+          <ul className="flex flex-col divide-y divide-border">
+            {rows.map((r) => {
+              const graded = r.right_first_time + r.read_wrong + r.missed + r.made_up;
+              const pct = graded ? Math.round((100 * r.right_first_time) / graded) : 0;
+              return (
+                <li key={r.copy_kind} className="flex flex-wrap items-baseline justify-between gap-2 py-2.5">
+                  <span>
+                    <span className="font-medium">{kinds[r.copy_kind]}</span>
+                    <span className="text-muted-foreground"> · {r.readings} {r.readings === 1 ? "copy" : "copies"} read</span>
+                    <span className="block text-sm text-muted-foreground">
+                      {r.right_first_time} right · {r.read_wrong} read wrong · {r.missed} missed · {r.made_up} made up
+                    </span>
+                  </span>
+                  <span className={`text-2xl font-semibold ${pct >= 95 ? "text-ok" : pct >= 80 ? "text-warn" : "text-stop"}`}>
+                    {graded ? `${pct}%` : "—"}
+                    <span className="block text-right text-xs font-normal text-muted-foreground">dates right</span>
+                  </span>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 

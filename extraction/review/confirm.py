@@ -101,6 +101,8 @@ def extractions() -> list[dict]:
           LEFT JOIN groomer g                     ON g.id = c.confirmed_by
           LEFT JOIN dog dg                        ON dg.id = c.dog_id
          WHERE e.status IN ('needs_review', 'accepted')
+           -- A reading made at the counter is confirmed there, by saving (section 27).
+           AND NOT e.read_at_counter
          ORDER BY (e.status = 'needs_review') DESC, e.extracted_at DESC""")
 
 
