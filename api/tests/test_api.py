@@ -331,3 +331,12 @@ def test_a_checked_shot_needs_the_photo_on_file(client):
         "vaccine": "rabies", "administered_on": (date.today() - timedelta(days=5)).isoformat(),
         "expires_on": (date.today() + timedelta(days=360)).isoformat()})
     assert r.status_code == 409 and r.json()["code"] == "GR027"
+
+
+def test_a_vaccine_not_on_the_paperwork_is_asked_for_and_shows_on_the_card(client):
+    gus = dog_named(client, "Gus")["id"]
+    r = client.post(f"/dogs/{gus}/ask-owner", json={"groomer_id": groomer(client), "vaccine": "bordetella"})
+    assert r.status_code == 201, r.text
+    card = client.get(f"/dogs/{gus}").json()
+    asked = [p for p in card["paperwork_requests"] if p["vaccine"] == "Bordetella"]
+    assert asked and asked[0]["channel"] == "verbal_at_counter" and asked[0]["next_reminder_on"]

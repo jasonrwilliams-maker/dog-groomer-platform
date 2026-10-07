@@ -582,6 +582,19 @@ def checked_shot(dog_id: UUID, body: CheckedShot):
                    body.groomer_id), "No active dog with that id.")
 
 
+class AskOwner(BaseModel):
+    groomer_id: UUID
+    vaccine: str
+
+
+@app.post("/dogs/{dog_id}/ask-owner", status_code=201)
+def ask_owner(dog_id: UUID, body: AskOwner):
+    """A vaccine the owner's paperwork doesn't show: recorded as asked for at
+    the counter, and followed up by the shop's reminders."""
+    return _write("SELECT ask_owner_at_counter(%s, %s, %s) AS id", (dog_id, body.vaccine, body.groomer_id),
+                  "No active dog with that id.")
+
+
 @app.post("/dogs/{dog_id}/paperwork/{document_id}/done")
 def paperwork_done(dog_id: UUID, document_id: UUID, body: Reviewer):
     _write("SELECT finish_paperwork_check(%s, %s, %s) AS ok", (document_id, dog_id, body.groomer_id))

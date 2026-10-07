@@ -20,13 +20,19 @@ const mb = (bytes: number) => bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).
  * leave it for a manager. Opened on a copy already waiting (`resume`), it goes
  * straight to checking.
  */
-export function PaperworkIntake({ dogId, dogName, groomerId, resume, onChanged, onClose }: {
+export function PaperworkIntake({
+  dogId, dogName, groomerId, resume, onChanged, onClose, cancelLabel = "Cancel", closeLabel,
+}: {
   dogId: string;
   dogName: string;
   groomerId: string;
   resume?: { documentId: string; mimeType: string };
   onChanged: () => void;
   onClose: () => void;
+  /** The way out before any copy is taken. */
+  cancelLabel?: string;
+  /** The way out once the dates are in. */
+  closeLabel?: string;
 }) {
   const [step, setStep] = useState<Step>(resume ? { at: "check", ...resume } : { at: "pick" });
   const [busy, setBusy] = useState(false);
@@ -83,7 +89,7 @@ export function PaperworkIntake({ dogId, dogName, groomerId, resume, onChanged, 
           <Button variant="outline" size="lg" disabled={busy} onClick={() => picker.current?.click()}>
             Choose a file
           </Button>
-          <Button variant="ghost" size="lg" disabled={busy} onClick={onClose}>Cancel</Button>
+          <Button variant="ghost" size="lg" disabled={busy} onClick={onClose}>{cancelLabel}</Button>
         </div>
         {problem}
         <button className="self-start text-sm text-muted-foreground underline-offset-2 hover:underline"
@@ -95,7 +101,8 @@ export function PaperworkIntake({ dogId, dogName, groomerId, resume, onChanged, 
   }
 
   if (step.at === "typed") {
-    return <PaperworkForm dogId={dogId} dogName={dogName} groomerId={groomerId} onSaved={onChanged} onClose={onClose} />;
+    return <PaperworkForm dogId={dogId} dogName={dogName} groomerId={groomerId} onSaved={onChanged} onClose={onClose}
+                          closeLabel={closeLabel} />;
   }
 
   if (step.at === "later") {
@@ -153,7 +160,7 @@ export function PaperworkIntake({ dogId, dogName, groomerId, resume, onChanged, 
       <div className="grid gap-4 lg:grid-cols-2">
         <CopyPreview documentId={step.documentId} mimeType={step.mimeType} />
         <PaperworkForm dogId={dogId} dogName={dogName} groomerId={groomerId} documentId={step.documentId}
-                       onSaved={onChanged} onClose={() => done(step.documentId)} closeLabel="Done checking" />
+                       onSaved={onChanged} onClose={() => done(step.documentId)} closeLabel={closeLabel ?? "Done checking"} />
       </div>
       {problem}
       <button className="self-start text-sm text-muted-foreground underline-offset-2 hover:underline"

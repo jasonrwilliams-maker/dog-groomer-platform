@@ -196,6 +196,9 @@ export const api = {
     post<{ id: string }>(`/dogs/${dogId}/checked-shots`, {
       groomer_id: groomerId, document_id: documentId, vaccine, administered_on: administeredOn, expires_on: expiresOn,
     }),
+  /** A vaccine the paperwork doesn't show: the shop asks the owner for it. */
+  askOwner: (dogId: string, groomerId: string, vaccine: string) =>
+    post<{ id: string }>(`/dogs/${dogId}/ask-owner`, { groomer_id: groomerId, vaccine }),
   paperworkDone: (dogId: string, documentId: string, groomerId: string) =>
     post<{ done: boolean }>(`/dogs/${dogId}/paperwork/${documentId}/done`, { groomer_id: groomerId }),
   paperworkWaiting: () => get<WaitingCopy[]>("/admin/paperwork"),

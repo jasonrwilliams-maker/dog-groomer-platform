@@ -1,7 +1,7 @@
 -- Paperwork at the counter: a photo of the owner's paperwork is kept with the
 -- dog, and a shot typed in while reading it counts as verified.
 --
--- Eight things are proven:
+-- Nine things are proven:
 --   1. A copy taken at the counter is filed against the owner and the dog,
 --      and waits on the manager's list; the same file twice is one copy.
 --   2. A shot cannot be checked by hand against a copy that is not on file
@@ -15,10 +15,13 @@
 --      checked against one.
 --   7. Done with a copy takes it off the list; receiving it again puts it back.
 --   8. Nothing is marked checked by hand without a photo behind it.
+--   9. A vaccine the paperwork does not show is asked for at the counter: one
+--      open request, followed up by the reminders; nothing to ask for when a
+--      current record is on file.
 
 BEGIN;
 SET search_path = groom, public;
-SELECT plan(22);
+SELECT plan(27);
 
 CREATE TEMP TABLE t_owner AS
 SELECT add_client('Rosa', 'Diaz', '410-555-0400', NULL, '00000000-0000-0000-0000-00000000b002') AS id;
@@ -154,6 +157,37 @@ SELECT throws_ok(
   $$ UPDATE vaccination_record SET verification_status = 'unverified', verified_by = NULL, verified_at = NULL
       WHERE id = (SELECT id FROM t_bord) $$,
   '23514', NULL, 'Nor be checked by hand and unverified at once');
+
+-- --- 9. Not on the paperwork -----------------------------------------------------------------------------------
+CREATE TEMP TABLE t_ask AS
+SELECT ask_owner_at_counter((SELECT id FROM t_dog), 'leptospirosis', '00000000-0000-0000-0000-00000000b002') AS id;
+
+SELECT results_eq(
+  $$ SELECT channel::text, status::text, next_reminder_on FROM record_request WHERE id = (SELECT id FROM t_ask) $$,
+  $$ SELECT 'verbal_at_counter'::text, 'sent'::text, CURRENT_DATE + reminder_interval_days() $$,
+  'A vaccine not on the paperwork is asked for at the counter, with a reminder due');
+
+SELECT is(
+  ask_owner_at_counter((SELECT id FROM t_dog), 'leptospirosis', '00000000-0000-0000-0000-00000000b001'),
+  (SELECT id FROM t_ask), 'Asking twice is the same request');
+
+SELECT throws_ok(
+  $$ SELECT ask_owner_at_counter((SELECT id FROM t_dog), 'rabies', '00000000-0000-0000-0000-00000000b002') $$,
+  '23514', NULL, 'There is nothing to ask for when a current record is on file');
+
+CREATE TEMP TABLE t_dog2 AS
+SELECT add_dog((SELECT id FROM t_owner), 'Salt', NULL, 'curly', 'male', NULL,
+               '00000000-0000-0000-0000-00000000b002') AS id;
+SELECT ask_owner_at_counter((SELECT id FROM t_dog2), 'rabies', '00000000-0000-0000-0000-00000000b002');
+
+SELECT is(
+  (SELECT state::text FROM v_check_in_vaccine WHERE dog_id = (SELECT id FROM t_dog2) AND vaccine_code = 'rabies'),
+  'requested_pending', 'The card reads "Requested, awaiting response"');
+
+SELECT is(
+  (SELECT count(*) FROM audit_log WHERE entity_type = 'record_request' AND actor_label = 'Tanya'
+      AND changed_fields ->> 'reason' = 'not on the paperwork'),
+  2::bigint, 'And who asked is audited');
 
 SELECT * FROM finish();
 ROLLBACK;

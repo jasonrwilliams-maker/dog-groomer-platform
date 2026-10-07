@@ -28,6 +28,12 @@
 -- section 22). Those stay "awaiting verification": there is nothing on file to
 -- have verified them against.
 --
+-- And a vaccine the paperwork does not show at all is not a dead end: the
+-- groomer says so (ask_owner_at_counter()), which records that the shop asked
+-- the owner for it at the counter. The card and the manager's list show it as
+-- requested, and the shop's reminders follow it up after reminder_interval_days
+-- like any other request. The rest of what the owner brought is saved as usual.
+--
 --   GR027  a shot checked by hand against a copy that is not on file for
 --          this dog
 --   GR028  a second look given by someone who is not a manager
@@ -248,3 +254,67 @@ SELECT vr.id, vr.dog_id, d.name AS dog, o.first_name || ' ' || o.last_name AS ow
   JOIN groomer g       ON g.id = vr.verified_by
  WHERE vr.checked_by_hand AND vr.second_look_at IS NULL AND d.is_active
  ORDER BY vr.verified_at;
+
+-- -----------------------------------------------------------------------------
+-- Not on the paperwork: ask the owner for it
+--
+-- Asking at the counter is the first ask, so it counts as one: the reminder
+-- schedule (section 19) picks it up after reminder_interval_days, by email or
+-- text where the owner has agreed to that, and gives up after max_reminders.
+-- Asking again while a request is open is the same request.
+-- -----------------------------------------------------------------------------
+
+CREATE FUNCTION ask_owner_at_counter(p_dog_id uuid, p_vaccine_code text, p_asked_by uuid)
+RETURNS uuid LANGUAGE plpgsql AS $$
+DECLARE
+    v_dog      record;
+    v_vaccine  record;
+    v_actor    text;
+    v_current  date;
+    v_id       uuid;
+BEGIN
+    SELECT d.id, d.owner_id INTO v_dog FROM dog d WHERE d.id = p_dog_id AND d.is_active;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Dog % is not an active client', p_dog_id;
+    END IF;
+    SELECT g.display_name INTO v_actor FROM groomer g WHERE g.id = p_asked_by;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'No such groomer: %', p_asked_by USING ERRCODE = 'foreign_key_violation';
+    END IF;
+    SELECT vt.id, vt.name INTO v_vaccine FROM vaccine_type vt WHERE vt.code = p_vaccine_code;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'Unknown vaccine: %', p_vaccine_code USING ERRCODE = 'check_violation';
+    END IF;
+
+    SELECT max(vr.expires_on) INTO v_current FROM vaccination_record vr
+     WHERE vr.dog_id = p_dog_id AND vr.vaccine_type_id = v_vaccine.id
+       AND vr.expires_on >= CURRENT_DATE AND vr.verification_status <> 'disputed';
+    IF v_current IS NOT NULL THEN
+        RAISE EXCEPTION '%: already on file, current until %', v_vaccine.name, v_current
+            USING ERRCODE = 'check_violation',
+                  HINT = 'Nothing to ask the owner for. Leave this line blank.';
+    END IF;
+
+    SELECT rr.id INTO v_id FROM record_request rr
+     WHERE rr.dog_id = p_dog_id AND rr.vaccine_type_id = v_vaccine.id
+       AND rr.status IN ('queued', 'sent', 'responded', 'insufficient')
+     ORDER BY rr.created_at DESC LIMIT 1;
+    IF FOUND THEN
+        RETURN v_id;
+    END IF;
+
+    INSERT INTO record_request (dog_id, owner_id, vaccine_type_id, channel, status, reminder_count,
+                                next_reminder_on, created_by)
+    VALUES (p_dog_id, v_dog.owner_id, v_vaccine.id, 'verbal_at_counter', 'sent', 1,
+            CURRENT_DATE + reminder_interval_days(), p_asked_by)
+    RETURNING id INTO v_id;
+
+    INSERT INTO audit_log (actor_id, actor_label, action, entity_type, entity_id, changed_fields)
+    VALUES (p_asked_by, v_actor, 'create', 'record_request', v_id,
+            jsonb_build_object('source', 'counter', 'vaccine', p_vaccine_code, 'reason', 'not on the paperwork'));
+    RETURN v_id;
+END $$;
+
+COMMENT ON FUNCTION ask_owner_at_counter(uuid, text, uuid) IS
+  'A vaccine the owner''s paperwork does not show: recorded as asked for at the '
+  'counter, and followed up by the shop''s reminders like any other request.';
