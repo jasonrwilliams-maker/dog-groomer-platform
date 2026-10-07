@@ -20,6 +20,8 @@ export type VaccineLine = {
   days_until_expiry: number | null;
   blocks_service: boolean;
   regulatory_required: boolean;
+  /** Set when the record was typed in by someone reading a photo of the paperwork. */
+  hand_checked: { checked_by: string; checked_on: string; second_look: boolean; document_id: string } | null;
 };
 
 export type CheckInCard = {
@@ -42,7 +44,30 @@ export type CheckInCard = {
   last_visit: { visit_date: string; groomer: string; note: string | null } | null;
   open_visit: { id: string; check_in: string; groomer: string } | null;
   paperwork_requests: { vaccine: string; status: string; channel: string; next_reminder_on: string | null }[];
+  /** Copies taken at the counter that nobody has finished checking. */
+  paperwork_waiting: { document_id: string; mime_type: string; received_by: string; received_at: string }[];
 };
+
+/** What the counter's upload saved. */
+export type ReceivedCopy = {
+  document_id: string; mime_type: string; page_count: number;
+  original_bytes: number; saved_bytes: number;
+  /** Whether any photo was made smaller to save space. */
+  resized: boolean;
+};
+export type WaitingCopy = {
+  document_id: string; dog_id: string; dog: string; owner: string; mime_type: string;
+  page_count: number | null; received_by: string; received_at: string;
+};
+export type HandChecked = {
+  id: string; dog_id: string; dog: string; owner: string; vaccine: string; administered_on: string;
+  expires_on: string; document_id: string; mime_type: string; checked_by: string; checked_at: string;
+};
+
+/** Where the screen shows a copy from. */
+export const paperworkUrl = (documentId: string) => `/api/paperwork/${documentId}/file`;
+/** One page of a copy, as an image. */
+export const pageUrl = (documentId: string, page: number) => `/api/paperwork/${documentId}/pages/${page}`;
 
 export type Groomer = { id: string; name: string; role: "groomer" | "manager" };
 
@@ -110,7 +135,8 @@ async function get<T>(path: string): Promise<T> {
 
 /** POST or PUT, and a 409 becomes a Refusal carrying the database's own words. */
 async function send<T>(method: "POST" | "PUT", path: string, body: unknown): Promise<T> {
-  const r = await fetch(`/api${path}`, {
+  // A form (a file upload) goes as it is; anything else as JSON.
+  const r = await fetch(`/api${path}`, body instanceof FormData ? { method, body } : {
     method,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -161,4 +187,33 @@ export const api = {
     post<{ id: string }>(`/dogs/${dogId}/shots`, {
       groomer_id: groomerId, vaccine, administered_on: administeredOn, expires_on: expiresOn,
     }),
+  /** A photo or PDF of the owner's paperwork, kept with the dog. */
+  sendPaperwork: (dogId: string, groomerId: string, files: File[]) => {
+    const form = new FormData();
+    form.append("groomer_id", groomerId);
+    files.forEach((f) => form.append("files", f));
+    return post<ReceivedCopy>(`/dogs/${dogId}/paperwork`, form);
+  },
+  paperworkInfo: (documentId: string) => get<{ mime_type: string; page_count: number }>(`/paperwork/${documentId}`),
+  /** One page out of a copy nobody has checked a shot against. */
+  removePage: (dogId: string, documentId: string, page: number, groomerId: string) =>
+    post<{ page_count: number }>(`/dogs/${dogId}/paperwork/${documentId}/pages/${page}/remove`, { groomer_id: groomerId }),
+  /** A copy nobody has checked a shot against, taken off the dog. */
+  removePaperwork: (dogId: string, documentId: string, groomerId: string) =>
+    post<{ removed: boolean }>(`/dogs/${dogId}/paperwork/${documentId}/remove`, { groomer_id: groomerId }),
+  /** A shot typed in while reading the photo: verified, and marked checked by hand. */
+  addCheckedShot: (dogId: string, groomerId: string, documentId: string, vaccine: string,
+                   administeredOn: string | null, expiresOn: string | null) =>
+    post<{ id: string }>(`/dogs/${dogId}/checked-shots`, {
+      groomer_id: groomerId, document_id: documentId, vaccine, administered_on: administeredOn, expires_on: expiresOn,
+    }),
+  /** A vaccine the paperwork doesn't show: the shop asks the owner for it. */
+  askOwner: (dogId: string, groomerId: string, vaccine: string) =>
+    post<{ id: string }>(`/dogs/${dogId}/ask-owner`, { groomer_id: groomerId, vaccine }),
+  paperworkDone: (dogId: string, documentId: string, groomerId: string) =>
+    post<{ done: boolean }>(`/dogs/${dogId}/paperwork/${documentId}/done`, { groomer_id: groomerId }),
+  paperworkWaiting: () => get<WaitingCopy[]>("/admin/paperwork"),
+  handChecked: () => get<HandChecked[]>("/admin/hand-checked"),
+  secondLook: (recordId: string, groomerId: string) =>
+    post<{ looked: boolean }>(`/admin/hand-checked/${recordId}/looked`, { groomer_id: groomerId }),
 };

@@ -17,11 +17,11 @@ from typing import Literal
 from uuid import UUID
 
 import psycopg
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
-from . import db
+from . import db, paperwork
 
 app = FastAPI(title="Paws & Polish — groomer API", version="0.1.0")
 
@@ -184,6 +184,21 @@ def check_in_card(dog_id: UUID):
          WHERE rr.dog_id = %s AND rr.status IN ('queued', 'sent', 'responded', 'insufficient')
          ORDER BY vt.name""", (dog_id,))
 
+    # Which lines rest on a record someone checked by hand against a photo.
+    hand_checked = {r["code"]: r for r in db.rows("""
+        SELECT vt.code, g.display_name AS checked_by, vr.verified_at::date AS checked_on,
+               vr.second_look_at IS NOT NULL AS second_look, vr.document_id
+          FROM dog_vaccine_compliance s
+          JOIN vaccination_record vr ON vr.id = s.latest_record_id
+          JOIN vaccine_type vt       ON vt.id = s.vaccine_type_id
+          JOIN groomer g             ON g.id = vr.verified_by
+         WHERE s.dog_id = %s AND vr.checked_by_hand""", (dog_id,))}
+    for v in vaccines:
+        h = hand_checked.get(v["code"])
+        v["hand_checked"] = {k: h[k] for k in ("checked_by", "checked_on", "second_look", "document_id")} if h else None
+    waiting = db.rows("""SELECT document_id, mime_type, received_by, received_at FROM v_paperwork_waiting
+                          WHERE dog_id = %s ORDER BY received_at""", (dog_id,))
+
     blocking = [v for v in vaccines if v["blocks_service"]]
     return {
         "dog": {**dog, "age": _age(dog["date_of_birth"])},
@@ -197,6 +212,7 @@ def check_in_card(dog_id: UUID):
         "last_visit": last_visit,
         "open_visit": open_visit,
         "paperwork_requests": requests,
+        "paperwork_waiting": waiting,
     }
 
 
@@ -505,3 +521,164 @@ class Reviewer(BaseModel):
 def review_done(review_id: UUID, body: Reviewer):
     _write("SELECT mark_reviewed(%s, %s) AS ok", (review_id, body.groomer_id))
     return {"reviewed": True}
+
+
+# --------------------------------------------------------------- paperwork at the counter
+
+@app.post("/dogs/{dog_id}/paperwork", status_code=201)
+def receive_paperwork(dog_id: UUID, groomer_id: UUID = Form(...), files: list[UploadFile] = File(...)):
+    """The owner's paperwork, as one copy however many photos and files it
+    took: each photo turned upright, stripped of the camera's details and
+    downsized if large, each PDF page drawn as a page, all saved under
+    private/ and filed against the dog. It waits on the manager's list until
+    someone says they are done checking it."""
+    try:
+        copy = paperwork.prepare([f.file.read(paperwork.MAX_UPLOAD_BYTES + 1) for f in files])
+    except paperwork.NotPaperwork as e:
+        raise HTTPException(422, str(e)) from None
+    try:
+        with db.connect() as conn:
+            row = conn.execute("SELECT receive_paperwork(%s, %s, %s, %s, %s, %s, %s, %s) AS id",
+                               (dog_id, copy.object_key, copy.mime_type, len(copy.data), copy.sha256,
+                                copy.page_keys, copy.exif_stripped, groomer_id)).fetchone()
+            # Written before the database commits: if saving fails, nothing is
+            # filed. A copy already on record (the same files again) is not
+            # written a second time.
+            doc = conn.execute("SELECT object_key, page_count FROM document WHERE id = %s", (row["id"],)).fetchone()
+            if doc["object_key"] == copy.object_key:
+                paperwork.save(copy)
+    except psycopg.Error as e:
+        if (r := refusal_from(e, form=True)) is not None:
+            raise r from None
+        if "not an active client" in str(e):
+            raise HTTPException(404, "No active dog with that id.") from None
+        raise
+    return {"document_id": row["id"], "mime_type": copy.mime_type, "page_count": doc["page_count"],
+            "original_bytes": copy.original_bytes, "saved_bytes": len(copy.data) if copy.mime_type == "image/jpeg"
+            else sum(len(p) for p in copy.pages), "resized": copy.resized}
+
+
+def _page_keys(document_id: UUID) -> list[str]:
+    """A copy's pages, in order. A photo filed before copies had pages is its own page."""
+    pages = db.rows("""SELECT render_object_key AS key FROM document_page
+                        WHERE document_id = %s ORDER BY page_number""", (document_id,))
+    if pages:
+        return [p["key"] for p in pages]
+    doc = db.row("SELECT object_key, mime_type FROM document WHERE id = %s", (document_id,))
+    return [doc["object_key"]] if doc and doc["mime_type"].startswith("image/") else []
+
+
+@app.get("/paperwork/{document_id}")
+def paperwork_copy(document_id: UUID):
+    """What the screen needs to show a copy: how many pages it has."""
+    doc = db.row("SELECT mime_type FROM document WHERE id = %s", (document_id,))
+    if doc is None:
+        raise HTTPException(404, "No such copy.")
+    return {"mime_type": doc["mime_type"], "page_count": len(_page_keys(document_id))}
+
+
+@app.get("/paperwork/{document_id}/pages/{page}")
+def paperwork_page(document_id: UUID, page: int):
+    """One page of a copy, as an image. This machine only, like the rest of the API."""
+    keys = _page_keys(document_id)
+    path = paperwork.path_of(keys[page - 1]) if 1 <= page <= len(keys) else None
+    if path is None:
+        raise HTTPException(404, "That page isn't on this computer.")
+    return FileResponse(path, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=3600"})
+
+
+@app.get("/paperwork/{document_id}/file")
+def paperwork_file(document_id: UUID):
+    """The copy itself: the photo, or the PDF of all its pages."""
+    doc = db.row("SELECT object_key, mime_type FROM document WHERE id = %s", (document_id,))
+    path = paperwork.path_of(doc["object_key"]) if doc else None
+    if path is None:
+        raise HTTPException(404, "That copy isn't on this computer.")
+    return FileResponse(path, media_type=doc["mime_type"], headers={"Cache-Control": "private, max-age=3600"})
+
+
+@app.post("/dogs/{dog_id}/paperwork/{document_id}/pages/{page}/remove")
+def remove_paperwork_page(dog_id: UUID, document_id: UUID, page: int, body: Reviewer):
+    """One page taken out of a copy (a dark webcam shot, a duplicate). The
+    copy is rebuilt from the pages left, and the unused files deleted."""
+    keys = _page_keys(document_id)
+    if not 1 <= page <= len(keys):
+        raise HTTPException(404, "This copy has no such page.")
+    try:
+        copy = paperwork.rebuilt(keys[:page - 1] + keys[page:])
+    except paperwork.NotPaperwork as e:
+        raise HTTPException(422, str(e)) from None
+    try:
+        with db.connect() as conn:
+            row = conn.execute("SELECT remove_paperwork_page(%s, %s, %s, %s, %s, %s, %s) AS keys",
+                               (document_id, dog_id, page, body.groomer_id, copy.object_key,
+                                len(copy.data), copy.sha256)).fetchone()
+            path = paperwork._disk_path(copy.object_key)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(copy.data)
+    except psycopg.Error as e:
+        if (r := refusal_from(e, form=True)) is not None:
+            raise r from None
+        raise
+    paperwork.discard(row["keys"])
+    return {"page_count": len(keys) - 1}
+
+
+@app.post("/dogs/{dog_id}/paperwork/{document_id}/remove")
+def remove_paperwork(dog_id: UUID, document_id: UUID, body: Reviewer):
+    """A copy nobody has checked a shot against (a blurry photo, the wrong
+    paper) taken off the dog, and its files deleted. Refused once a record
+    rests on it (GR029)."""
+    row = _write("SELECT remove_paperwork(%s, %s, %s) AS keys", (document_id, dog_id, body.groomer_id))
+    paperwork.discard(row["keys"])
+    return {"removed": True}
+
+
+class CheckedShot(CounterShot):
+    document_id: UUID
+
+
+@app.post("/dogs/{dog_id}/checked-shots", status_code=201)
+def checked_shot(dog_id: UUID, body: CheckedShot):
+    """One vaccine typed in while reading the photo: verified, and marked as
+    checked by hand. The same refusals as a shot typed with no photo."""
+    return _write("SELECT record_checked_shot(%s, %s, %s, %s, %s, %s) AS id",
+                  (dog_id, body.document_id, body.vaccine, body.administered_on, body.expires_on,
+                   body.groomer_id), "No active dog with that id.")
+
+
+class AskOwner(BaseModel):
+    groomer_id: UUID
+    vaccine: str
+
+
+@app.post("/dogs/{dog_id}/ask-owner", status_code=201)
+def ask_owner(dog_id: UUID, body: AskOwner):
+    """A vaccine the owner's paperwork doesn't show: recorded as asked for at
+    the counter, and followed up by the shop's reminders."""
+    return _write("SELECT ask_owner_at_counter(%s, %s, %s) AS id", (dog_id, body.vaccine, body.groomer_id),
+                  "No active dog with that id.")
+
+
+@app.post("/dogs/{dog_id}/paperwork/{document_id}/done")
+def paperwork_done(dog_id: UUID, document_id: UUID, body: Reviewer):
+    _write("SELECT finish_paperwork_check(%s, %s, %s) AS ok", (document_id, dog_id, body.groomer_id))
+    return {"done": True}
+
+
+@app.get("/admin/paperwork")
+def paperwork_waiting():
+    """Copies received at the counter that nobody has finished checking."""
+    return db.rows("SELECT * FROM v_paperwork_waiting")
+
+
+@app.get("/admin/hand-checked")
+def hand_checked():
+    """Records a groomer checked by hand, waiting for a manager's second look."""
+    return db.rows("SELECT * FROM v_hand_checked_open")
+
+
+@app.post("/admin/hand-checked/{record_id}/looked")
+def second_look(record_id: UUID, body: Reviewer):
+    _write("SELECT give_second_look(%s, %s) AS ok", (record_id, body.groomer_id))
+    return {"looked": True}

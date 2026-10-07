@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api, Refusal, type WalkInOptions } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useIsManager } from "@/lib/viewer";
 
 // The vaccines and choices the forms offer change only when the shop's
 // configuration does, so one fetch serves every form on the page.
@@ -18,18 +19,29 @@ export function useWalkInOptions(): WalkInOptions | null {
   return value;
 }
 
-type Line = { given: string; expires: string; saved: boolean; refusal: Refusal | null; error: string | null };
-const blank: Line = { given: "", expires: "", saved: false, refusal: null, error: null };
+type Line = {
+  given: string; expires: string; saved: boolean;
+  /** Not on the paperwork: the shop has asked the owner for it. */
+  asked: boolean;
+  refusal: Refusal | null; error: string | null;
+};
+const blank: Line = { given: "", expires: "", saved: false, asked: false, refusal: null, error: null };
 
-/** One line per vaccine the shop tracks: the two dates, typed off the paper. */
-export function PaperworkForm({ dogId, dogName, groomerId, onSaved, onClose, closeLabel = "Done" }: {
+/** One line per vaccine the shop tracks: the two dates, typed off the paper.
+ *  With a documentId, they are being read off a photo of it, and count as
+ *  verified (checked by hand); without one, they await a manager. */
+export function PaperworkForm({ dogId, dogName, groomerId, documentId, onSaved, onClose, closeLabel = "Done", actions }: {
   dogId: string;
   dogName: string;
   groomerId: string;
+  documentId?: string;
   onSaved: () => void;
   onClose: () => void;
   closeLabel?: string;
+  /** More buttons for the same row, after the form's own. */
+  actions?: React.ReactNode;
 }) {
+  const manager = useIsManager();
   const opts = useWalkInOptions();
   const [lines, setLines] = useState<Record<string, Line>>({});
   const [busy, setBusy] = useState(false);
@@ -41,8 +53,20 @@ export function PaperworkForm({ dogId, dogName, groomerId, onSaved, onClose, clo
 
   const toSave = (opts?.vaccines ?? []).filter((v) => {
     const l = line(v.code);
-    return !l.saved && (l.given || l.expires);
+    return !l.saved && !l.asked && (l.given || l.expires);
   });
+
+  async function ask(code: string) {
+    set(code, { refusal: null, error: null });
+    try {
+      await api.askOwner(dogId, groomerId, code);
+      set(code, { asked: true, given: "", expires: "" });
+      onSaved();
+    } catch (e) {
+      if (e instanceof Refusal) set(code, { refusal: e });
+      else set(code, { error: e instanceof Error ? e.message : String(e) });
+    }
+  }
 
   async function save() {
     setBusy(true);
@@ -51,7 +75,9 @@ export function PaperworkForm({ dogId, dogName, groomerId, onSaved, onClose, clo
       const l = line(v.code);
       set(v.code, { refusal: null, error: null });
       try {
-        await api.addShot(dogId, groomerId, v.code, l.given || null, l.expires || null);
+        await (documentId
+          ? api.addCheckedShot(dogId, groomerId, documentId, v.code, l.given || null, l.expires || null)
+          : api.addShot(dogId, groomerId, v.code, l.given || null, l.expires || null));
         set(v.code, { saved: true });
         any = true;
       } catch (e) {
@@ -65,10 +91,24 @@ export function PaperworkForm({ dogId, dogName, groomerId, onSaved, onClose, clo
 
   return (
     <div className="flex flex-col gap-4">
+      {documentId ? (
+        <p className="text-sm text-muted-foreground">
+          Read the pages and type each date exactly as it&apos;s printed. A shot with no expiry date on the paper
+          can&apos;t be recorded: the system never guesses one. What you save here counts as verified, under your
+          name{manager ? ", and needs no second look" : ", and a manager can compare it with the pages later"}.
+        </p>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          Type the dates exactly as {dogName}&apos;s paper prints them. A shot with no expiry date on the paper
+          can&apos;t be recorded: the system never guesses one. Shots entered here count for today&apos;s groom,
+          {manager ? " and wait on your Admin list until someone checks them against the paper."
+                   : " and a manager checks them against the paper later."}
+        </p>
+      )}
       <p className="text-sm text-muted-foreground">
-        Type the dates exactly as {dogName}&apos;s paper prints them. A shot with no expiry date on the paper
-        can&apos;t be recorded: the system never guesses one. Shots entered here count for today&apos;s groom,
-        and a manager checks them against the paper later.
+        Fill in what the paperwork shows and leave the rest. If a vaccine isn&apos;t on it, tap{" "}
+        <span className="font-medium text-foreground">Not on their paperwork</span>: the shop asks the owner for it,
+        and you can add it when it comes in.
       </p>
 
       {!opts ? (
@@ -78,15 +118,25 @@ export function PaperworkForm({ dogId, dogName, groomerId, onSaved, onClose, clo
           {opts.vaccines.map((v) => {
             const l = line(v.code);
             return (
-              <li key={v.code} className={cn("flex flex-col gap-2 p-4", l.saved && "bg-ok-soft")}>
-                <div className="flex items-baseline justify-between gap-2">
+              <li key={v.code} className={cn("flex flex-col gap-2 p-4", l.saved && "bg-ok-soft", l.asked && "bg-muted")}>
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
                   <span className="font-medium">
                     {v.name}
                     {v.required && <span className="ml-2 text-xs font-normal text-muted-foreground">required by law</span>}
                   </span>
-                  {l.saved && <span className="text-sm font-medium text-ok">Saved · awaiting verification</span>}
+                  {l.asked && <span className="text-sm font-medium">Asked the owner · reminder in a week</span>}
+                  {!l.saved && !l.asked && (
+                    <Button variant="outline" size="sm" onClick={() => ask(v.code)}>
+                      Not on their paperwork
+                    </Button>
+                  )}
+                  {l.saved && (
+                    <span className="text-sm font-medium text-ok">
+                      {documentId ? "Saved · checked by hand" : "Saved · awaiting verification"}
+                    </span>
+                  )}
                 </div>
-                {!l.saved && (
+                {!l.saved && !l.asked && (
                   <div className="grid gap-3 sm:grid-cols-2">
                     <label className="flex flex-col gap-1 text-sm">
                       <span className="text-muted-foreground">Given</span>
@@ -118,6 +168,7 @@ export function PaperworkForm({ dogId, dogName, groomerId, onSaved, onClose, clo
           {busy ? "Saving…" : toSave.length > 1 ? `Save ${toSave.length} shots` : "Save shot"}
         </Button>
         <Button variant="outline" size="lg" onClick={onClose}>{closeLabel}</Button>
+        {actions}
       </div>
     </div>
   );

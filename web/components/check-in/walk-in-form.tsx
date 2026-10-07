@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { PaperworkForm } from "@/components/check-in/paperwork-form";
+import { PaperworkIntake } from "@/components/check-in/paperwork-intake";
 import {
   blankDog, DogFields, dogToSave, Heading, OwnerFields, ownerToSave, type OwnerDraft,
 } from "@/components/check-in/profile-fields";
@@ -53,9 +53,10 @@ export function WalkInForm({ walkIn, groomerId, onDone, onCancel }: {
     return (
       <div className="flex flex-col gap-4">
         <Heading title={`Paperwork for ${dog.name}`}
-                 note={`${dog.name} is on file. Did the owner bring vaccination records?`} />
-        <PaperworkForm dogId={saved.dogId} dogName={dog.name} groomerId={groomerId}
-                       onSaved={() => {}} onClose={() => onDone(saved.dogId)} closeLabel={`Open ${dog.name}'s card`} />
+                 note={`${dog.name} is on file. Did the owner bring vaccination records? Save what they have; the rest can come later.`} />
+        <PaperworkIntake dogId={saved.dogId} dogName={dog.name} groomerId={groomerId}
+                         onChanged={() => {}} onClose={() => onDone(saved.dogId)}
+                         cancelLabel="No paperwork today" closeLabel={`Finish · open ${dog.name}'s card`} />
       </div>
     );
   }

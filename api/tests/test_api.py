@@ -7,8 +7,10 @@ arrives as the database's own words with a 409, not as a 500.
 """
 from __future__ import annotations
 
+import io
 import os
 import subprocess
+import tempfile
 from datetime import date, timedelta
 from pathlib import Path
 from urllib.parse import urlparse, urlunparse
@@ -26,6 +28,8 @@ def client():
            "PGUSER": base.username or "postgres", "PGPASSWORD": base.password or ""}
     subprocess.run(["sh", "api/load_demo.sh", "--fresh", TEST_DB], cwd=REPO, env=env, check=True)
     os.environ["DATABASE_URL"] = urlunparse(base._replace(path=f"/{TEST_DB}"))
+    # Copies of paperwork go somewhere temporary, never into private/.
+    os.environ["PRIVATE_DIR"] = tempfile.mkdtemp(prefix="paperwork-")
 
     from fastapi.testclient import TestClient
     from app.main import app
@@ -248,3 +252,139 @@ def test_a_handling_note_is_added_and_a_typo_in_it_put_right(client):
     fixed = client.put(f"/behaviour/{latest['id']}", json={"groomer_id": groomer(client), "difficulty": 3,
                                                           "trigger": "scissors", "zone": "feet:back", "note": "Kicks"})
     assert fixed.json()["changed"] == {"note": {"old": "Kiks", "new": "Kicks"}}
+
+
+def tablet_photo(width: int = 4032, height: int = 3024) -> bytes:
+    """A camera-sized JPEG carrying a GPS position, as a tablet photo would."""
+    from PIL import Image
+    im = Image.new("RGB", (width, height), "white")
+    exif = im.getexif()
+    exif[0x010F] = "TabletCo"                       # make
+    exif.get_ifd(0x8825)[2] = (39.0, 17.0, 0.0)     # GPS latitude
+    buf = io.BytesIO()
+    im.save(buf, format="JPEG", quality=95, exif=exif)
+    return buf.getvalue()
+
+
+def test_a_photo_of_the_paperwork_is_downsized_checked_by_hand_and_waits_for_a_second_look(client):
+    from PIL import Image
+    jaddi = dog_named(client, "Jaddi")["id"]
+    tanya, nadia = groomer(client), groomer(client, "Nadia")
+
+    not_a_photo = client.post(f"/dogs/{jaddi}/paperwork", data={"groomer_id": tanya},
+                              files={"files": ("notes.txt", b"rabies 2026", "text/plain")})
+    assert not_a_photo.status_code == 422
+
+    up = client.post(f"/dogs/{jaddi}/paperwork", data={"groomer_id": tanya},
+                     files={"files": ("IMG_0001.jpg", tablet_photo(), "image/jpeg")})
+    assert up.status_code == 201, up.text
+    body = up.json()
+    assert body["resized"] and body["page_count"] == 1
+    assert body["saved_bytes"] < body["original_bytes"]
+    doc = body["document_id"]
+
+    again = client.post(f"/dogs/{jaddi}/paperwork", data={"groomer_id": tanya},
+                        files={"files": ("IMG_0001.jpg", tablet_photo(), "image/jpeg")})
+    assert again.json()["document_id"] == doc, "the same photo twice is one copy"
+    other_owner = client.post(f"/dogs/{dog_named(client, 'Moose')['id']}/paperwork", data={"groomer_id": tanya},
+                              files={"files": ("IMG_0001.jpg", tablet_photo(), "image/jpeg")})
+    assert other_owner.status_code == 201 and other_owner.json()["document_id"] != doc,         "another owner handing in the same file gets a copy of their own"
+
+    file = client.get(f"/paperwork/{doc}/file")
+    assert file.status_code == 200 and file.headers["content-type"] == "image/jpeg"
+    saved = Image.open(io.BytesIO(file.content))
+    assert saved.size == (2576, 1932), "downsized to the long edge the model reads"
+    assert len(saved.getexif()) == 0, "no camera details or GPS kept"
+
+    card = client.get(f"/dogs/{jaddi}").json()
+    assert [w["document_id"] for w in card["paperwork_waiting"]] == [doc]
+    assert card["can_start"] is False
+
+    given, expires = date.today() - timedelta(days=10), date.today() + timedelta(days=1085)
+    shot = client.post(f"/dogs/{jaddi}/checked-shots", json={
+        "groomer_id": tanya, "document_id": doc, "vaccine": "rabies",
+        "administered_on": given.isoformat(), "expires_on": expires.isoformat()})
+    assert shot.status_code == 201, shot.text
+
+    card = client.get(f"/dogs/{jaddi}").json()
+    assert card["can_start"] is True
+    rabies = next(v for v in card["vaccines"] if v["code"] == "rabies")
+    assert rabies["label"] == "Current"
+    assert rabies["hand_checked"]["checked_by"] == "Tanya"
+    assert rabies["hand_checked"]["second_look"] is False
+
+    assert client.post(f"/dogs/{jaddi}/paperwork/{doc}/done", json={"groomer_id": tanya}).status_code == 200
+    assert client.get(f"/dogs/{jaddi}").json()["paperwork_waiting"] == []
+    assert all(w["document_id"] != doc for w in client.get("/admin/paperwork").json())
+
+    open_ = [r for r in client.get("/admin/hand-checked").json() if r["dog"] == "Jaddi"]
+    assert [r["vaccine"] for r in open_] == ["Rabies"]
+    refused = client.post(f"/admin/hand-checked/{open_[0]['id']}/looked", json={"groomer_id": tanya})
+    assert refused.status_code == 409 and refused.json()["code"] == "GR028"
+    assert client.post(f"/admin/hand-checked/{open_[0]['id']}/looked", json={"groomer_id": nadia}).status_code == 200
+    assert not [r for r in client.get("/admin/hand-checked").json() if r["dog"] == "Jaddi"]
+
+
+def test_a_checked_shot_needs_the_photo_on_file(client):
+    moose = dog_named(client, "Moose")["id"]
+    r = client.post(f"/dogs/{moose}/checked-shots", json={
+        "groomer_id": groomer(client), "document_id": "00000000-0000-0000-0000-000000000000",
+        "vaccine": "rabies", "administered_on": (date.today() - timedelta(days=5)).isoformat(),
+        "expires_on": (date.today() + timedelta(days=360)).isoformat()})
+    assert r.status_code == 409 and r.json()["code"] == "GR027"
+
+
+def test_a_vaccine_not_on_the_paperwork_is_asked_for_and_shows_on_the_card(client):
+    gus = dog_named(client, "Gus")["id"]
+    r = client.post(f"/dogs/{gus}/ask-owner", json={"groomer_id": groomer(client), "vaccine": "bordetella"})
+    assert r.status_code == 201, r.text
+    card = client.get(f"/dogs/{gus}").json()
+    asked = [p for p in card["paperwork_requests"] if p["vaccine"] == "Bordetella"]
+    assert asked and asked[0]["channel"] == "verbal_at_counter" and asked[0]["next_reminder_on"]
+
+
+def two_page_pdf() -> bytes:
+    from PIL import Image
+    pages = [Image.new("RGB", (850, 1100), c) for c in ("white", "ivory")]
+    buf = io.BytesIO()
+    pages[0].save(buf, format="PDF", save_all=True, append_images=pages[1:])
+    return buf.getvalue()
+
+
+def test_several_photos_and_a_pdf_are_one_copy_with_pages_and_an_unused_copy_can_be_removed(client):
+    from PIL import Image
+    olive = dog_named(client, "Olive")["id"]
+    tanya = groomer(client)
+    up = client.post(f"/dogs/{olive}/paperwork", data={"groomer_id": tanya}, files=[
+        ("files", ("page1.jpg", tablet_photo(), "image/jpeg")),
+        ("files", ("page2.jpg", tablet_photo(3024, 4032), "image/jpeg")),
+        ("files", ("emailed.pdf", two_page_pdf(), "application/pdf")),
+    ])
+    assert up.status_code == 201, up.text
+    doc = up.json()["document_id"]
+    assert up.json()["page_count"] == 4 and up.json()["mime_type"] == "application/pdf"
+    assert client.get(f"/paperwork/{doc}").json()["page_count"] == 4
+    sizes = [Image.open(io.BytesIO(client.get(f"/paperwork/{doc}/pages/{n}").content)).size for n in (1, 2, 3, 4)]
+    assert sizes[0] == (2576, 1932) and sizes[1] == (1932, 2576), "each photo is its own page, upright"
+    assert max(sizes[2]) == 2576, "a PDF page is drawn at the same size"
+    assert client.get(f"/paperwork/{doc}/pages/5").status_code == 404
+    assert client.get(f"/paperwork/{doc}/file").content[:5] == b"%PDF-"
+
+    page2 = client.get(f"/paperwork/{doc}/pages/2").content
+    dark = client.post(f"/dogs/{olive}/paperwork/{doc}/pages/1/remove", json={"groomer_id": tanya})
+    assert dark.status_code == 200 and dark.json()["page_count"] == 3
+    assert client.get(f"/paperwork/{doc}/pages/1").content == page2, "the pages after it move up"
+    assert client.get(f"/paperwork/{doc}/file").content[:5] == b"%PDF-"
+
+    gone = client.post(f"/dogs/{olive}/paperwork/{doc}/remove", json={"groomer_id": tanya})
+    assert gone.status_code == 200
+    assert client.get(f"/paperwork/{doc}").status_code == 404
+    assert client.get(f"/dogs/{olive}").json()["paperwork_waiting"] == []
+
+
+def test_a_copy_shots_were_checked_against_stays(client):
+    jaddi = dog_named(client, "Jaddi")["id"]
+    rabies = next(v for v in client.get(f"/dogs/{jaddi}").json()["vaccines"] if v["code"] == "rabies")
+    r = client.post(f"/dogs/{jaddi}/paperwork/{rabies['hand_checked']['document_id']}/remove",
+                    json={"groomer_id": groomer(client)})
+    assert r.status_code == 409 and r.json()["code"] == "GR029"

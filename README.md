@@ -5,8 +5,8 @@
 A system of record for a small grooming practice, with the business rules
 enforced **in the database** rather than in the application.
 
-Twenty-six numbered rules, each with a dedicated error code, each proven by a test
-that asserts the *refusal* — not the happy path. 330 assertions, all passing.
+Twenty-nine numbered rules, each with a dedicated error code, each proven by a test
+that asserts the *refusal* — not the happy path. 367 assertions, all passing.
 How strictly each groom-time rule is enforced (block, warn, or off) is itself a
 row of data, changed by `UPDATE` and recorded in the audit log — not a migration.
 
@@ -79,9 +79,9 @@ for a better copy instead of recording a guess.
 
 | Component | State |
 |---|---|
-| Schema | Sections 0–14 stable, in one file; later sections appended as separate files (15–25) |
-| Business rules | 26, codes `GR001`–`GR026` |
-| Test suite | 21 files, 330 pgTAP assertions, passing; 15 API tests |
+| Schema | Sections 0–14 stable, in one file; later sections appended as separate files (15–26) |
+| Business rules | 29, codes `GR001`–`GR029` |
+| Test suite | 22 files, 367 pgTAP assertions, passing; 20 API tests |
 | Document vocabulary (§15) | 29 rulings seeded from the labelled corpus; `resolve_term()` fails closed |
 | Extraction line items (§16) | One row per printed line; review views; the shape the harness loads |
 | Confirmation — Layer 3 (§18) | `confirm_extraction()` turns a fully reviewed page into verified records, records every line's outcome, and asks the owner for what the page is missing |
@@ -93,7 +93,8 @@ for a better copy instead of recording a guess.
 | Breed list (§23) | 199 breeds, each with the coat it usually has, in `sql/23_breed_seed.sql`, the one file to edit to change the list; safe to run again. A breed not on the list is refused with the nearest names ("Did you mean Shih Tzu?") unless the groomer says it is new (GR023) |
 | Allergies and handling (§24) | Groomers add, change and take off a dog's allergies from the card, picked from a list grouped by what each changes for the groom (contact, flea, environmental, food), with "did you mean" (GR024). Anything that leaves the dog less protected, an allergy taken off or made less severe, needs a reason (GR025) and goes on the manager's list; only a manager clears it (GR026). An allergy taken off is kept, marked removed. Handling notes stay a dated history: new notes are added, typos corrected, and a note can say which side (front or back feet and paw pads, left or right ear) |
 | Allergen list (§25) | 45 allergens in `sql/25_allergen_seed.sql`, the one file to edit to change the list; safe to run again |
-| Groomer interface | **Check-in screen** (`web/`, Next.js + Tailwind, shadcn-style components) on a thin FastAPI backend (`api/`): pick who's grooming, find a dog by its name or its owner's, see whether today's groom can start and why not, allergies, handling notes; start the groom; sign up a walk-in and type in the paperwork they brought; put right a typo in a dog's or an owner's details; keep its allergies and handling notes. Managers see allergy changes to review. Managers also get an Admin view: the whole book's compliance at a glance and the way into the records tool. Runs on its own demo database, `grooming_demo` |
+| Paperwork at the counter (§26) | The owner's paperwork, as many photos and files as it takes (tablet camera or webcam, or the PDFs they emailed), is kept as one copy with numbered pages; a blurry page is removed or retaken before saving, and a saved copy nobody checked a shot against can lose a bad page or be removed outright (GR029 refuses once a record rests on it). Each photo is turned upright, stripped of the camera's details and GPS, downsized if large, saved under `private/counter/`, and kept with the dog (`receive_paperwork()`). Then the groomer checks it now or leaves it for later. Shots typed in while reading the photo (`record_checked_shot()`) are verified straight away and marked **checked by hand**; without a photo on file for that dog they are refused (GR027). Each groomer's hand check waits on the manager's list for a second look against its photo, which only a manager gives (GR028). Copies left for later wait on the manager's list under "Paperwork to check". A vaccine the paperwork doesn't show is marked "Not on their paperwork" (`ask_owner_at_counter()`): recorded as asked for at the counter, and followed up by the shop's reminders, so a walk-in can be saved with whatever they brought |
+| Groomer interface | **Check-in screen** (`web/`, Next.js + Tailwind, shadcn-style components) on a thin FastAPI backend (`api/`): pick who's grooming, find a dog by its name or its owner's, see whether today's groom can start and why not, allergies, handling notes; start the groom; sign up a walk-in and photograph the paperwork they brought, then check it now or leave it for a manager; put right a typo in a dog's or an owner's details; keep its allergies and handling notes. Managers see allergy changes to review, paperwork waiting to be checked, and shots checked by hand waiting for a second look. Managers also get an Admin view: the whole book's compliance at a glance and the way into the records tool. Runs on its own demo database, `grooming_demo` |
 | Extraction harness | Built — scores a model run against the answer keys; self-check passing |
 | Photo preparation | Built — a photo is turned upright, stripped of EXIF and GPS, and downscaled before it is sent |
 | Labelling & review tool | Built — Streamlit; writes answer keys from a form, and reconciles a run against its key |
@@ -275,6 +276,9 @@ Lamb ones.
 | `GR024` | The same for an allergen, which also has to say which group it belongs to |
 | `GR025` | An allergy is not taken off, or made less severe, without a reason — and the change waits for a manager |
 | `GR026` | Only a manager clears a change from the manager's list |
+| `GR027` | A shot counts as verified at the counter only if a photo of the paperwork is on file for that dog |
+| `GR028` | Only a manager gives a hand-checked shot its second look |
+| `GR029` | A copy of paperwork a shot was checked against is not removed: it is that record's evidence |
 
 Each raises its own SQLSTATE so tests assert on a stable identifier rather than on
 error prose, and the API layer can map codes to user-facing messages without
