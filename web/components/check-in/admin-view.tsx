@@ -5,9 +5,10 @@ import { Badge, toneFor } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { CopyPages, PaperworkIntake } from "@/components/check-in/paperwork-intake";
+import { RecordFixForm } from "@/components/check-in/record-fix-form";
 import {
   api, paperworkUrl, type AiAccuracy, type ComplianceLine, type ComplianceSummary, type HandChecked, type Review,
-  type WaitingCopy,
+  type WaitingCopy, type WaitingShot,
 } from "@/lib/api";
 import { formatDate } from "@/lib/utils";
 
@@ -36,7 +37,8 @@ const GROUPS: { id: string; title: string; note: string; match: (l: ComplianceLi
     match: (l) => !l.blocks_service && (l.state === "no_record" || l.state === "requested_pending") },
   { id: "expiring", title: "Expiring soon", note: "Ask for updated paperwork at the next visit.",
     match: (l) => !l.blocks_service && l.state === "expiring_soon" },
-  { id: "waiting", title: "Waiting to be verified", note: "Typed in with no copy of the paperwork. Groomable now; check them against the paper.",
+  // Listed with its own buttons (WaitingCard), not as a plain group.
+  { id: "waiting", title: "Waiting to be verified", note: "",
     match: (l) => !l.blocks_service && l.state === "received_unverified" },
   { id: "disputed", title: "Disputed", note: "Two records disagree. Compare them in the records tool.",
     match: (l) => !l.blocks_service && l.state === "disputed_record" },
@@ -62,12 +64,16 @@ export function AdminView({ groomerId, onOpenDog }: { groomerId: string; onOpenD
   const [handChecked, setHandChecked] = useState<HandChecked[]>([]);
   const [checking, setChecking] = useState<WaitingCopy | null>(null);
   const [aiScore, setAiScore] = useState<AiAccuracy[]>([]);
+  const [typedIn, setTypedIn] = useState<WaitingShot[]>([]);
+  // The one record whose form is open: verifying a typed-in shot, or fixing a hand-checked one.
+  const [fixing, setFixing] = useState<string | null>(null);
 
   const fail = (e: { message?: string }) => setProblem(String(e.message ?? e));
   const loadReviews = () => api.reviews().then(setReviews).catch(fail);
   const loadPaperwork = () => {
     api.paperworkWaiting().then(setWaiting).catch(fail);
     api.handChecked().then(setHandChecked).catch(fail);
+    api.waitingVerification().then(setTypedIn).catch(fail);
     api.aiAccuracy().then(setAiScore).catch(fail);
     api.compliance().then(setSummary).catch(fail);
   };
@@ -103,7 +109,7 @@ export function AdminView({ groomerId, onOpenDog }: { groomerId: string; onOpenD
       <section className="flex flex-col gap-2">
         <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Your to-do list</h2>
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <Stat label="Waiting to be verified" value={dogsIn(byId["waiting"].lines)} tone="info" target="waiting" />
+          <Stat label="Waiting to be verified" value={new Set(typedIn.map((r) => r.dog_id)).size} tone="info" target="waiting" />
           <Stat label="Paperwork to check" value={waiting.length} tone="info" target="paperwork" />
           <Stat label="Checked by hand, to look over" value={handChecked.length} tone="info" target="hand-checked" />
           <Stat label="Allergy changes to review" value={reviews.length} tone="info" target="reviews" />
@@ -195,8 +201,7 @@ export function AdminView({ groomerId, onOpenDog }: { groomerId: string; onOpenD
             <CardTitle>Checked by hand · {handChecked.length}</CardTitle>
             <p className="text-sm text-muted-foreground">
               Shots a groomer verified by reading a photo at the counter. Compare each with its photo: a date misread
-              in a rush is the shop&apos;s problem at inspection. If one doesn&apos;t match, leave it here and sort it out
-              with the groomer.
+              in a rush is the shop&apos;s problem at inspection. If one doesn&apos;t match, fix the dates here.
             </p>
           </CardHeader>
           <CardContent>
@@ -216,10 +221,60 @@ export function AdminView({ groomerId, onOpenDog }: { groomerId: string; onOpenD
                       </a>
                     </span>
                   </span>
-                  <Button variant="outline" size="sm"
-                          onClick={() => api.secondLook(r.id, groomerId).then(loadPaperwork).catch(fail)}>
-                    Matches the photo
-                  </Button>
+                  {fixing !== r.id && (
+                    <span className="flex gap-2">
+                      <Button variant="outline" size="sm"
+                              onClick={() => api.secondLook(r.id, groomerId).then(loadPaperwork).catch(fail)}>
+                        Matches the photo
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => setFixing(r.id)}>
+                        Doesn&apos;t match: fix it
+                      </Button>
+                    </span>
+                  )}
+                  {fixing === r.id && (
+                    <RecordFixForm mode="fix" recordId={r.id} vaccine={r.vaccine} given={r.administered_on}
+                                   expires={r.expires_on} groomerId={groomerId}
+                                   onSaved={() => { setFixing(null); loadPaperwork(); }} onCancel={() => setFixing(null)} />
+                  )}
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
+      {typedIn.length > 0 && (
+        <Card id="waiting" className="scroll-mt-6">
+          <CardHeader>
+            <CardTitle>Waiting to be verified · {typedIn.length}</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Shots typed in at the counter with no copy of the paperwork. The dog can be groomed meanwhile. Check
+              each one against the owner&apos;s paper or with the vet, then verify it.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <ul className="flex flex-col divide-y divide-border">
+              {typedIn.map((r) => (
+                <li key={r.id} className="flex flex-wrap items-center justify-between gap-3 py-2.5">
+                  <span className="min-w-0">
+                    <button className="font-medium hover:underline" onClick={() => onOpenDog(r.dog_id)}>{r.dog}</button>
+                    <span className="text-muted-foreground"> · {r.owner}</span>
+                    <span className="block text-sm">
+                      {r.vaccine} · given {formatDate(r.administered_on)} · expires {formatDate(r.expires_on)}
+                    </span>
+                    <span className="block text-sm text-muted-foreground">
+                      Typed in{r.entered_by && ` by ${r.entered_by}`}, {when(r.entered_at)}
+                    </span>
+                  </span>
+                  {fixing !== r.id && (
+                    <Button variant="outline" size="sm" onClick={() => setFixing(r.id)}>Verify</Button>
+                  )}
+                  {fixing === r.id && (
+                    <RecordFixForm mode="verify" recordId={r.id} vaccine={r.vaccine} given={r.administered_on}
+                                   expires={r.expires_on} groomerId={groomerId}
+                                   onSaved={() => { setFixing(null); loadPaperwork(); }} onCancel={() => setFixing(null)} />
+                  )}
                 </li>
               ))}
             </ul>
@@ -259,7 +314,7 @@ export function AdminView({ groomerId, onOpenDog }: { groomerId: string; onOpenD
         </Card>
       )}
 
-      {grouped.map((g) => g.lines.length > 0 && (
+      {grouped.map((g) => g.lines.length > 0 && g.id !== "waiting" && (
         <Group key={g.id} id={g.id} title={`${g.title} · ${dogs(dogsIn(g.lines))}`} note={g.note} lines={g.lines}
                onOpenDog={onOpenDog} />
       ))}

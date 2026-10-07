@@ -390,6 +390,44 @@ def test_a_copy_shots_were_checked_against_stays(client):
     assert r.status_code == 409 and r.json()["code"] == "GR029"
 
 
+def test_a_manager_verifies_a_typed_in_shot_and_fixes_a_misread_one(client):
+    tanya, nadia = groomer(client), groomer(client, "Nadia")
+    waiting = [r for r in client.get("/admin/waiting-verification").json() if r["dog"] == "Daisy"]
+    assert [r["vaccine"] for r in waiting] == ["Rabies"]
+    daisy = waiting[0]
+
+    form = {"how": "Called the vet's office", "administered_on": daisy["administered_on"],
+            "expires_on": daisy["expires_on"]}
+    refused = client.post(f"/admin/records/{daisy['id']}/verify", json={**form, "groomer_id": tanya})
+    assert refused.status_code == 409 and refused.json()["code"] == "GR030"
+    blank = client.post(f"/admin/records/{daisy['id']}/verify", json={**form, "how": " ", "groomer_id": nadia})
+    assert blank.status_code == 409 and "how you checked" in blank.json()["message"]
+    ok = client.post(f"/admin/records/{daisy['id']}/verify", json={**form, "groomer_id": nadia})
+    assert ok.status_code == 200, ok.text
+    assert not [r for r in client.get("/admin/waiting-verification").json() if r["dog"] == "Daisy"]
+
+    # A groomer misreads a date off a photo; the manager fixes it from the list.
+    moose = dog_named(client, "Moose")["id"]
+    doc = client.post(f"/dogs/{moose}/paperwork", data={"groomer_id": tanya},
+                      files={"files": ("bordetella.jpg", tablet_photo(900, 700), "image/jpeg")}).json()["document_id"]
+    given = date.today() - timedelta(days=5)
+    misread = client.post(f"/dogs/{moose}/checked-shots", json={
+        "groomer_id": tanya, "document_id": doc, "vaccine": "bordetella",
+        "administered_on": given.isoformat(), "expires_on": (given + timedelta(days=30)).isoformat()})
+    assert misread.status_code == 201, misread.text
+    record = misread.json()["id"]
+    bad = client.post(f"/admin/records/{record}/fix", json={
+        "groomer_id": nadia, "administered_on": given.isoformat(), "expires_on": None})
+    assert bad.status_code == 409 and bad.json()["code"] == "GR021"
+    fixed = client.post(f"/admin/records/{record}/fix", json={
+        "groomer_id": nadia, "administered_on": given.isoformat(),
+        "expires_on": (given + timedelta(days=365)).isoformat()})
+    assert fixed.status_code == 200, fixed.text
+    assert all(r["id"] != record for r in client.get("/admin/hand-checked").json())
+    bordetella = next(v for v in client.get(f"/dogs/{moose}").json()["vaccines"] if v["code"] == "bordetella")
+    assert bordetella["expires_on"] == (given + timedelta(days=365)).isoformat()
+
+
 class FakeReply:
     """What the SDK's final message looks like, enough for app/reader.py."""
     def __init__(self, text: str, stop_reason: str = "end_turn"):

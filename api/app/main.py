@@ -715,6 +715,54 @@ def second_look(record_id: UUID, body: Reviewer):
     return {"looked": True}
 
 
+# --------------------------------------------------------------- a manager's fixes
+
+@app.get("/admin/waiting-verification")
+def waiting_verification():
+    """Shots typed in with no copy of the paperwork, waiting for a manager."""
+    return db.rows("SELECT * FROM v_waiting_verification")
+
+
+class FixedDates(Reviewer):
+    administered_on: date | None
+    expires_on: date | None
+
+
+class Verification(FixedDates):
+    how: str
+
+
+def _manager_write(statements: list[tuple[str, tuple]]):
+    """A manager's fix, all or nothing; a refusal in its own words."""
+    try:
+        with db.connect() as conn:
+            for sql, params in statements:
+                conn.execute(sql, params)
+    except psycopg.Error as e:
+        if (r := refusal_from(e, form=True)) is not None:
+            raise r from None
+        raise
+
+
+@app.post("/admin/records/{record_id}/fix")
+def fix_record(record_id: UUID, body: FixedDates):
+    """A manager puts a shot's dates right. On a hand-checked shot, that is
+    its second look."""
+    _manager_write([("SELECT correct_counter_shot(%s, %s, %s, %s)",
+                     (record_id, body.administered_on, body.expires_on, body.groomer_id))])
+    return {"fixed": True}
+
+
+@app.post("/admin/records/{record_id}/verify")
+def verify_record(record_id: UUID, body: Verification):
+    """A manager verifies a shot typed in with no photo, saying how they
+    checked it, and puts its dates right first if they were wrong."""
+    _manager_write([("SELECT correct_counter_shot(%s, %s, %s, %s)",
+                     (record_id, body.administered_on, body.expires_on, body.groomer_id)),
+                    ("SELECT verify_counter_shot(%s, %s, %s)", (record_id, body.how, body.groomer_id))])
+    return {"verified": True}
+
+
 # --------------------------------------------------------------- the AI's suggestions
 
 @app.get("/ai/status")
