@@ -1,7 +1,7 @@
 -- Paperwork at the counter: a photo of the owner's paperwork is kept with the
 -- dog, and a shot typed in while reading it counts as verified.
 --
--- Nine things are proven:
+-- Ten things are proven:
 --   1. A copy taken at the counter is filed against the owner and the dog,
 --      and waits on the manager's list; the same file twice is one copy.
 --   2. A shot cannot be checked by hand against a copy that is not on file
@@ -18,10 +18,12 @@
 --   9. A vaccine the paperwork does not show is asked for at the counter: one
 --      open request, followed up by the reminders; nothing to ask for when a
 --      current record is on file.
+--  10. A copy is its pages, in order. One nobody checked a shot against can be
+--      removed, files and all; one a record rests on cannot (GR029).
 
 BEGIN;
 SET search_path = groom, public;
-SELECT plan(27);
+SELECT plan(33);
 
 CREATE TEMP TABLE t_owner AS
 SELECT add_client('Rosa', 'Diaz', '410-555-0400', NULL, '00000000-0000-0000-0000-00000000b002') AS id;
@@ -31,8 +33,8 @@ SELECT add_dog((SELECT id FROM t_owner), 'Pepper', NULL, 'curly', 'female', NULL
 
 -- --- 1. The copy ---------------------------------------------------------------------------------------
 CREATE TEMP TABLE t_doc AS
-SELECT receive_paperwork((SELECT id FROM t_dog), 'private/counter/test-a.jpg', 'image/jpeg', 120000,
-                         repeat('a', 64), 1, true, '00000000-0000-0000-0000-00000000b002') AS id;
+SELECT receive_paperwork((SELECT id FROM t_dog), 'private/counter/test-a.pdf', 'application/pdf', 120000,
+                         repeat('a', 64), ARRAY['private/counter/test-a-p1.jpg', 'private/counter/test-a-p2.jpg'], true, '00000000-0000-0000-0000-00000000b002') AS id;
 
 SELECT results_eq(
   $$ SELECT owner_id, source::text, exif_stripped FROM document WHERE id = (SELECT id FROM t_doc) $$,
@@ -48,8 +50,8 @@ SELECT is(
   'Tanya', 'It waits on the manager''s list, with who took it');
 
 SELECT is(
-  receive_paperwork((SELECT id FROM t_dog), 'private/counter/test-a-again.jpg', 'image/jpeg', 120000,
-                    repeat('a', 64), 1, true, '00000000-0000-0000-0000-00000000b002'),
+  receive_paperwork((SELECT id FROM t_dog), 'private/counter/test-a-again.pdf', 'application/pdf', 120000,
+                    repeat('a', 64), ARRAY['private/counter/test-a-again-p1.jpg'], true, '00000000-0000-0000-0000-00000000b002'),
   (SELECT id FROM t_doc), 'The same file twice is the copy already on file');
 
 SELECT is(
@@ -141,8 +143,8 @@ SELECT is(
   (SELECT count(*) FROM v_paperwork_waiting WHERE document_id = (SELECT id FROM t_doc)), 0::bigint,
   'Done with a copy takes it off the list');
 
-SELECT receive_paperwork((SELECT id FROM t_dog), 'private/counter/test-a.jpg', 'image/jpeg', 120000,
-                         repeat('a', 64), 1, true, '00000000-0000-0000-0000-00000000b001');
+SELECT receive_paperwork((SELECT id FROM t_dog), 'private/counter/test-a.pdf', 'application/pdf', 120000,
+                         repeat('a', 64), ARRAY['private/counter/test-a-p1.jpg', 'private/counter/test-a-p2.jpg'], true, '00000000-0000-0000-0000-00000000b001');
 
 SELECT is(
   (SELECT received_by FROM v_paperwork_waiting WHERE document_id = (SELECT id FROM t_doc)),
@@ -188,6 +190,34 @@ SELECT is(
   (SELECT count(*) FROM audit_log WHERE entity_type = 'record_request' AND actor_label = 'Tanya'
       AND changed_fields ->> 'reason' = 'not on the paperwork'),
   2::bigint, 'And who asked is audited');
+
+-- --- 10. Pages, and removing a copy -------------------------------------------------------------------------------
+SELECT results_eq(
+  $$ SELECT page_number, render_object_key FROM document_page WHERE document_id = (SELECT id FROM t_doc) ORDER BY 1 $$,
+  $$ VALUES (1, 'private/counter/test-a-p1.jpg'), (2, 'private/counter/test-a-p2.jpg') $$,
+  'A copy of two photos is one copy with two pages, in order');
+
+SELECT is((SELECT page_count FROM document WHERE id = (SELECT id FROM t_doc)), 2, 'And says so');
+
+SELECT throws_ok(
+  $$ SELECT remove_paperwork((SELECT id FROM t_doc), (SELECT id FROM t_dog), '00000000-0000-0000-0000-00000000b002') $$,
+  'GR029', NULL, 'A copy shots were checked against cannot be removed');
+
+CREATE TEMP TABLE t_blurry AS
+SELECT receive_paperwork((SELECT id FROM t_dog), 'private/counter/blurry.jpg', 'image/jpeg', 90000,
+                         repeat('b', 64), ARRAY['private/counter/blurry.jpg'], true,
+                         '00000000-0000-0000-0000-00000000b002') AS id;
+
+SELECT is(
+  remove_paperwork((SELECT id FROM t_blurry), (SELECT id FROM t_dog), '00000000-0000-0000-0000-00000000b002'),
+  ARRAY['private/counter/blurry.jpg'], 'A blurry photo nobody used can be removed, and its file is named for deleting');
+
+SELECT is((SELECT count(*) FROM document WHERE id = (SELECT id FROM t_blurry)), 0::bigint,
+  'It is gone, off the list with it');
+
+SELECT is(
+  (SELECT count(*) FROM audit_log WHERE entity_type = 'document' AND entity_id = (SELECT id FROM t_blurry) AND action = 'delete'),
+  1::bigint, 'And who removed it is audited');
 
 SELECT * FROM finish();
 ROLLBACK;

@@ -89,9 +89,9 @@ export function PaperworkForm({ dogId, dogName, groomerId, documentId, onSaved, 
     <div className="flex flex-col gap-4">
       {documentId ? (
         <p className="text-sm text-muted-foreground">
-          Read the photo and type each date exactly as it&apos;s printed. A shot with no expiry date on the paper
+          Read the pages and type each date exactly as it&apos;s printed. A shot with no expiry date on the paper
           can&apos;t be recorded: the system never guesses one. What you save here counts as verified, under your
-          name, and a manager can compare it with the photo later.
+          name, and a manager can compare it with the pages later.
         </p>
       ) : (
         <p className="text-sm text-muted-foreground">

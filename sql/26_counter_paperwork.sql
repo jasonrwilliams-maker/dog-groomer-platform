@@ -16,7 +16,13 @@
 --
 -- Either way the copy is kept: receive_paperwork() files it against the owner
 -- and the dog, as the records tool does with an upload, and lists it as
--- waiting to be checked until someone says they are done with it.
+-- waiting to be checked until someone says they are done with it. One
+-- handover is one copy, however many photos and files it took: each is a page
+-- (document_page), in order.
+--
+-- A copy nobody has checked a shot against can be removed: a blurry photo, the
+-- wrong dog's paper. One that a record rests on stays, because it is that
+-- record's evidence (GR029).
 --
 -- A record verified this way is marked as checked by hand. It is the shop
 -- owner's protection: a busy groomer can misread a date, and the health
@@ -37,13 +43,15 @@
 --   GR027  a shot checked by hand against a copy that is not on file for
 --          this dog
 --   GR028  a second look given by someone who is not a manager
+--   GR029  removing a copy that a vaccination record was checked against
 -- =============================================================================
 
 SET search_path = groom, public;
 
 INSERT INTO policy_enforcement (error_code, level, relaxable, description) VALUES
   ('GR027', 'block', false, 'A shot checked by hand without a copy of the paperwork on file for the dog'),
-  ('GR028', 'block', false, 'A second look at a hand-checked record given by someone who is not a manager');
+  ('GR028', 'block', false, 'A second look at a hand-checked record given by someone who is not a manager'),
+  ('GR029', 'block', false, 'A copy of paperwork removed while a vaccination record rests on it');
 
 -- -----------------------------------------------------------------------------
 -- The copy, and whether anyone has checked it yet
@@ -93,7 +101,7 @@ COMMENT ON COLUMN vaccination_record.checked_by_hand IS
 -- -----------------------------------------------------------------------------
 
 CREATE FUNCTION receive_paperwork(p_dog_id uuid, p_object_key text, p_mime_type text,
-                                  p_byte_size bigint, p_sha256 text, p_page_count integer,
+                                  p_byte_size bigint, p_sha256 text, p_page_keys text[],
                                   p_exif_stripped boolean, p_received_by uuid)
 RETURNS uuid LANGUAGE plpgsql AS $$
 DECLARE
@@ -113,11 +121,16 @@ BEGIN
     SELECT doc.id INTO v_doc_id FROM document doc
      WHERE doc.owner_id = v_owner_id AND doc.sha256 = p_sha256;
     IF NOT FOUND THEN
+        IF coalesce(cardinality(p_page_keys), 0) = 0 THEN
+            RAISE EXCEPTION 'A copy needs at least one page' USING ERRCODE = 'check_violation';
+        END IF;
         INSERT INTO document (owner_id, object_key, mime_type, byte_size, sha256, source,
                               page_count, exif_stripped, uploaded_by)
         VALUES (v_owner_id, p_object_key, p_mime_type, p_byte_size, p_sha256, 'upload',
-                p_page_count, p_exif_stripped, p_received_by)
+                cardinality(p_page_keys), p_exif_stripped, p_received_by)
         RETURNING id INTO v_doc_id;
+        INSERT INTO document_page (document_id, page_number, render_object_key)
+        SELECT v_doc_id, k.n, k.key FROM unnest(p_page_keys) WITH ORDINALITY AS k(key, n);
         INSERT INTO audit_log (actor_id, actor_label, action, entity_type, entity_id, changed_fields)
         VALUES (p_received_by, v_actor, 'create', 'document', v_doc_id,
                 jsonb_build_object('source', 'counter', 'dog_id', p_dog_id, 'mime_type', p_mime_type));
@@ -134,9 +147,56 @@ BEGIN
     RETURN v_doc_id;
 END $$;
 
-COMMENT ON FUNCTION receive_paperwork(uuid, text, text, bigint, text, integer, boolean, uuid) IS
-  'A copy of the paperwork taken at the counter: filed against the owner and the '
-  'dog (once per file per owner) and listed as waiting to be checked.';
+COMMENT ON FUNCTION receive_paperwork(uuid, text, text, bigint, text, text[], boolean, uuid) IS
+  'A copy of the paperwork taken at the counter, its pages in order: filed against '
+  'the owner and the dog (once per file per owner) and listed as waiting to be checked.';
+
+-- -----------------------------------------------------------------------------
+-- Removing a copy
+--
+-- Taken off this dog. If no other dog shares it, the copy itself goes too, and
+-- the files it named are returned so the caller can delete them. Refused while
+-- any vaccination record was checked against it (GR029).
+-- -----------------------------------------------------------------------------
+
+CREATE FUNCTION remove_paperwork(p_document_id uuid, p_dog_id uuid, p_removed_by uuid)
+RETURNS text[] LANGUAGE plpgsql AS $$
+DECLARE
+    v_actor text;
+    v_keys  text[];
+BEGIN
+    SELECT g.display_name INTO v_actor FROM groomer g WHERE g.id = p_removed_by;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'No such groomer: %', p_removed_by USING ERRCODE = 'foreign_key_violation';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM counter_paperwork cp WHERE cp.document_id = p_document_id AND cp.dog_id = p_dog_id) THEN
+        RAISE EXCEPTION 'No copy taken at the counter with id % for this dog', p_document_id
+            USING ERRCODE = 'foreign_key_violation';
+    END IF;
+    IF EXISTS (SELECT 1 FROM vaccination_record vr WHERE vr.document_id = p_document_id) THEN
+        RAISE EXCEPTION 'Shots were checked against this copy, so it can''t be removed'
+            USING ERRCODE = 'GR029',
+                  HINT = 'It is the evidence for those records. Add a clearer copy alongside it instead.';
+    END IF;
+
+    DELETE FROM counter_paperwork WHERE document_id = p_document_id AND dog_id = p_dog_id;
+    DELETE FROM document_dog      WHERE document_id = p_document_id AND dog_id = p_dog_id;
+    IF NOT EXISTS (SELECT 1 FROM document_dog dd WHERE dd.document_id = p_document_id) THEN
+        SELECT array_agg(DISTINCT k) INTO v_keys
+          FROM (SELECT doc.object_key AS k FROM document doc WHERE doc.id = p_document_id
+                UNION SELECT dp.render_object_key FROM document_page dp WHERE dp.document_id = p_document_id) keys;
+        DELETE FROM document WHERE id = p_document_id;
+    END IF;
+
+    INSERT INTO audit_log (actor_id, actor_label, action, entity_type, entity_id, changed_fields)
+    VALUES (p_removed_by, v_actor, 'delete', 'document', p_document_id,
+            jsonb_build_object('source', 'counter', 'dog_id', p_dog_id, 'files_removed', coalesce(cardinality(v_keys), 0)));
+    RETURN coalesce(v_keys, '{}');
+END $$;
+
+COMMENT ON FUNCTION remove_paperwork(uuid, uuid, uuid) IS
+  'Takes a counter copy off a dog (a blurry photo, the wrong paper). Refused once a '
+  'record was checked against it (GR029). Returns the files to delete, if any.';
 
 -- -----------------------------------------------------------------------------
 -- A shot checked by hand against the copy
@@ -233,7 +293,7 @@ END $$;
 
 CREATE VIEW v_paperwork_waiting AS
 SELECT cp.document_id, cp.dog_id, d.name AS dog, o.first_name || ' ' || o.last_name AS owner,
-       doc.mime_type, g.display_name AS received_by, cp.received_at
+       doc.mime_type, doc.page_count, g.display_name AS received_by, cp.received_at
   FROM counter_paperwork cp
   JOIN document doc ON doc.id = cp.document_id
   JOIN dog d        ON d.id = cp.dog_id

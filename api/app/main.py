@@ -526,26 +526,26 @@ def review_done(review_id: UUID, body: Reviewer):
 # --------------------------------------------------------------- paperwork at the counter
 
 @app.post("/dogs/{dog_id}/paperwork", status_code=201)
-def receive_paperwork(dog_id: UUID, groomer_id: UUID = Form(...), file: UploadFile = File(...)):
-    """A photo or PDF of the owner's paperwork: turned upright, stripped of
-    the camera's details, downsized if it is large, saved under private/, and
-    filed against the dog. It waits on the manager's list until someone says
-    they are done checking it."""
+def receive_paperwork(dog_id: UUID, groomer_id: UUID = Form(...), files: list[UploadFile] = File(...)):
+    """The owner's paperwork, as one copy however many photos and files it
+    took: each photo turned upright, stripped of the camera's details and
+    downsized if large, each PDF page drawn as a page, all saved under
+    private/ and filed against the dog. It waits on the manager's list until
+    someone says they are done checking it."""
     try:
-        copy = paperwork.prepare(file.file.read(paperwork.MAX_UPLOAD_BYTES + 1))
+        copy = paperwork.prepare([f.file.read(paperwork.MAX_UPLOAD_BYTES + 1) for f in files])
     except paperwork.NotPaperwork as e:
         raise HTTPException(422, str(e)) from None
     try:
         with db.connect() as conn:
             row = conn.execute("SELECT receive_paperwork(%s, %s, %s, %s, %s, %s, %s, %s) AS id",
                                (dog_id, copy.object_key, copy.mime_type, len(copy.data), copy.sha256,
-                                1 if copy.mime_type != "application/pdf" else None, copy.exif_stripped,
-                                groomer_id)).fetchone()
+                                copy.page_keys, copy.exif_stripped, groomer_id)).fetchone()
             # Written before the database commits: if saving fails, nothing is
-            # filed. A file already on record (the same copy again) is not
+            # filed. A copy already on record (the same files again) is not
             # written a second time.
-            key = conn.execute("SELECT object_key FROM document WHERE id = %s", (row["id"],)).fetchone()
-            if key["object_key"] == copy.object_key:
+            doc = conn.execute("SELECT object_key, page_count FROM document WHERE id = %s", (row["id"],)).fetchone()
+            if doc["object_key"] == copy.object_key:
                 paperwork.save(copy)
     except psycopg.Error as e:
         if (r := refusal_from(e, form=True)) is not None:
@@ -553,20 +553,58 @@ def receive_paperwork(dog_id: UUID, groomer_id: UUID = Form(...), file: UploadFi
         if "not an active client" in str(e):
             raise HTTPException(404, "No active dog with that id.") from None
         raise
-    return {"document_id": row["id"], "mime_type": copy.mime_type,
-            "original_bytes": copy.original_bytes, "saved_bytes": len(copy.data),
-            "original_size": copy.original_size, "saved_size": copy.saved_size}
+    return {"document_id": row["id"], "mime_type": copy.mime_type, "page_count": doc["page_count"],
+            "original_bytes": copy.original_bytes, "saved_bytes": len(copy.data) if copy.mime_type == "image/jpeg"
+            else sum(len(p) for p in copy.pages), "resized": copy.resized}
+
+
+def _page_keys(document_id: UUID) -> list[str]:
+    """A copy's pages, in order. A photo filed before copies had pages is its own page."""
+    pages = db.rows("""SELECT render_object_key AS key FROM document_page
+                        WHERE document_id = %s ORDER BY page_number""", (document_id,))
+    if pages:
+        return [p["key"] for p in pages]
+    doc = db.row("SELECT object_key, mime_type FROM document WHERE id = %s", (document_id,))
+    return [doc["object_key"]] if doc and doc["mime_type"].startswith("image/") else []
+
+
+@app.get("/paperwork/{document_id}")
+def paperwork_copy(document_id: UUID):
+    """What the screen needs to show a copy: how many pages it has."""
+    doc = db.row("SELECT mime_type FROM document WHERE id = %s", (document_id,))
+    if doc is None:
+        raise HTTPException(404, "No such copy.")
+    return {"mime_type": doc["mime_type"], "page_count": len(_page_keys(document_id))}
+
+
+@app.get("/paperwork/{document_id}/pages/{page}")
+def paperwork_page(document_id: UUID, page: int):
+    """One page of a copy, as an image. This machine only, like the rest of the API."""
+    keys = _page_keys(document_id)
+    path = paperwork.path_of(keys[page - 1]) if 1 <= page <= len(keys) else None
+    if path is None:
+        raise HTTPException(404, "That page isn't on this computer.")
+    return FileResponse(path, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=3600"})
 
 
 @app.get("/paperwork/{document_id}/file")
 def paperwork_file(document_id: UUID):
-    """The copy itself, to show beside the form. This machine only, like the
-    rest of the API."""
+    """The copy itself: the photo, or the PDF of all its pages."""
     doc = db.row("SELECT object_key, mime_type FROM document WHERE id = %s", (document_id,))
     path = paperwork.path_of(doc["object_key"]) if doc else None
     if path is None:
         raise HTTPException(404, "That copy isn't on this computer.")
     return FileResponse(path, media_type=doc["mime_type"], headers={"Cache-Control": "private, max-age=3600"})
+
+
+@app.post("/dogs/{dog_id}/paperwork/{document_id}/remove")
+def remove_paperwork(dog_id: UUID, document_id: UUID, body: Reviewer):
+    """A copy nobody has checked a shot against (a blurry photo, the wrong
+    paper) taken off the dog, and its files deleted. Refused once a record
+    rests on it (GR029)."""
+    row = _write("SELECT remove_paperwork(%s, %s, %s) AS keys", (document_id, dog_id, body.groomer_id))
+    paperwork.discard(row["keys"])
+    return {"removed": True}
 
 
 class CheckedShot(CounterShot):

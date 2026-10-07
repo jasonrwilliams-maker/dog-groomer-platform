@@ -30,7 +30,7 @@ export function DogCard({
   const [refusal, setRefusal] = useState<Refusal | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Open: a new copy (true), or one already waiting to be checked.
-  const [paperwork, setPaperwork] = useState<boolean | { documentId: string; mimeType: string }>(false);
+  const [paperwork, setPaperwork] = useState<boolean | { documentId: string }>(false);
   const [editing, setEditing] = useState(false);
 
   async function start() {
@@ -116,8 +116,7 @@ export function DogCard({
               waiting to be checked.
             </span>
             <Button variant="outline" size="sm"
-                    onClick={() => setPaperwork({ documentId: card.paperwork_waiting[0].document_id,
-                                                  mimeType: card.paperwork_waiting[0].mime_type })}>
+                    onClick={() => setPaperwork({ documentId: card.paperwork_waiting[0].document_id })}>
               Check it now
             </Button>
           </div>

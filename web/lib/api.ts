@@ -50,12 +50,14 @@ export type CheckInCard = {
 
 /** What the counter's upload saved. */
 export type ReceivedCopy = {
-  document_id: string; mime_type: string; original_bytes: number; saved_bytes: number;
-  original_size: [number, number] | null; saved_size: [number, number] | null;
+  document_id: string; mime_type: string; page_count: number;
+  original_bytes: number; saved_bytes: number;
+  /** Whether any photo was made smaller to save space. */
+  resized: boolean;
 };
 export type WaitingCopy = {
   document_id: string; dog_id: string; dog: string; owner: string; mime_type: string;
-  received_by: string; received_at: string;
+  page_count: number | null; received_by: string; received_at: string;
 };
 export type HandChecked = {
   id: string; dog_id: string; dog: string; owner: string; vaccine: string; administered_on: string;
@@ -64,6 +66,8 @@ export type HandChecked = {
 
 /** Where the screen shows a copy from. */
 export const paperworkUrl = (documentId: string) => `/api/paperwork/${documentId}/file`;
+/** One page of a copy, as an image. */
+export const pageUrl = (documentId: string, page: number) => `/api/paperwork/${documentId}/pages/${page}`;
 
 export type Groomer = { id: string; name: string; role: "groomer" | "manager" };
 
@@ -184,12 +188,16 @@ export const api = {
       groomer_id: groomerId, vaccine, administered_on: administeredOn, expires_on: expiresOn,
     }),
   /** A photo or PDF of the owner's paperwork, kept with the dog. */
-  sendPaperwork: (dogId: string, groomerId: string, file: File) => {
+  sendPaperwork: (dogId: string, groomerId: string, files: File[]) => {
     const form = new FormData();
     form.append("groomer_id", groomerId);
-    form.append("file", file);
+    files.forEach((f) => form.append("files", f));
     return post<ReceivedCopy>(`/dogs/${dogId}/paperwork`, form);
   },
+  paperworkInfo: (documentId: string) => get<{ mime_type: string; page_count: number }>(`/paperwork/${documentId}`),
+  /** A copy nobody has checked a shot against, taken off the dog. */
+  removePaperwork: (dogId: string, documentId: string, groomerId: string) =>
+    post<{ removed: boolean }>(`/dogs/${dogId}/paperwork/${documentId}/remove`, { groomer_id: groomerId }),
   /** A shot typed in while reading the photo: verified, and marked checked by hand. */
   addCheckedShot: (dogId: string, groomerId: string, documentId: string, vaccine: string,
                    administeredOn: string | null, expiresOn: string | null) =>

@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Badge, toneFor } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { CopyPreview, PaperworkIntake } from "@/components/check-in/paperwork-intake";
+import { CopyPages, PaperworkIntake } from "@/components/check-in/paperwork-intake";
 import {
   api, paperworkUrl, type ComplianceLine, type ComplianceSummary, type HandChecked, type Review, type WaitingCopy,
 } from "@/lib/api";
@@ -94,7 +94,7 @@ export function AdminView({ groomerId, onOpenDog }: { groomerId: string; onOpenD
           <CardContent>
             <PaperworkIntake key={checking.document_id} dogId={checking.dog_id} dogName={checking.dog}
                              groomerId={groomerId}
-                             resume={{ documentId: checking.document_id, mimeType: checking.mime_type }}
+                             resume={{ documentId: checking.document_id }}
                              onChanged={loadPaperwork} onClose={() => { setChecking(null); loadPaperwork(); }} />
           </CardContent>
         </Card>
@@ -113,16 +113,23 @@ export function AdminView({ groomerId, onOpenDog }: { groomerId: string; onOpenD
               {waiting.map((w) => (
                 <li key={`${w.document_id}-${w.dog_id}`} className="flex flex-wrap items-center justify-between gap-3 py-2.5">
                   <span className="flex min-w-0 items-center gap-3">
-                    <CopyPreview documentId={w.document_id} mimeType={w.mime_type} small />
+                    <CopyPages documentId={w.document_id} small />
                     <span>
                       <button className="font-medium hover:underline" onClick={() => onOpenDog(w.dog_id)}>{w.dog}</button>
                       <span className="text-muted-foreground"> · {w.owner}</span>
                       <span className="block text-sm text-muted-foreground">Received by {w.received_by}, {when(w.received_at)}</span>
                     </span>
                   </span>
-                  <Button size="sm" disabled={checking?.document_id === w.document_id} onClick={() => setChecking(w)}>
-                    Check it
-                  </Button>
+                  <span className="flex gap-2">
+                    <Button size="sm" disabled={checking?.document_id === w.document_id} onClick={() => setChecking(w)}>
+                      Check it
+                    </Button>
+                    <Button variant="outline" size="sm"
+                            onClick={() => window.confirm(`Remove this copy of ${w.dog}'s paperwork? Its pages are deleted.`)
+                              && api.removePaperwork(w.dog_id, w.document_id, groomerId).then(loadPaperwork).catch(fail)}>
+                      Remove
+                    </Button>
+                  </span>
                 </li>
               ))}
             </ul>
