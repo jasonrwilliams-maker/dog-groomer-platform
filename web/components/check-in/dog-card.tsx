@@ -6,9 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { AllergyCard } from "@/components/check-in/allergy-card";
 import { HandlingCard } from "@/components/check-in/handling-card";
-import { PaperworkForm } from "@/components/check-in/paperwork-form";
+import { PaperworkIntake } from "@/components/check-in/paperwork-intake";
 import { ProfileEditForm } from "@/components/check-in/profile-edit-form";
-import { api, Refusal, type CheckInCard } from "@/lib/api";
+import { api, paperworkUrl, Refusal, type CheckInCard } from "@/lib/api";
 import { cn, formatDate, formatTime } from "@/lib/utils";
 
 const SEX = { male: "Male", female: "Female", unknown: "" } as Record<string, string>;
@@ -29,7 +29,8 @@ export function DogCard({
   const [busy, setBusy] = useState(false);
   const [refusal, setRefusal] = useState<Refusal | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [paperwork, setPaperwork] = useState(false);
+  // Open: a new copy (true), or one already waiting to be checked.
+  const [paperwork, setPaperwork] = useState<boolean | { documentId: string; mimeType: string }>(false);
   const [editing, setEditing] = useState(false);
 
   async function start() {
@@ -93,7 +94,7 @@ export function DogCard({
             <ul className="mt-1 text-stop">
               {card.blocking.map((b) => <li key={b}>{b}</li>)}
             </ul>
-            <p className="mt-2 text-sm">Ask the owner for a current certificate, and type it in below.</p>
+            <p className="mt-2 text-sm">Ask the owner for a current certificate, and add it below.</p>
           </>
         )}
         {card.paperwork_requests.length > 0 && (
@@ -108,6 +109,20 @@ export function DogCard({
           </ul>
         )}
 
+        {card.paperwork_waiting.length > 0 && !paperwork && (
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border/60 pt-2 text-sm">
+            <span>
+              Paperwork received from the owner{card.paperwork_waiting.length > 1 && ` (${card.paperwork_waiting.length} copies)`},
+              waiting to be checked.
+            </span>
+            <Button variant="outline" size="sm"
+                    onClick={() => setPaperwork({ documentId: card.paperwork_waiting[0].document_id,
+                                                  mimeType: card.paperwork_waiting[0].mime_type })}>
+              Check it now
+            </Button>
+          </div>
+        )}
+
         {!card.open_visit && (
           <div className="mt-4 flex flex-wrap items-center gap-3">
             <Button variant="go" size="lg" disabled={!card.can_start || busy} onClick={start}>
@@ -115,7 +130,7 @@ export function DogCard({
             </Button>
             {!paperwork && (
               <Button variant="outline" size="lg" onClick={() => setPaperwork(true)}>
-                Type in paperwork
+                Add paperwork
               </Button>
             )}
           </div>
@@ -134,8 +149,10 @@ export function DogCard({
         <Card className="border-primary/40">
           <CardHeader><CardTitle>Paperwork the owner brought</CardTitle></CardHeader>
           <CardContent>
-            <PaperworkForm dogId={dog.id} dogName={dog.name} groomerId={groomerId}
-                           onSaved={onChanged} onClose={() => setPaperwork(false)} />
+            <PaperworkIntake key={typeof paperwork === "object" ? paperwork.documentId : "new"}
+                             dogId={dog.id} dogName={dog.name} groomerId={groomerId}
+                             resume={typeof paperwork === "object" ? paperwork : undefined}
+                             onChanged={onChanged} onClose={() => setPaperwork(false)} />
           </CardContent>
         </Card>
       )}
@@ -164,6 +181,13 @@ export function DogCard({
                         <span className="block text-sm text-muted-foreground">
                           {v.days_until_expiry !== null && v.days_until_expiry < 0 ? "Expired" : "Expires"} {formatDate(v.expires_on)}
                         </span>
+                      )}
+                      {v.hand_checked && (
+                        <a href={paperworkUrl(v.hand_checked.document_id)} target="_blank" rel="noreferrer"
+                           className="block text-xs text-muted-foreground hover:underline">
+                          Checked by hand by {v.hand_checked.checked_by}, {formatDate(v.hand_checked.checked_on)}
+                          {v.hand_checked.second_look ? " · manager agreed" : " · manager hasn't looked yet"} · photo ↗
+                        </a>
                       )}
                     </span>
                     <Badge tone={toneFor(v.state, v.blocks_service)}>{v.label}</Badge>

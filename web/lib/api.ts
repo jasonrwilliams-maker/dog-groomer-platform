@@ -20,6 +20,8 @@ export type VaccineLine = {
   days_until_expiry: number | null;
   blocks_service: boolean;
   regulatory_required: boolean;
+  /** Set when the record was typed in by someone reading a photo of the paperwork. */
+  hand_checked: { checked_by: string; checked_on: string; second_look: boolean; document_id: string } | null;
 };
 
 export type CheckInCard = {
@@ -42,7 +44,26 @@ export type CheckInCard = {
   last_visit: { visit_date: string; groomer: string; note: string | null } | null;
   open_visit: { id: string; check_in: string; groomer: string } | null;
   paperwork_requests: { vaccine: string; status: string; channel: string; next_reminder_on: string | null }[];
+  /** Copies taken at the counter that nobody has finished checking. */
+  paperwork_waiting: { document_id: string; mime_type: string; received_by: string; received_at: string }[];
 };
+
+/** What the counter's upload saved. */
+export type ReceivedCopy = {
+  document_id: string; mime_type: string; original_bytes: number; saved_bytes: number;
+  original_size: [number, number] | null; saved_size: [number, number] | null;
+};
+export type WaitingCopy = {
+  document_id: string; dog_id: string; dog: string; owner: string; mime_type: string;
+  received_by: string; received_at: string;
+};
+export type HandChecked = {
+  id: string; dog_id: string; dog: string; owner: string; vaccine: string; administered_on: string;
+  expires_on: string; document_id: string; mime_type: string; checked_by: string; checked_at: string;
+};
+
+/** Where the screen shows a copy from. */
+export const paperworkUrl = (documentId: string) => `/api/paperwork/${documentId}/file`;
 
 export type Groomer = { id: string; name: string; role: "groomer" | "manager" };
 
@@ -110,7 +131,8 @@ async function get<T>(path: string): Promise<T> {
 
 /** POST or PUT, and a 409 becomes a Refusal carrying the database's own words. */
 async function send<T>(method: "POST" | "PUT", path: string, body: unknown): Promise<T> {
-  const r = await fetch(`/api${path}`, {
+  // A form (a file upload) goes as it is; anything else as JSON.
+  const r = await fetch(`/api${path}`, body instanceof FormData ? { method, body } : {
     method,
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -161,4 +183,23 @@ export const api = {
     post<{ id: string }>(`/dogs/${dogId}/shots`, {
       groomer_id: groomerId, vaccine, administered_on: administeredOn, expires_on: expiresOn,
     }),
+  /** A photo or PDF of the owner's paperwork, kept with the dog. */
+  sendPaperwork: (dogId: string, groomerId: string, file: File) => {
+    const form = new FormData();
+    form.append("groomer_id", groomerId);
+    form.append("file", file);
+    return post<ReceivedCopy>(`/dogs/${dogId}/paperwork`, form);
+  },
+  /** A shot typed in while reading the photo: verified, and marked checked by hand. */
+  addCheckedShot: (dogId: string, groomerId: string, documentId: string, vaccine: string,
+                   administeredOn: string | null, expiresOn: string | null) =>
+    post<{ id: string }>(`/dogs/${dogId}/checked-shots`, {
+      groomer_id: groomerId, document_id: documentId, vaccine, administered_on: administeredOn, expires_on: expiresOn,
+    }),
+  paperworkDone: (dogId: string, documentId: string, groomerId: string) =>
+    post<{ done: boolean }>(`/dogs/${dogId}/paperwork/${documentId}/done`, { groomer_id: groomerId }),
+  paperworkWaiting: () => get<WaitingCopy[]>("/admin/paperwork"),
+  handChecked: () => get<HandChecked[]>("/admin/hand-checked"),
+  secondLook: (recordId: string, groomerId: string) =>
+    post<{ looked: boolean }>(`/admin/hand-checked/${recordId}/looked`, { groomer_id: groomerId }),
 };

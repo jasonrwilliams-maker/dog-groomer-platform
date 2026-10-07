@@ -21,11 +21,14 @@ export function useWalkInOptions(): WalkInOptions | null {
 type Line = { given: string; expires: string; saved: boolean; refusal: Refusal | null; error: string | null };
 const blank: Line = { given: "", expires: "", saved: false, refusal: null, error: null };
 
-/** One line per vaccine the shop tracks: the two dates, typed off the paper. */
-export function PaperworkForm({ dogId, dogName, groomerId, onSaved, onClose, closeLabel = "Done" }: {
+/** One line per vaccine the shop tracks: the two dates, typed off the paper.
+ *  With a documentId, they are being read off a photo of it, and count as
+ *  verified (checked by hand); without one, they await a manager. */
+export function PaperworkForm({ dogId, dogName, groomerId, documentId, onSaved, onClose, closeLabel = "Done" }: {
   dogId: string;
   dogName: string;
   groomerId: string;
+  documentId?: string;
   onSaved: () => void;
   onClose: () => void;
   closeLabel?: string;
@@ -51,7 +54,9 @@ export function PaperworkForm({ dogId, dogName, groomerId, onSaved, onClose, clo
       const l = line(v.code);
       set(v.code, { refusal: null, error: null });
       try {
-        await api.addShot(dogId, groomerId, v.code, l.given || null, l.expires || null);
+        await (documentId
+          ? api.addCheckedShot(dogId, groomerId, documentId, v.code, l.given || null, l.expires || null)
+          : api.addShot(dogId, groomerId, v.code, l.given || null, l.expires || null));
         set(v.code, { saved: true });
         any = true;
       } catch (e) {
@@ -65,11 +70,19 @@ export function PaperworkForm({ dogId, dogName, groomerId, onSaved, onClose, clo
 
   return (
     <div className="flex flex-col gap-4">
-      <p className="text-sm text-muted-foreground">
-        Type the dates exactly as {dogName}&apos;s paper prints them. A shot with no expiry date on the paper
-        can&apos;t be recorded: the system never guesses one. Shots entered here count for today&apos;s groom,
-        and a manager checks them against the paper later.
-      </p>
+      {documentId ? (
+        <p className="text-sm text-muted-foreground">
+          Read the photo and type each date exactly as it&apos;s printed. A shot with no expiry date on the paper
+          can&apos;t be recorded: the system never guesses one. What you save here counts as verified, under your
+          name, and a manager can compare it with the photo later.
+        </p>
+      ) : (
+        <p className="text-sm text-muted-foreground">
+          Type the dates exactly as {dogName}&apos;s paper prints them. A shot with no expiry date on the paper
+          can&apos;t be recorded: the system never guesses one. Shots entered here count for today&apos;s groom,
+          and a manager checks them against the paper later.
+        </p>
+      )}
 
       {!opts ? (
         <p className="text-sm text-muted-foreground">Loading…</p>
@@ -84,7 +97,11 @@ export function PaperworkForm({ dogId, dogName, groomerId, onSaved, onClose, clo
                     {v.name}
                     {v.required && <span className="ml-2 text-xs font-normal text-muted-foreground">required by law</span>}
                   </span>
-                  {l.saved && <span className="text-sm font-medium text-ok">Saved · awaiting verification</span>}
+                  {l.saved && (
+                    <span className="text-sm font-medium text-ok">
+                      {documentId ? "Saved · checked by hand" : "Saved · awaiting verification"}
+                    </span>
+                  )}
                 </div>
                 {!l.saved && (
                   <div className="grid gap-3 sm:grid-cols-2">

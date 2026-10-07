@@ -4,7 +4,10 @@ import { useEffect, useState } from "react";
 import { Badge, toneFor } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { api, type ComplianceLine, type ComplianceSummary, type Review } from "@/lib/api";
+import { CopyPreview, PaperworkIntake } from "@/components/check-in/paperwork-intake";
+import {
+  api, paperworkUrl, type ComplianceLine, type ComplianceSummary, type HandChecked, type Review, type WaitingCopy,
+} from "@/lib/api";
 import { formatDate } from "@/lib/utils";
 
 // The labelling and review tool (extraction/review/). Managers only.
@@ -18,7 +21,7 @@ const REQUEST = {
 // Each group is a different job for the manager, in the order they matter.
 const GROUPS: { title: string; note: string; match: (l: ComplianceLine) => boolean }[] = [
   { title: "Can't groom", note: "These stop today's groom until paperwork is confirmed.", match: (l) => l.blocks_service },
-  { title: "Waiting to be verified", note: "Groomable now; check them against the paperwork.",
+  { title: "Waiting to be verified", note: "Typed in with no copy of the paperwork. Groomable now; check them against the paper.",
     match: (l) => !l.blocks_service && l.state === "received_unverified" },
   { title: "Expiring soon", note: "Ask for updated paperwork at the next visit.",
     match: (l) => !l.blocks_service && l.state === "expiring_soon" },
@@ -29,9 +32,19 @@ export function AdminView({ groomerId, onOpenDog }: { groomerId: string; onOpenD
   const [reviews, setReviews] = useState<Review[]>([]);
   const [problem, setProblem] = useState<string | null>(null);
 
-  const loadReviews = () => api.reviews().then(setReviews).catch((e) => setProblem(String(e.message ?? e)));
+  const [waiting, setWaiting] = useState<WaitingCopy[]>([]);
+  const [handChecked, setHandChecked] = useState<HandChecked[]>([]);
+  const [checking, setChecking] = useState<WaitingCopy | null>(null);
+
+  const fail = (e: { message?: string }) => setProblem(String(e.message ?? e));
+  const loadReviews = () => api.reviews().then(setReviews).catch(fail);
+  const loadPaperwork = () => {
+    api.paperworkWaiting().then(setWaiting).catch(fail);
+    api.handChecked().then(setHandChecked).catch(fail);
+    api.compliance().then(setSummary).catch(fail);
+  };
   useEffect(() => {
-    api.compliance().then(setSummary).catch((e) => setProblem(String(e.message ?? e)));
+    loadPaperwork();
     loadReviews();
   }, []);
 
@@ -70,6 +83,91 @@ export function AdminView({ groomerId, onOpenDog }: { groomerId: string; onOpenD
         </CardContent>
       </Card>
 
+      {checking && (
+        <Card className="border-primary/40">
+          <CardHeader>
+            <CardTitle>{checking.dog}&apos;s paperwork</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              {checking.owner} · received by {checking.received_by}, {when(checking.received_at)}
+            </p>
+          </CardHeader>
+          <CardContent>
+            <PaperworkIntake key={checking.document_id} dogId={checking.dog_id} dogName={checking.dog}
+                             groomerId={groomerId}
+                             resume={{ documentId: checking.document_id, mimeType: checking.mime_type }}
+                             onChanged={loadPaperwork} onClose={() => { setChecking(null); loadPaperwork(); }} />
+          </CardContent>
+        </Card>
+      )}
+
+      {waiting.length > 0 && (
+        <Card className="border-warn/40">
+          <CardHeader>
+            <CardTitle>Paperwork to check · {waiting.length}</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Copies taken at the counter that nobody has finished checking. Read each one and type in its dates.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <ul className="flex flex-col divide-y divide-border">
+              {waiting.map((w) => (
+                <li key={`${w.document_id}-${w.dog_id}`} className="flex flex-wrap items-center justify-between gap-3 py-2.5">
+                  <span className="flex min-w-0 items-center gap-3">
+                    <CopyPreview documentId={w.document_id} mimeType={w.mime_type} small />
+                    <span>
+                      <button className="font-medium hover:underline" onClick={() => onOpenDog(w.dog_id)}>{w.dog}</button>
+                      <span className="text-muted-foreground"> · {w.owner}</span>
+                      <span className="block text-sm text-muted-foreground">Received by {w.received_by}, {when(w.received_at)}</span>
+                    </span>
+                  </span>
+                  <Button size="sm" disabled={checking?.document_id === w.document_id} onClick={() => setChecking(w)}>
+                    Check it
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
+      {handChecked.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Checked by hand · {handChecked.length}</CardTitle>
+            <p className="text-sm text-muted-foreground">
+              Shots a groomer verified by reading a photo at the counter. Compare each with its photo: a date misread
+              in a rush is the shop&apos;s problem at inspection. If one doesn&apos;t match, leave it here and sort it out
+              with the groomer.
+            </p>
+          </CardHeader>
+          <CardContent>
+            <ul className="flex flex-col divide-y divide-border">
+              {handChecked.map((r) => (
+                <li key={r.id} className="flex flex-wrap items-center justify-between gap-3 py-2.5">
+                  <span className="min-w-0">
+                    <button className="font-medium hover:underline" onClick={() => onOpenDog(r.dog_id)}>{r.dog}</button>
+                    <span className="text-muted-foreground"> · {r.owner}</span>
+                    <span className="block text-sm">
+                      {r.vaccine} · given {formatDate(r.administered_on)} · expires {formatDate(r.expires_on)}
+                    </span>
+                    <span className="block text-sm text-muted-foreground">
+                      Checked by {r.checked_by}, {when(r.checked_at)} ·{" "}
+                      <a href={paperworkUrl(r.document_id)} target="_blank" rel="noreferrer" className="underline-offset-2 hover:underline">
+                        see the photo ↗
+                      </a>
+                    </span>
+                  </span>
+                  <Button variant="outline" size="sm"
+                          onClick={() => api.secondLook(r.id, groomerId).then(loadPaperwork).catch(fail)}>
+                    Matches the photo
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
       {reviews.length > 0 && (
         <Card className="border-warn/40">
           <CardHeader>
@@ -87,8 +185,7 @@ export function AdminView({ groomerId, onOpenDog }: { groomerId: string; onOpenD
                     <span className="text-muted-foreground"> · {r.owner}</span>
                     <span className="block text-sm">{r.summary}</span>
                     <span className="block text-sm text-muted-foreground">
-                      &ldquo;{r.reason}&rdquo; · {r.changed_by}, {new Date(r.changed_at).toLocaleString("en-US", {
-                        month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}
+                      &ldquo;{r.reason}&rdquo; · {r.changed_by}, {when(r.changed_at)}
                     </span>
                   </button>
                   <Button variant="outline" size="sm"
@@ -115,6 +212,9 @@ export function AdminView({ groomerId, onOpenDog }: { groomerId: string; onOpenD
     </div>
   );
 }
+
+const when = (at: string) =>
+  new Date(at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
 function Stat({ label, value, tone }: { label: string; value: number; tone?: "ok" | "stop" }) {
   const colour = tone === "ok" ? "text-ok" : tone === "stop" ? "text-stop" : "";

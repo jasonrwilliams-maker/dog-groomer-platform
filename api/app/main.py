@@ -17,11 +17,11 @@ from typing import Literal
 from uuid import UUID
 
 import psycopg
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
-from . import db
+from . import db, paperwork
 
 app = FastAPI(title="Paws & Polish — groomer API", version="0.1.0")
 
@@ -184,6 +184,21 @@ def check_in_card(dog_id: UUID):
          WHERE rr.dog_id = %s AND rr.status IN ('queued', 'sent', 'responded', 'insufficient')
          ORDER BY vt.name""", (dog_id,))
 
+    # Which lines rest on a record someone checked by hand against a photo.
+    hand_checked = {r["code"]: r for r in db.rows("""
+        SELECT vt.code, g.display_name AS checked_by, vr.verified_at::date AS checked_on,
+               vr.second_look_at IS NOT NULL AS second_look, vr.document_id
+          FROM dog_vaccine_compliance s
+          JOIN vaccination_record vr ON vr.id = s.latest_record_id
+          JOIN vaccine_type vt       ON vt.id = s.vaccine_type_id
+          JOIN groomer g             ON g.id = vr.verified_by
+         WHERE s.dog_id = %s AND vr.checked_by_hand""", (dog_id,))}
+    for v in vaccines:
+        h = hand_checked.get(v["code"])
+        v["hand_checked"] = {k: h[k] for k in ("checked_by", "checked_on", "second_look", "document_id")} if h else None
+    waiting = db.rows("""SELECT document_id, mime_type, received_by, received_at FROM v_paperwork_waiting
+                          WHERE dog_id = %s ORDER BY received_at""", (dog_id,))
+
     blocking = [v for v in vaccines if v["blocks_service"]]
     return {
         "dog": {**dog, "age": _age(dog["date_of_birth"])},
@@ -197,6 +212,7 @@ def check_in_card(dog_id: UUID):
         "last_visit": last_visit,
         "open_visit": open_visit,
         "paperwork_requests": requests,
+        "paperwork_waiting": waiting,
     }
 
 
@@ -505,3 +521,86 @@ class Reviewer(BaseModel):
 def review_done(review_id: UUID, body: Reviewer):
     _write("SELECT mark_reviewed(%s, %s) AS ok", (review_id, body.groomer_id))
     return {"reviewed": True}
+
+
+# --------------------------------------------------------------- paperwork at the counter
+
+@app.post("/dogs/{dog_id}/paperwork", status_code=201)
+def receive_paperwork(dog_id: UUID, groomer_id: UUID = Form(...), file: UploadFile = File(...)):
+    """A photo or PDF of the owner's paperwork: turned upright, stripped of
+    the camera's details, downsized if it is large, saved under private/, and
+    filed against the dog. It waits on the manager's list until someone says
+    they are done checking it."""
+    try:
+        copy = paperwork.prepare(file.file.read(paperwork.MAX_UPLOAD_BYTES + 1))
+    except paperwork.NotPaperwork as e:
+        raise HTTPException(422, str(e)) from None
+    try:
+        with db.connect() as conn:
+            row = conn.execute("SELECT receive_paperwork(%s, %s, %s, %s, %s, %s, %s, %s) AS id",
+                               (dog_id, copy.object_key, copy.mime_type, len(copy.data), copy.sha256,
+                                1 if copy.mime_type != "application/pdf" else None, copy.exif_stripped,
+                                groomer_id)).fetchone()
+            # Written before the database commits: if saving fails, nothing is
+            # filed. A file already on record (the same copy again) is not
+            # written a second time.
+            key = conn.execute("SELECT object_key FROM document WHERE id = %s", (row["id"],)).fetchone()
+            if key["object_key"] == copy.object_key:
+                paperwork.save(copy)
+    except psycopg.Error as e:
+        if (r := refusal_from(e, form=True)) is not None:
+            raise r from None
+        if "not an active client" in str(e):
+            raise HTTPException(404, "No active dog with that id.") from None
+        raise
+    return {"document_id": row["id"], "mime_type": copy.mime_type,
+            "original_bytes": copy.original_bytes, "saved_bytes": len(copy.data),
+            "original_size": copy.original_size, "saved_size": copy.saved_size}
+
+
+@app.get("/paperwork/{document_id}/file")
+def paperwork_file(document_id: UUID):
+    """The copy itself, to show beside the form. This machine only, like the
+    rest of the API."""
+    doc = db.row("SELECT object_key, mime_type FROM document WHERE id = %s", (document_id,))
+    path = paperwork.path_of(doc["object_key"]) if doc else None
+    if path is None:
+        raise HTTPException(404, "That copy isn't on this computer.")
+    return FileResponse(path, media_type=doc["mime_type"], headers={"Cache-Control": "private, max-age=3600"})
+
+
+class CheckedShot(CounterShot):
+    document_id: UUID
+
+
+@app.post("/dogs/{dog_id}/checked-shots", status_code=201)
+def checked_shot(dog_id: UUID, body: CheckedShot):
+    """One vaccine typed in while reading the photo: verified, and marked as
+    checked by hand. The same refusals as a shot typed with no photo."""
+    return _write("SELECT record_checked_shot(%s, %s, %s, %s, %s, %s) AS id",
+                  (dog_id, body.document_id, body.vaccine, body.administered_on, body.expires_on,
+                   body.groomer_id), "No active dog with that id.")
+
+
+@app.post("/dogs/{dog_id}/paperwork/{document_id}/done")
+def paperwork_done(dog_id: UUID, document_id: UUID, body: Reviewer):
+    _write("SELECT finish_paperwork_check(%s, %s, %s) AS ok", (document_id, dog_id, body.groomer_id))
+    return {"done": True}
+
+
+@app.get("/admin/paperwork")
+def paperwork_waiting():
+    """Copies received at the counter that nobody has finished checking."""
+    return db.rows("SELECT * FROM v_paperwork_waiting")
+
+
+@app.get("/admin/hand-checked")
+def hand_checked():
+    """Records a groomer checked by hand, waiting for a manager's second look."""
+    return db.rows("SELECT * FROM v_hand_checked_open")
+
+
+@app.post("/admin/hand-checked/{record_id}/looked")
+def second_look(record_id: UUID, body: Reviewer):
+    _write("SELECT give_second_look(%s, %s) AS ok", (record_id, body.groomer_id))
+    return {"looked": True}
