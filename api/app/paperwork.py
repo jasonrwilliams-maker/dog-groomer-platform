@@ -174,6 +174,17 @@ def _as_pdf(pages: list[bytes]) -> bytes:
     return buf.getvalue()
 
 
+def rebuilt(page_keys: list[str]) -> Copy:
+    """The copy made again from the pages it still has, after one is taken out."""
+    pages = []
+    for key in page_keys:
+        path = path_of(key)
+        if path is None:
+            raise NotPaperwork("A page of this copy is missing from this computer, so it can't be rebuilt.")
+        pages.append(path.read_bytes())
+    return Copy(_as_pdf(pages), "application/pdf", pages, sum(map(len, pages)), True, False)
+
+
 def _disk_path(key: str) -> Path:
     return private_dir() / Path(key).relative_to("private")
 

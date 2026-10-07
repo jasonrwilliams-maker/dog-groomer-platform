@@ -195,6 +195,9 @@ export const api = {
     return post<ReceivedCopy>(`/dogs/${dogId}/paperwork`, form);
   },
   paperworkInfo: (documentId: string) => get<{ mime_type: string; page_count: number }>(`/paperwork/${documentId}`),
+  /** One page out of a copy nobody has checked a shot against. */
+  removePage: (dogId: string, documentId: string, page: number, groomerId: string) =>
+    post<{ page_count: number }>(`/dogs/${dogId}/paperwork/${documentId}/pages/${page}/remove`, { groomer_id: groomerId }),
   /** A copy nobody has checked a shot against, taken off the dog. */
   removePaperwork: (dogId: string, documentId: string, groomerId: string) =>
     post<{ removed: boolean }>(`/dogs/${dogId}/paperwork/${documentId}/remove`, { groomer_id: groomerId }),

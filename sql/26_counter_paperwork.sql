@@ -194,6 +194,61 @@ BEGIN
     RETURN coalesce(v_keys, '{}');
 END $$;
 
+-- One page taken out of a copy (a dark webcam shot, a duplicate). The pages
+-- after it move up. The copy file itself is rebuilt from the pages that are
+-- left by the caller, which passes its new name and fingerprint. The last page
+-- is not removed this way: that is removing the copy. Returns the files that
+-- are no longer used.
+CREATE FUNCTION remove_paperwork_page(p_document_id uuid, p_dog_id uuid, p_page integer, p_removed_by uuid,
+                                      p_object_key text, p_byte_size bigint, p_sha256 text)
+RETURNS text[] LANGUAGE plpgsql AS $$
+DECLARE
+    v_actor  text;
+    v_old    text;
+    v_page   text;
+BEGIN
+    SELECT g.display_name INTO v_actor FROM groomer g WHERE g.id = p_removed_by;
+    IF NOT FOUND THEN
+        RAISE EXCEPTION 'No such groomer: %', p_removed_by USING ERRCODE = 'foreign_key_violation';
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM counter_paperwork cp WHERE cp.document_id = p_document_id AND cp.dog_id = p_dog_id) THEN
+        RAISE EXCEPTION 'No copy taken at the counter with id % for this dog', p_document_id
+            USING ERRCODE = 'foreign_key_violation';
+    END IF;
+    IF EXISTS (SELECT 1 FROM vaccination_record vr WHERE vr.document_id = p_document_id) THEN
+        RAISE EXCEPTION 'Shots were checked against this copy, so its pages can''t be changed'
+            USING ERRCODE = 'GR029',
+                  HINT = 'It is the evidence for those records. Add a clearer copy alongside it instead.';
+    END IF;
+    IF (SELECT count(*) FROM document_page dp WHERE dp.document_id = p_document_id) <= 1 THEN
+        RAISE EXCEPTION 'That is the only page. Remove the whole copy instead'
+            USING ERRCODE = 'check_violation';
+    END IF;
+
+    DELETE FROM document_page WHERE document_id = p_document_id AND page_number = p_page
+    RETURNING render_object_key INTO v_page;
+    IF v_page IS NULL THEN
+        RAISE EXCEPTION 'This copy has no page %', p_page USING ERRCODE = 'check_violation';
+    END IF;
+    -- Renumbered in two moves, so no two pages hold the same number on the way.
+    UPDATE document_page SET page_number = page_number + 1000 WHERE document_id = p_document_id;
+    UPDATE document_page dp SET page_number = r.n
+      FROM (SELECT id, row_number() OVER (ORDER BY page_number) AS n
+              FROM document_page WHERE document_id = p_document_id) r
+     WHERE dp.id = r.id;
+
+    SELECT object_key INTO v_old FROM document WHERE id = p_document_id;
+    UPDATE document
+       SET object_key = p_object_key, mime_type = 'application/pdf', byte_size = p_byte_size,
+           sha256 = p_sha256, page_count = page_count - 1
+     WHERE id = p_document_id;
+
+    INSERT INTO audit_log (actor_id, actor_label, action, entity_type, entity_id, changed_fields)
+    VALUES (p_removed_by, v_actor, 'update', 'document', p_document_id,
+            jsonb_build_object('source', 'counter', 'page_removed', p_page));
+    RETURN ARRAY[v_page] || CASE WHEN v_old IS DISTINCT FROM p_object_key THEN ARRAY[v_old] ELSE '{}' END;
+END $$;
+
 COMMENT ON FUNCTION remove_paperwork(uuid, uuid, uuid) IS
   'Takes a counter copy off a dog (a blurry photo, the wrong paper). Refused once a '
   'record was checked against it (GR029). Returns the files to delete, if any.';

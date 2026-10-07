@@ -597,6 +597,33 @@ def paperwork_file(document_id: UUID):
     return FileResponse(path, media_type=doc["mime_type"], headers={"Cache-Control": "private, max-age=3600"})
 
 
+@app.post("/dogs/{dog_id}/paperwork/{document_id}/pages/{page}/remove")
+def remove_paperwork_page(dog_id: UUID, document_id: UUID, page: int, body: Reviewer):
+    """One page taken out of a copy (a dark webcam shot, a duplicate). The
+    copy is rebuilt from the pages left, and the unused files deleted."""
+    keys = _page_keys(document_id)
+    if not 1 <= page <= len(keys):
+        raise HTTPException(404, "This copy has no such page.")
+    try:
+        copy = paperwork.rebuilt(keys[:page - 1] + keys[page:])
+    except paperwork.NotPaperwork as e:
+        raise HTTPException(422, str(e)) from None
+    try:
+        with db.connect() as conn:
+            row = conn.execute("SELECT remove_paperwork_page(%s, %s, %s, %s, %s, %s, %s) AS keys",
+                               (document_id, dog_id, page, body.groomer_id, copy.object_key,
+                                len(copy.data), copy.sha256)).fetchone()
+            path = paperwork._disk_path(copy.object_key)
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(copy.data)
+    except psycopg.Error as e:
+        if (r := refusal_from(e, form=True)) is not None:
+            raise r from None
+        raise
+    paperwork.discard(row["keys"])
+    return {"page_count": len(keys) - 1}
+
+
 @app.post("/dogs/{dog_id}/paperwork/{document_id}/remove")
 def remove_paperwork(dog_id: UUID, document_id: UUID, body: Reviewer):
     """A copy nobody has checked a shot against (a blurry photo, the wrong

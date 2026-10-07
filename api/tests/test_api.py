@@ -370,6 +370,12 @@ def test_several_photos_and_a_pdf_are_one_copy_with_pages_and_an_unused_copy_can
     assert client.get(f"/paperwork/{doc}/pages/5").status_code == 404
     assert client.get(f"/paperwork/{doc}/file").content[:5] == b"%PDF-"
 
+    page2 = client.get(f"/paperwork/{doc}/pages/2").content
+    dark = client.post(f"/dogs/{olive}/paperwork/{doc}/pages/1/remove", json={"groomer_id": tanya})
+    assert dark.status_code == 200 and dark.json()["page_count"] == 3
+    assert client.get(f"/paperwork/{doc}/pages/1").content == page2, "the pages after it move up"
+    assert client.get(f"/paperwork/{doc}/file").content[:5] == b"%PDF-"
+
     gone = client.post(f"/dogs/{olive}/paperwork/{doc}/remove", json={"groomer_id": tanya})
     assert gone.status_code == 200
     assert client.get(f"/paperwork/{doc}").status_code == 404

@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Camera, wantsLiveCamera } from "@/components/check-in/camera";
 import { PaperworkForm } from "@/components/check-in/paperwork-form";
 import { api, pageUrl, paperworkUrl, Refusal, type ReceivedCopy } from "@/lib/api";
+import { useIsManager } from "@/lib/viewer";
 
 type Step =
   | { at: "pick" }
@@ -42,7 +43,10 @@ export function PaperworkIntake({
   /** The way out once the dates are in. */
   closeLabel?: string;
 }) {
+  const manager = useIsManager();
   const [step, setStep] = useState<Step>(resume ? { at: "check", ...resume } : { at: "pick" });
+  // Bumped when a page is taken out, so the pages are fetched again.
+  const [pagesVersion, setPagesVersion] = useState(0);
   const [pending, setPending] = useState<Pending[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -117,6 +121,21 @@ export function PaperworkIntake({
     }
   }
 
+  async function removePage(documentId: string, page: number) {
+    if (!window.confirm(`Take page ${page} out of this copy?`)) return;
+    setBusy(true); setError(null);
+    try {
+      const { page_count } = await api.removePage(dogId, documentId, page, groomerId);
+      setPagesVersion((v) => v + 1);
+      if (step.at === "choose") setStep({ at: "choose", copy: { ...step.copy, page_count } });
+      onChanged();
+    } catch (e) {
+      setError(e instanceof Refusal ? `${e.message}. ${e.hint ?? ""}` : e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const problem = error && <p role="alert" className="text-sm text-stop">{error}</p>;
   const takePhoto = () => wantsLiveCamera() ? setStep({ at: "camera" }) : camera.current?.click();
 
@@ -173,7 +192,7 @@ export function PaperworkIntake({
           </Button>
           <Button variant="outline" size="lg" disabled={busy} onClick={takePhoto}>Take another photo</Button>
           <Button variant="outline" size="lg" disabled={busy} onClick={() => picker.current?.click()}>Add a file</Button>
-          <Button variant="ghost" size="lg" disabled={busy} onClick={() => pending.forEach((p) => drop(p.id))}>
+          <Button variant="danger" size="lg" disabled={busy} onClick={() => pending.forEach((p) => drop(p.id))}>
             Start over
           </Button>
         </div>
@@ -191,14 +210,15 @@ export function PaperworkIntake({
         </p>
         {inputs}
         <div className="flex flex-wrap gap-3">
-          <Button size="lg" onClick={takePhoto}>Take a photo</Button>
+          {/* Three equal choices, so none is styled as the one to pick. */}
+          <Button variant="outline" size="lg" onClick={takePhoto}>Take a photo</Button>
           <Button variant="outline" size="lg" onClick={() => picker.current?.click()}>Choose files</Button>
           <Button variant="outline" size="lg" onClick={() => setStep({ at: "typed" })}>Type the dates in</Button>
           <Button variant="ghost" size="lg" onClick={onClose}>{cancelLabel}</Button>
         </div>
         <p className="-mt-2 text-sm text-muted-foreground">
           No copy to keep? <span className="font-medium text-foreground">Type the dates in</span> without one;
-          a manager verifies them later.
+          {manager ? " they wait on your Admin list until checked." : " a manager verifies them later."}
         </p>
         {problem}
       </div>
@@ -215,8 +235,10 @@ export function PaperworkIntake({
       <div className="flex flex-col gap-3">
         <p className="font-medium text-ok">Saved for later.</p>
         <p className="text-sm text-muted-foreground">
-          It&apos;s on the manager&apos;s list under &ldquo;Paperwork to check&rdquo;. Until someone checks it,
-          {" "}{dogName}&apos;s vaccinations stay as they are on the card.
+          {manager
+            ? <>It&apos;s on your to-do list in Admin, under &ldquo;Paperwork to check&rdquo;.</>
+            : <>A manager will review it and enter {dogName}&apos;s shots.</>}
+          {" "}Until then, {dogName}&apos;s vaccinations stay as they are on the card.
         </p>
         <Button variant="outline" size="lg" className="self-start" onClick={onClose}>Close</Button>
       </div>
@@ -228,16 +250,17 @@ export function PaperworkIntake({
     return (
       <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-2">
-          <CopyPages documentId={copy.document_id} small />
+          <CopyPages documentId={copy.document_id} small version={pagesVersion}
+                     onRemovePage={busy ? undefined : (n) => removePage(copy.document_id, n)} />
           <p className="text-sm text-muted-foreground">
             <span className="font-medium text-ok">Copy saved</span>
             {` · ${copy.page_count} ${copy.page_count === 1 ? "page" : "pages"}`}
             {copy.resized && ` · shrunk from ${mb(copy.original_bytes)} to ${mb(copy.saved_bytes)} to save space`}
-            {" · "}
-            <button className="underline-offset-2 hover:underline" disabled={busy} onClick={() => remove(copy.document_id)}>
-              Blurry or wrong? Remove it
-            </button>
+            {copy.page_count > 1 && " · tap ✕ to take out a bad page"}
           </p>
+          <Button variant="danger" size="sm" className="self-start" disabled={busy} onClick={() => remove(copy.document_id)}>
+            Remove this copy and start again
+          </Button>
         </div>
         {problem}
         <p className="font-medium">Who checks it?</p>
@@ -255,7 +278,8 @@ export function PaperworkIntake({
             onClick={() => setStep({ at: "later" })}>
             <span className="text-lg font-semibold">Check it later</span>
             <span className="text-sm text-muted-foreground">
-              Too busy, or it needs a careful look. It goes on the manager&apos;s list in the Admin view.
+              Too busy, or it needs a careful look.{" "}
+              {manager ? "It goes on your to-do list in Admin." : "A manager will review it."}
             </span>
           </button>
         </div>
@@ -263,33 +287,38 @@ export function PaperworkIntake({
     );
   }
 
-  // Checking: the pages beside the form.
+  // Checking: the pages first, large, and the form under them.
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid gap-4 lg:grid-cols-2">
-        <CopyPages documentId={step.documentId} />
-        <PaperworkForm dogId={dogId} dogName={dogName} groomerId={groomerId} documentId={step.documentId}
-                       onSaved={onChanged} onClose={() => done(step.documentId)} closeLabel={closeLabel ?? "Done checking"} />
-      </div>
+      <CopyPages documentId={step.documentId} version={pagesVersion}
+                 onRemovePage={busy ? undefined : (n) => removePage(step.documentId, n)} />
       {problem}
-      <div className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-muted-foreground">
-        <button className="underline-offset-2 hover:underline" disabled={busy} onClick={onClose}>
-          Not finished? Leave it on the list to check later
-        </button>
-        <button className="underline-offset-2 hover:underline" disabled={busy} onClick={() => remove(step.documentId)}>
-          Blurry or wrong? Remove this copy and take it again
-        </button>
-      </div>
+      <PaperworkForm dogId={dogId} dogName={dogName} groomerId={groomerId} documentId={step.documentId}
+                     onSaved={onChanged} onClose={() => done(step.documentId)} closeLabel={closeLabel ?? "Done checking"}
+                     actions={<>
+                       <Button variant="outline" size="lg" disabled={busy} onClick={onClose}>Save for later</Button>
+                       <Button variant="danger" size="lg" disabled={busy} onClick={() => remove(step.documentId)}>
+                         Remove and retake
+                       </Button>
+                     </>} />
     </div>
   );
 }
 
 /** A saved copy's pages, in order. Tap a page to open it full size. */
-export function CopyPages({ documentId, small = false }: { documentId: string; small?: boolean }) {
+export function CopyPages({ documentId, small = false, version = 0, onRemovePage }: {
+  documentId: string;
+  small?: boolean;
+  /** Changes when a page is taken out, so the pages are fetched afresh. */
+  version?: number;
+  /** Offered on each page while the copy has more than one. */
+  onRemovePage?: (page: number) => void;
+}) {
   const [info, setInfo] = useState<{ mime_type: string; page_count: number } | null>(null);
   useEffect(() => {
     api.paperworkInfo(documentId).then(setInfo).catch(() => setInfo({ mime_type: "", page_count: 0 }));
-  }, [documentId]);
+  }, [documentId, version]);
+  const src = (n: number) => `${pageUrl(documentId, n)}?v=${version}`;
   if (!info) return <p className="text-sm text-muted-foreground">Loading the pages…</p>;
 
   // A PDF filed before copies had pages: show the file itself.
@@ -302,27 +331,42 @@ export function CopyPages({ documentId, small = false }: { documentId: string; s
     );
   }
   const pages = Array.from({ length: info.page_count }, (_, i) => i + 1);
+  const removable = onRemovePage && pages.length > 1;
 
   if (small) {
     return (
       <div className="flex flex-wrap gap-2">
         {pages.map((n) => (
-          <a key={n} href={pageUrl(documentId, n)} target="_blank" rel="noreferrer">
-            <img src={pageUrl(documentId, n)} alt={`Page ${n}`}
-                 className="h-24 w-auto rounded-[var(--radius)] border border-border bg-muted" />
-          </a>
+          <span key={n} className="relative">
+            <a href={src(n)} target="_blank" rel="noreferrer">
+              <img src={src(n)} alt={`Page ${n}`} className="h-24 w-auto rounded-[var(--radius)] border border-border bg-muted" />
+            </a>
+            {removable && (
+              <button aria-label={`Take out page ${n}`} onClick={() => onRemovePage(n)}
+                      className="absolute right-1 top-1 flex h-7 w-7 items-center justify-center rounded-full bg-card/90 text-sm font-semibold shadow hover:bg-stop-soft hover:text-stop">
+                ✕
+              </button>
+            )}
+          </span>
         ))}
       </div>
     );
   }
   return (
-    <div className="flex max-h-[75vh] flex-col gap-4 overflow-y-auto rounded-[var(--radius)] border border-border bg-muted p-2">
+    <div className="mx-auto flex max-h-[70vh] w-full max-w-3xl flex-col gap-4 overflow-y-auto rounded-[var(--radius)] border border-border bg-muted p-3">
       {pages.map((n) => (
-        <a key={n} href={pageUrl(documentId, n)} target="_blank" rel="noreferrer" className="flex flex-col gap-1">
-          {pages.length > 1 && <span className="text-xs font-medium text-muted-foreground">Page {n} of {pages.length}</span>}
-          <img src={pageUrl(documentId, n)} alt={`Page ${n} of the owner's paperwork`}
-               className="w-full rounded-[var(--radius)] border border-border bg-card object-contain" />
-        </a>
+        <div key={n} className="flex flex-col gap-1">
+          {pages.length > 1 && (
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-medium text-muted-foreground">Page {n} of {pages.length}</span>
+              {removable && <Button variant="danger" size="sm" onClick={() => onRemovePage(n)}>Take out this page</Button>}
+            </div>
+          )}
+          <a href={src(n)} target="_blank" rel="noreferrer">
+            <img src={src(n)} alt={`Page ${n} of the owner's paperwork`}
+                 className="mx-auto max-h-[65vh] w-auto max-w-full rounded-[var(--radius)] border border-border bg-card object-contain" />
+          </a>
+        </div>
       ))}
       <span className="px-1 text-xs text-muted-foreground">Tap a page to open it full size ↗</span>
     </div>

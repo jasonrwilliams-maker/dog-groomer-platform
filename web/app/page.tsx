@@ -6,6 +6,7 @@ import { AdminView } from "@/components/check-in/admin-view";
 import { DogCard } from "@/components/check-in/dog-card";
 import { DogList } from "@/components/check-in/dog-list";
 import { WalkInForm, type WalkInFor } from "@/components/check-in/walk-in-form";
+import { ViewerProvider } from "@/lib/viewer";
 import { Welcome } from "@/components/check-in/welcome";
 import { Button } from "@/components/ui/button";
 import { api, type CheckInCard, type DogSummary, type Groomer, type SearchBy } from "@/lib/api";
@@ -123,6 +124,7 @@ export default function CheckInPage() {
         </div>
       </header>
 
+      <ViewerProvider value={manager}>
       <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-6 md:px-8">
         {trouble}
 
@@ -155,6 +157,7 @@ export default function CheckInPage() {
           </div>
         )}
       </div>
+      </ViewerProvider>
     </div>
   );
 }

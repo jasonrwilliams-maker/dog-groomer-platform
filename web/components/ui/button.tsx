@@ -13,6 +13,8 @@ const buttonVariants = cva(
         go: "bg-ok text-white hover:bg-ok/90",
         outline: "border border-border bg-card hover:bg-muted",
         ghost: "hover:bg-muted",
+        // Removes or throws something away: quiet, and red so it is never hit by accident.
+        danger: "border border-stop/40 bg-card text-stop hover:bg-stop-soft",
       },
       size: { default: "h-10 px-4", lg: "h-12 px-6 text-base", sm: "h-8 px-3" },
     },

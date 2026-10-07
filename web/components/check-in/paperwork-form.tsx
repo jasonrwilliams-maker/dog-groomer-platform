@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api, Refusal, type WalkInOptions } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { useIsManager } from "@/lib/viewer";
 
 // The vaccines and choices the forms offer change only when the shop's
 // configuration does, so one fetch serves every form on the page.
@@ -29,7 +30,7 @@ const blank: Line = { given: "", expires: "", saved: false, asked: false, refusa
 /** One line per vaccine the shop tracks: the two dates, typed off the paper.
  *  With a documentId, they are being read off a photo of it, and count as
  *  verified (checked by hand); without one, they await a manager. */
-export function PaperworkForm({ dogId, dogName, groomerId, documentId, onSaved, onClose, closeLabel = "Done" }: {
+export function PaperworkForm({ dogId, dogName, groomerId, documentId, onSaved, onClose, closeLabel = "Done", actions }: {
   dogId: string;
   dogName: string;
   groomerId: string;
@@ -37,7 +38,10 @@ export function PaperworkForm({ dogId, dogName, groomerId, documentId, onSaved, 
   onSaved: () => void;
   onClose: () => void;
   closeLabel?: string;
+  /** More buttons for the same row, after the form's own. */
+  actions?: React.ReactNode;
 }) {
+  const manager = useIsManager();
   const opts = useWalkInOptions();
   const [lines, setLines] = useState<Record<string, Line>>({});
   const [busy, setBusy] = useState(false);
@@ -91,13 +95,14 @@ export function PaperworkForm({ dogId, dogName, groomerId, documentId, onSaved, 
         <p className="text-sm text-muted-foreground">
           Read the pages and type each date exactly as it&apos;s printed. A shot with no expiry date on the paper
           can&apos;t be recorded: the system never guesses one. What you save here counts as verified, under your
-          name, and a manager can compare it with the pages later.
+          name{manager ? ", and needs no second look" : ", and a manager can compare it with the pages later"}.
         </p>
       ) : (
         <p className="text-sm text-muted-foreground">
           Type the dates exactly as {dogName}&apos;s paper prints them. A shot with no expiry date on the paper
           can&apos;t be recorded: the system never guesses one. Shots entered here count for today&apos;s groom,
-          and a manager checks them against the paper later.
+          {manager ? " and wait on your Admin list until someone checks them against the paper."
+                   : " and a manager checks them against the paper later."}
         </p>
       )}
       <p className="text-sm text-muted-foreground">
@@ -114,14 +119,14 @@ export function PaperworkForm({ dogId, dogName, groomerId, documentId, onSaved, 
             const l = line(v.code);
             return (
               <li key={v.code} className={cn("flex flex-col gap-2 p-4", l.saved && "bg-ok-soft", l.asked && "bg-muted")}>
-                <div className="flex items-baseline justify-between gap-2">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
                   <span className="font-medium">
                     {v.name}
                     {v.required && <span className="ml-2 text-xs font-normal text-muted-foreground">required by law</span>}
                   </span>
                   {l.asked && <span className="text-sm font-medium">Asked the owner · reminder in a week</span>}
                   {!l.saved && !l.asked && (
-                    <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => ask(v.code)}>
+                    <Button variant="outline" size="sm" onClick={() => ask(v.code)}>
                       Not on their paperwork
                     </Button>
                   )}
@@ -163,6 +168,7 @@ export function PaperworkForm({ dogId, dogName, groomerId, documentId, onSaved, 
           {busy ? "Saving…" : toSave.length > 1 ? `Save ${toSave.length} shots` : "Save shot"}
         </Button>
         <Button variant="outline" size="lg" onClick={onClose}>{closeLabel}</Button>
+        {actions}
       </div>
     </div>
   );

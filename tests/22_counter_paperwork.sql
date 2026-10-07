@@ -19,11 +19,11 @@
 --      open request, followed up by the reminders; nothing to ask for when a
 --      current record is on file.
 --  10. A copy is its pages, in order. One nobody checked a shot against can be
---      removed, files and all; one a record rests on cannot (GR029).
+--      removed, files and all, or lose a page; one a record rests on cannot (GR029).
 
 BEGIN;
 SET search_path = groom, public;
-SELECT plan(33);
+SELECT plan(37);
 
 CREATE TEMP TABLE t_owner AS
 SELECT add_client('Rosa', 'Diaz', '410-555-0400', NULL, '00000000-0000-0000-0000-00000000b002') AS id;
@@ -207,6 +207,32 @@ CREATE TEMP TABLE t_blurry AS
 SELECT receive_paperwork((SELECT id FROM t_dog), 'private/counter/blurry.jpg', 'image/jpeg', 90000,
                          repeat('b', 64), ARRAY['private/counter/blurry.jpg'], true,
                          '00000000-0000-0000-0000-00000000b002') AS id;
+
+CREATE TEMP TABLE t_three AS
+SELECT receive_paperwork((SELECT id FROM t_dog), 'private/counter/three.pdf', 'application/pdf', 90000,
+                         repeat('c', 64), ARRAY['private/counter/p1.jpg', 'private/counter/dark.jpg', 'private/counter/p3.jpg'],
+                         true, '00000000-0000-0000-0000-00000000b002') AS id;
+
+SELECT is(
+  remove_paperwork_page((SELECT id FROM t_three), (SELECT id FROM t_dog), 2, '00000000-0000-0000-0000-00000000b002',
+                        'private/counter/three-v2.pdf', 60000, repeat('d', 64)),
+  ARRAY['private/counter/dark.jpg', 'private/counter/three.pdf'],
+  'A dark page can be taken out of a copy; its file and the old copy file are named for deleting');
+
+SELECT results_eq(
+  $$ SELECT page_number, render_object_key FROM document_page WHERE document_id = (SELECT id FROM t_three) ORDER BY 1 $$,
+  $$ VALUES (1, 'private/counter/p1.jpg'), (2, 'private/counter/p3.jpg') $$,
+  'The pages after it move up');
+
+SELECT throws_ok(
+  $$ SELECT remove_paperwork_page((SELECT id FROM t_doc), (SELECT id FROM t_dog), 2, '00000000-0000-0000-0000-00000000b002',
+                                  'x.pdf', 1, repeat('e', 64)) $$,
+  'GR029', NULL, 'No page comes out of a copy a record rests on');
+
+SELECT throws_ok(
+  $$ SELECT remove_paperwork_page((SELECT id FROM t_blurry), (SELECT id FROM t_dog), 1, '00000000-0000-0000-0000-00000000b002',
+                                  'x.pdf', 1, repeat('e', 64)) $$,
+  '23514', NULL, 'The only page is removed by removing the copy');
 
 SELECT is(
   remove_paperwork((SELECT id FROM t_blurry), (SELECT id FROM t_dog), '00000000-0000-0000-0000-00000000b002'),
