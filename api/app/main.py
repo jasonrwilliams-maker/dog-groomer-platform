@@ -21,7 +21,10 @@ from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
-from . import db, paperwork
+import json
+import os
+
+from . import db, paperwork, reader
 
 app = FastAPI(title="Paws & Polish — groomer API", version="0.1.0")
 
@@ -634,20 +637,46 @@ def remove_paperwork(dog_id: UUID, document_id: UUID, body: Reviewer):
     return {"removed": True}
 
 
-class CheckedShot(CounterShot):
+class AiVerdict(BaseModel):
+    """When the form was filled in by the AI: which reading, and which of its
+    lines this vaccine came from (none: the AI missed it)."""
+    ai_extraction_id: UUID | None = None
+    ai_line_item_id: UUID | None = None
+
+
+class CheckedShot(CounterShot, AiVerdict):
     document_id: UUID
+
+
+def _write_and_grade(sql: str, params: tuple, verdict: AiVerdict, grade: tuple):
+    """A write, and the AI's grade for the same vaccine, saved together."""
+    try:
+        with db.connect() as conn:
+            row = conn.execute(sql, params).fetchone()
+            if verdict.ai_extraction_id is not None:
+                conn.execute("SELECT grade_counter_suggestion(%s, %s, %s, %s, %s, %s)",
+                             (verdict.ai_extraction_id, verdict.ai_line_item_id, *grade))
+            return row
+    except psycopg.Error as e:
+        if (r := refusal_from(e, form=True)) is not None:
+            raise r from None
+        if "not an active client" in str(e):
+            raise HTTPException(404, "No active dog with that id.") from None
+        raise
 
 
 @app.post("/dogs/{dog_id}/checked-shots", status_code=201)
 def checked_shot(dog_id: UUID, body: CheckedShot):
-    """One vaccine typed in while reading the photo: verified, and marked as
-    checked by hand. The same refusals as a shot typed with no photo."""
-    return _write("SELECT record_checked_shot(%s, %s, %s, %s, %s, %s) AS id",
-                  (dog_id, body.document_id, body.vaccine, body.administered_on, body.expires_on,
-                   body.groomer_id), "No active dog with that id.")
+    """One vaccine typed in while reading the copy: verified, and marked as
+    checked by hand. The same refusals as a shot typed with no copy. If the AI
+    filled the form in, what was saved is its grade."""
+    return _write_and_grade("SELECT record_checked_shot(%s, %s, %s, %s, %s, %s) AS id",
+                            (dog_id, body.document_id, body.vaccine, body.administered_on, body.expires_on,
+                             body.groomer_id),
+                            body, (body.vaccine, body.administered_on, body.expires_on, "saved"))
 
 
-class AskOwner(BaseModel):
+class AskOwner(AiVerdict):
     groomer_id: UUID
     vaccine: str
 
@@ -655,9 +684,11 @@ class AskOwner(BaseModel):
 @app.post("/dogs/{dog_id}/ask-owner", status_code=201)
 def ask_owner(dog_id: UUID, body: AskOwner):
     """A vaccine the owner's paperwork doesn't show: recorded as asked for at
-    the counter, and followed up by the shop's reminders."""
-    return _write("SELECT ask_owner_at_counter(%s, %s, %s) AS id", (dog_id, body.vaccine, body.groomer_id),
-                  "No active dog with that id.")
+    the counter, and followed up by the shop's reminders. If the AI said it
+    was there, it made it up."""
+    return _write_and_grade("SELECT ask_owner_at_counter(%s, %s, %s) AS id",
+                            (dog_id, body.vaccine, body.groomer_id),
+                            body, (body.vaccine, None, None, "not_on_paper"))
 
 
 @app.post("/dogs/{dog_id}/paperwork/{document_id}/done")
@@ -682,3 +713,83 @@ def hand_checked():
 def second_look(record_id: UUID, body: Reviewer):
     _write("SELECT give_second_look(%s, %s) AS ok", (record_id, body.groomer_id))
     return {"looked": True}
+
+
+# --------------------------------------------------------------- the AI's suggestions
+
+@app.get("/ai/status")
+def ai_status():
+    """Whether "Have the AI read it" can work on this computer."""
+    configured = bool(os.environ.get("EXTRACTION_MODEL")) and bool(os.environ.get("ANTHROPIC_API_KEY"))
+    return {"available": configured,
+            "why_not": None if configured else
+            "The AI isn't set up on this computer. Add ANTHROPIC_API_KEY and EXTRACTION_MODEL to .env."}
+
+
+def _ai_state(document_id: UUID):
+    """The latest reading of a copy at the counter: what to fill the form in
+    with, and the names it found that nobody has ruled on yet."""
+    reading = db.row("""SELECT id, extracted_at, model_version, status::text AS status
+                          FROM extraction WHERE document_id = %s AND read_at_counter
+                         ORDER BY extracted_at DESC LIMIT 1""", (document_id,))
+    if reading is None:
+        return {"reading": None}
+    suggestions = db.rows("""SELECT vaccine_code, line_item_id, term, administered_on, administered_on_raw,
+                                    expires_on, expires_on_raw, given_doubtful, expires_doubtful
+                               FROM v_counter_ai_suggestion WHERE extraction_id = %s""", (reading["id"],))
+    unfamiliar = db.rows("""SELECT line_item_id, term, administered_on_raw, expires_on_raw
+                              FROM v_counter_ai_unfamiliar WHERE extraction_id = %s ORDER BY n""", (reading["id"],))
+    return {"reading": {**reading, "failed": reading["status"] == "rejected"},
+            "suggestions": {s["vaccine_code"]: s for s in suggestions},
+            "unfamiliar": unfamiliar}
+
+
+@app.get("/paperwork/{document_id}/ai")
+def paperwork_ai(document_id: UUID):
+    return _ai_state(document_id)
+
+
+@app.post("/paperwork/{document_id}/ai")
+def paperwork_ai_read(document_id: UUID, body: Reviewer):
+    """Send the copy to the AI and keep what it read. Takes up to a minute or
+    so. Nothing it reads becomes a record: it only fills the form in."""
+    doc = db.row("SELECT object_key, mime_type FROM document WHERE id = %s", (document_id,))
+    if doc is None:
+        raise HTTPException(404, "No such copy.")
+    pages = [paperwork.path_of(k) for k in _page_keys(document_id)]
+    content = reader.blocks(doc["mime_type"], paperwork.path_of(doc["object_key"]), [p for p in pages if p])
+    if not content:
+        raise HTTPException(404, "That copy isn't on this computer.")
+    try:
+        reading = reader.read(content)
+    except reader.NotSetUp as e:
+        raise HTTPException(503, str(e)) from None
+    except reader.ReadFailed as e:
+        raise HTTPException(502, str(e)) from None
+    doc_fields, line_items = reader.flatten(reading.output) if reading.output is not None else (None, None)
+    raw = {**reading.raw_response, "parse_error": reading.parse_error}
+    _write("SELECT record_counter_reading(%s, %s, %s, %s, %s, %s::jsonb, %s::jsonb, %s::jsonb) AS id",
+           (document_id, body.groomer_id, reading.model_requested, reading.model_version, reading.prompt_version,
+            json.dumps(raw), json.dumps(doc_fields) if doc_fields is not None else None,
+            json.dumps(line_items) if line_items is not None else None), "No such copy.")
+    return _ai_state(document_id)
+
+
+class TermRuling(BaseModel):
+    groomer_id: UUID
+    term: str
+    vaccine: str | None = None          # None: not a vaccine the shop deals in
+
+
+@app.post("/paperwork/{document_id}/ai/terms")
+def rule_on_term(document_id: UUID, body: TermRuling):
+    """Say which vaccine a name the AI found is. The ruling is kept for every
+    page after this one."""
+    _write("SELECT rule_on_term(%s, %s, %s) AS ok", (body.term, body.vaccine, body.groomer_id))
+    return _ai_state(document_id)
+
+
+@app.get("/admin/ai-accuracy")
+def ai_accuracy():
+    """How the AI has done on real paperwork, as graded at the counter."""
+    return db.rows("SELECT * FROM v_counter_ai_accuracy ORDER BY copy_kind")
