@@ -91,6 +91,7 @@ export function AdminView({ groomerId, onOpenDog }: { groomerId: string; onOpenD
   const other = summary.lines.filter((l) => !GROUPS.some((g) => g.match(l)));
 
   const byId = Object.fromEntries(grouped.map((g) => [g.id, g]));
+  const typedInDogs = new Set(typedIn.map((r) => r.dog_id)).size;
 
   return (
     <div className="flex flex-col gap-6">
@@ -109,7 +110,7 @@ export function AdminView({ groomerId, onOpenDog }: { groomerId: string; onOpenD
       <section className="flex flex-col gap-2">
         <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Your to-do list</h2>
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <Stat label="Waiting to be verified" value={new Set(typedIn.map((r) => r.dog_id)).size} tone="info" target="waiting" />
+          <Stat label="Waiting to be verified" value={typedInDogs} tone="info" target="waiting" />
           <Stat label="Paperwork to check" value={waiting.length} tone="info" target="paperwork" />
           <Stat label="Checked by hand, to look over" value={handChecked.length} tone="info" target="hand-checked" />
           <Stat label="Allergy changes to review" value={reviews.length} tone="info" target="reviews" />
@@ -247,7 +248,7 @@ export function AdminView({ groomerId, onOpenDog }: { groomerId: string; onOpenD
       {typedIn.length > 0 && (
         <Card id="waiting" className="scroll-mt-6">
           <CardHeader>
-            <CardTitle>Waiting to be verified · {typedIn.length}</CardTitle>
+            <CardTitle>Waiting to be verified · {dogs(typedInDogs)}</CardTitle>
             <p className="text-sm text-muted-foreground">
               Shots typed in at the counter with no copy of the paperwork. The dog can be groomed meanwhile. Check
               each one against the owner&apos;s paper or with the vet, then verify it.

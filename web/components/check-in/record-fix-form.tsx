@@ -50,7 +50,7 @@ export function RecordFixForm({ mode, recordId, vaccine, given: given0, expires:
     <div className="mt-3 flex w-full flex-col gap-3 rounded-[var(--radius)] border border-border bg-muted/40 p-3">
       <p className="text-sm text-muted-foreground">
         {mode === "fix"
-          ? `Type ${vaccine}'s dates as the photo shows them. Your reading replaces the groomer's; theirs is kept in the history.`
+          ? `Type ${vaccine}'s dates as the photo shows them. Your dates replace the groomer's. Their name stays on the record, and what they typed is kept in the history.`
           : `Check ${vaccine}'s dates against the paper or with the vet. Put them right here if they were typed in wrong.`}
       </p>
       <div className="grid gap-3 sm:grid-cols-2">

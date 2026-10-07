@@ -190,15 +190,17 @@ def check_in_card(dog_id: UUID):
     # Which lines rest on a record someone checked by hand against a photo.
     hand_checked = {r["code"]: r for r in db.rows("""
         SELECT vt.code, g.display_name AS checked_by, vr.verified_at::date AS checked_on,
-               vr.second_look_at IS NOT NULL AS second_look, vr.document_id
+               vr.second_look_at IS NOT NULL AS second_look, vr.document_id, fg.display_name AS fixed_by
           FROM dog_vaccine_compliance s
           JOIN vaccination_record vr ON vr.id = s.latest_record_id
           JOIN vaccine_type vt       ON vt.id = s.vaccine_type_id
           JOIN groomer g             ON g.id = vr.verified_by
+          LEFT JOIN groomer fg       ON fg.id = vr.fixed_by
          WHERE s.dog_id = %s AND vr.checked_by_hand""", (dog_id,))}
     for v in vaccines:
         h = hand_checked.get(v["code"])
-        v["hand_checked"] = {k: h[k] for k in ("checked_by", "checked_on", "second_look", "document_id")} if h else None
+        v["hand_checked"] = ({k: h[k] for k in ("checked_by", "checked_on", "second_look", "document_id", "fixed_by")}
+                             if h else None)
     waiting = db.rows("""SELECT document_id, mime_type, received_by, received_at FROM v_paperwork_waiting
                           WHERE dog_id = %s ORDER BY received_at""", (dog_id,))
 

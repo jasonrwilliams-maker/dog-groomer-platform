@@ -21,7 +21,11 @@ export type VaccineLine = {
   blocks_service: boolean;
   regulatory_required: boolean;
   /** Set when the record was typed in by someone reading a photo of the paperwork. */
-  hand_checked: { checked_by: string; checked_on: string; second_look: boolean; document_id: string } | null;
+  hand_checked: {
+    checked_by: string; checked_on: string; second_look: boolean; document_id: string;
+    /** The manager who put its dates right, if they were misread. */
+    fixed_by: string | null;
+  } | null;
 };
 
 export type CheckInCard = {

@@ -426,6 +426,8 @@ def test_a_manager_verifies_a_typed_in_shot_and_fixes_a_misread_one(client):
     assert all(r["id"] != record for r in client.get("/admin/hand-checked").json())
     bordetella = next(v for v in client.get(f"/dogs/{moose}").json()["vaccines"] if v["code"] == "bordetella")
     assert bordetella["expires_on"] == (given + timedelta(days=365)).isoformat()
+    assert bordetella["hand_checked"]["checked_by"] == "Tanya", "who checked it by hand stays on the record"
+    assert bordetella["hand_checked"]["fixed_by"] == "Nadia"
 
 
 class FakeReply:

@@ -185,7 +185,8 @@ export function DogCard({
                         <a href={paperworkUrl(v.hand_checked.document_id)} target="_blank" rel="noreferrer"
                            className="block text-xs text-muted-foreground hover:underline">
                           Checked by hand by {v.hand_checked.checked_by}, {formatDate(v.hand_checked.checked_on)}
-                          {v.hand_checked.second_look ? " · manager agreed" : " · manager hasn't looked yet"} · photo ↗
+                          {v.hand_checked.fixed_by ? ` · dates fixed by ${v.hand_checked.fixed_by}`
+                            : v.hand_checked.second_look ? " · manager agreed" : " · manager hasn't looked yet"} · photo ↗
                         </a>
                       )}
                     </span>
