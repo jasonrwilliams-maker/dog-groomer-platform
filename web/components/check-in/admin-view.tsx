@@ -22,16 +22,27 @@ const REQUEST = {
 type Tone = "ok" | "stop" | "warn" | "info";
 
 // Each group is a different job for the manager, in the order they matter.
-// The count cards at the top point at them by id.
-const GROUPS: { id: string; title: string; note: string; tone?: Tone; match: (l: ComplianceLine) => boolean }[] = [
-  { id: "cant-groom", title: "Can't groom", note: "These stop today's groom until paperwork is confirmed.",
-    tone: "stop", match: (l) => l.blocks_service },
-  { id: "waiting", title: "Waiting to be verified", note: "Typed in with no copy of the paperwork. Groomable now; check them against the paper.",
-    tone: "info", match: (l) => !l.blocks_service && l.state === "received_unverified" },
+// A vaccine line is in exactly one: anything that stops a groom is under
+// "Can't groom" (rabies, as the shop is set up: vaccine_type.blocks_service_if_expired),
+// and the rest by what is wrong with it. The count cards point at them by id.
+const GROUPS: { id: string; title: string; note: string; match: (l: ComplianceLine) => boolean }[] = [
+  { id: "cant-groom", title: "Can't groom", note: "These stop future grooms until paperwork is confirmed.",
+    match: (l) => l.blocks_service },
+  { id: "expired", title: "Expired",
+    note: "Past their date. Under the shop's rules these don't stop a groom; ask for updated paperwork at the next visit.",
+    match: (l) => !l.blocks_service && l.state === "expired" },
+  { id: "missing", title: "No paperwork on file",
+    note: "Never received, or asked for and not in yet. These don't stop a groom; ask the owner for them.",
+    match: (l) => !l.blocks_service && (l.state === "no_record" || l.state === "requested_pending") },
   { id: "expiring", title: "Expiring soon", note: "Ask for updated paperwork at the next visit.",
-    tone: "warn", match: (l) => !l.blocks_service && l.state === "expiring_soon" },
+    match: (l) => !l.blocks_service && l.state === "expiring_soon" },
+  { id: "waiting", title: "Waiting to be verified", note: "Typed in with no copy of the paperwork. Groomable now; check them against the paper.",
+    match: (l) => !l.blocks_service && l.state === "received_unverified" },
+  { id: "disputed", title: "Disputed", note: "Two records disagree. Compare them in the records tool.",
+    match: (l) => !l.blocks_service && l.state === "disputed_record" },
 ];
-const OTHER = { id: "other", title: "Other", note: "Not blocking, but not complete either." };
+// Nothing should land here; if something does, it is shown rather than lost.
+const OTHER = { id: "other", title: "Anything else", note: "A state this screen doesn't have a list for yet." };
 
 /** How many dogs a list of vaccine lines is about. */
 const dogsIn = (lines: ComplianceLine[]) => new Set(lines.map((l) => l.dog_id)).size;
@@ -77,15 +88,27 @@ export function AdminView({ groomerId, onOpenDog }: { groomerId: string; onOpenD
 
   return (
     <div className="flex flex-col gap-6">
-      {/* The book at a glance. A card with a list behind it opens that list. */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-        <Stat label="Dogs on the books" value={summary.dogs} />
-        <Stat label="Cleared to groom" value={summary.cleared} tone="ok" />
-        <Stat label="Can't groom" value={dogsIn(byId["cant-groom"].lines)} tone="stop" target="cant-groom" />
-        <Stat label="Expiring soon" value={dogsIn(byId["expiring"].lines)} tone="warn" target="expiring" />
-        <Stat label="Waiting to be verified" value={dogsIn(byId["waiting"].lines)} tone="info" target="waiting" />
-        <Stat label="Other" value={dogsIn(other)} target="other" />
-      </div>
+      {/* The book at a glance, then the manager's own jobs. A card with a list behind it opens that list. */}
+      <section className="flex flex-col gap-2">
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Vaccinations</h2>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          <Stat label="Dogs on the books" value={summary.dogs} />
+          <Stat label="Cleared to groom" value={summary.cleared} tone="ok" />
+          <Stat label="Can't groom" value={dogsIn(byId["cant-groom"].lines)} tone="stop" target="cant-groom" />
+          <Stat label="Expired" value={dogsIn(byId["expired"].lines)} tone="stop" target="expired" />
+          <Stat label="No paperwork on file" value={dogsIn(byId["missing"].lines)} tone="warn" target="missing" />
+          <Stat label="Expiring soon" value={dogsIn(byId["expiring"].lines)} tone="warn" target="expiring" />
+        </div>
+      </section>
+      <section className="flex flex-col gap-2">
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Your to-do list</h2>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <Stat label="Waiting to be verified" value={dogsIn(byId["waiting"].lines)} tone="info" target="waiting" />
+          <Stat label="Paperwork to check" value={waiting.length} tone="info" target="paperwork" />
+          <Stat label="Checked by hand, to look over" value={handChecked.length} tone="info" target="hand-checked" />
+          <Stat label="Allergy changes to review" value={reviews.length} tone="info" target="reviews" />
+        </div>
+      </section>
 
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
@@ -127,7 +150,7 @@ export function AdminView({ groomerId, onOpenDog }: { groomerId: string; onOpenD
       )}
 
       {waiting.length > 0 && (
-        <Card className="border-warn/40">
+        <Card id="paperwork" className="scroll-mt-6 border-warn/40">
           <CardHeader>
             <CardTitle>Paperwork to check · {waiting.length}</CardTitle>
             <p className="text-sm text-muted-foreground">
@@ -167,7 +190,7 @@ export function AdminView({ groomerId, onOpenDog }: { groomerId: string; onOpenD
       )}
 
       {handChecked.length > 0 && (
-        <Card>
+        <Card id="hand-checked" className="scroll-mt-6">
           <CardHeader>
             <CardTitle>Checked by hand · {handChecked.length}</CardTitle>
             <p className="text-sm text-muted-foreground">
@@ -205,7 +228,7 @@ export function AdminView({ groomerId, onOpenDog }: { groomerId: string; onOpenD
       )}
 
       {reviews.length > 0 && (
-        <Card className="border-warn/40">
+        <Card id="reviews" className="scroll-mt-6 border-warn/40">
           <CardHeader>
             <CardTitle>Changes to review · {reviews.length}</CardTitle>
             <p className="text-sm text-muted-foreground">
