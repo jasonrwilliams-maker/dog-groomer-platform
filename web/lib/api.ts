@@ -257,6 +257,14 @@ export type FinishGroom = {
   note: string | null;
 };
 
+export type AdminAccess = {
+  name: string; is_manager: boolean;
+  /** Has a PIN or a passkey; until then, opening Admin starts with setting one up. */
+  set_up: boolean; has_pin: boolean; passkeys: number;
+  open: boolean;
+};
+export type Passkey = { id: string; label: string; added_at: string; last_used_at: string | null };
+
 /** A refusal from the database, passed through by the backend as a 409. */
 export class Refusal extends Error {
   constructor(public code: string, message: string, public hint: string | null) {
@@ -264,8 +272,44 @@ export class Refusal extends Error {
   }
 }
 
+// --- Admin's lock (section 33) ---------------------------------------------
+// Admin opens for a manager who verified with a passkey or PIN. The session's
+// token lives here, in memory only: a reload, "Switch" or "Lock Admin" ends it.
+
+/** Admin opened for this manager until expires_at (an ISO time). */
+export type AdminSession = { token: string; expires_at: string; manager_id: string; name: string };
+let adminSession: AdminSession | null = null;
+const lockListeners = new Set<() => void>();
+
+export function getAdminSession(managerId: string): AdminSession | null {
+  if (adminSession && (adminSession.manager_id !== managerId || new Date(adminSession.expires_at) <= new Date())) {
+    adminSession = null;
+  }
+  return adminSession;
+}
+export function setAdminSession(s: AdminSession | null) {
+  adminSession = s;
+  if (!s) lockListeners.forEach((f) => f());
+}
+/** Told when Admin locks: by the backend (time ran out) or by someone here. */
+export function onAdminLocked(f: () => void) {
+  lockListeners.add(f);
+  return () => { lockListeners.delete(f); };
+}
+const adminHeaders = (): Record<string, string> =>
+  adminSession ? { "X-Admin-Session": adminSession.token } : {};
+
+/** The backend says Admin is locked: forget the session, so the door shows again. */
+function checkLocked(r: Response) {
+  if (r.status === 401) {
+    setAdminSession(null);
+    throw new Error("Admin is locked. Verify to open it again.");
+  }
+}
+
 async function get<T>(path: string): Promise<T> {
-  const r = await fetch(`/api${path}`, { cache: "no-store" });
+  const r = await fetch(`/api${path}`, { cache: "no-store", headers: adminHeaders() });
+  checkLocked(r);
   if (!r.ok) throw new Error(`The backend answered ${r.status} for ${path}.`);
   return r.json();
 }
@@ -273,11 +317,12 @@ async function get<T>(path: string): Promise<T> {
 /** POST or PUT, and a 409 becomes a Refusal carrying the database's own words. */
 async function send<T>(method: "POST" | "PUT", path: string, body: unknown): Promise<T> {
   // A form (a file upload) goes as it is; anything else as JSON.
-  const r = await fetch(`/api${path}`, body instanceof FormData ? { method, body } : {
+  const r = await fetch(`/api${path}`, body instanceof FormData ? { method, body, headers: adminHeaders() } : {
     method,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...adminHeaders() },
     body: JSON.stringify(body),
   });
+  checkLocked(r);
   const json = await r.json().catch(() => ({}));
   if (r.status === 409) throw new Refusal(json.code, json.message, json.hint);
   if (!r.ok) throw new Error(typeof json.detail === "string" ? json.detail : `The backend answered ${r.status}.`);
@@ -389,6 +434,24 @@ export const api = {
     send<{ changed: boolean }>("PUT", `/appointments/${id}`, b),
   cancelBooking: (id: string, groomerId: string, reason: string) =>
     post<{ cancelled: boolean }>(`/appointments/${id}/cancel`, { groomer_id: groomerId, reason }),
+  /** How this person opens Admin, and whether it is open for them now. */
+  adminAccess: (groomerId: string) => get<AdminAccess>(`/admin/access/${groomerId}`),
+  openAdminWithPin: (groomerId: string, pin: string) =>
+    post<AdminSession>("/admin/access/pin", { groomer_id: groomerId, pin }),
+  passkeyOpeningOptions: (groomerId: string) =>
+    post<Record<string, unknown>>("/admin/access/passkey/options", { groomer_id: groomerId }),
+  openAdminWithPasskey: (groomerId: string, credential: Record<string, unknown>) =>
+    post<AdminSession>("/admin/access/passkey", { groomer_id: groomerId, credential }),
+  passkeyRegistrationOptions: (groomerId: string) =>
+    post<Record<string, unknown>>("/admin/access/register/options", { groomer_id: groomerId }),
+  /** Adds a passkey; on a manager's very first setup this also opens Admin (session). */
+  registerPasskey: (groomerId: string, credential: Record<string, unknown>, label: string) =>
+    post<{ added: boolean; session: AdminSession | null }>("/admin/access/register", { groomer_id: groomerId, credential, label }),
+  setAdminPin: (groomerId: string, pin: string) =>
+    post<{ set: boolean; session: AdminSession | null }>("/admin/access/set-pin", { groomer_id: groomerId, pin }),
+  lockAdmin: () => post<{ locked: boolean }>("/admin/access/lock", {}),
+  myPasskeys: () => get<Passkey[]>("/admin/passkeys"),
+  removePasskey: (id: string) => post<{ removed: boolean }>(`/admin/passkeys/${id}/remove`, {}),
   haircutOptions: () => get<HaircutOptions>("/haircut/options"),
   haircutStart: (dogId: string) => get<HaircutStart>(`/dogs/${dogId}/haircut`),
   /** A style and length on this dog, zone by zone; a shave-down by the coat's level. */

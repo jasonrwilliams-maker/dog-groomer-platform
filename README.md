@@ -5,8 +5,8 @@
 A system of record for a small grooming practice, with the business rules
 enforced **in the database** rather than in the application.
 
-Thirty-five numbered rules, each with a dedicated error code, each proven by a test
-that asserts the *refusal* — not the happy path. 465 assertions, all passing.
+Thirty-seven numbered rules, each with a dedicated error code, each proven by a test
+that asserts the *refusal* — not the happy path. 483 assertions, all passing.
 How strictly each groom-time rule is enforced (block, warn, or off) is itself a
 row of data, changed by `UPDATE` and recorded in the audit log — not a migration.
 
@@ -80,7 +80,7 @@ for a better copy instead of recording a guess.
 | Component | State |
 |---|---|
 | Schema | Sections 0–14 stable, in one file; later sections appended as separate files (15–31) |
-| Business rules | 35, codes `GR001`–`GR035` |
+| Business rules | 37, codes `GR001`–`GR037` |
 | Test suite | 27 files, 440 pgTAP assertions, passing; 26 API tests |
 | Document vocabulary (§15) | 29 rulings seeded from the labelled corpus; `resolve_term()` fails closed |
 | Extraction line items (§16) | One row per printed line; review views; the shape the harness loads |
@@ -100,7 +100,8 @@ for a better copy instead of recording a guess.
 | Booking ahead (§30) | Anyone books a groom from a dog's card (**Book a groom**) or the calendar: service, length (each service has a usual length, a full groom 1 hr 30 min; tick "Set a different length" for anything up to the whole day), day, groomer and one of their free start times, within the shop's hours (`shop_opens`, `shop_closes`). The form shows the dog's breed, age, coat, owner and phone. The dog's **usual groomer** (whoever groomed it last) is offered first, then whoever is signed in; booking a regular client with someone else asks why, and the reason is kept (GR032). Nobody is booked twice at once, groomer or dog (GR031, backed by an exclusion constraint). Vaccines that will be out of date by the day are a warning, not a refusal; check-in still decides on the day. The calendar shows bookings, and the day's timeline is the signed-in groomer's day first, the team below; a booking can be changed or cancelled (reason kept). A green check beside a dog's name, on the dog list, card, calendar and booking form, means every vaccine is current and verified (`vaccines_all_current()`): stricter than cleared to groom |
 | Dog photos (§31) | Each dog can have one profile photo, added from its card (**Add photo**: take one with the tablet camera or webcam, or choose one), changed or removed. Turned upright, stripped of the camera's details and GPS, and kept in three sizes under `private/dogs/` (`set_dog_photo()`, `remove_dog_photo()`); a new photo replaces the old and its files are deleted. Shown on the card, the booking form, the dog list and the dog pickers; a drawn placeholder until one is added |
 | Record the haircut (§32) | A groom in progress has **Record the haircut** on its card: what was done (full groom, bath, nails…), the coat's condition and thickness, the style and length, then the cut zone by zone (`haircut_plan()`), starting from the dog's **usual style**. The groomer changes only what she did differently; each change is marked "today", and one that breaks the style's identity (a fluffy Poodle face) is flagged, never refused. A cut different from the usual says why in a line (GR034). A shave-down follows the coat: matted all over (level 4) is a #7F with a warning to tell the owner; pelted (level 5) is a #10, saved only once the groomer ticks that the owner was told what it can do to the skin (GR033). A shave-down the coat doesn't call for, or a puppy under the shop's grooming age, goes ahead with a reason and a manager's OK, and only a manager's (GR035). Ticking **Keep as the usual style** makes today's cut the start of the next groom; the change is in the audit log, before and after. Saving finishes the groom: services, coat, haircut and a note for next time, all or nothing (`finish_visit()`), and the card's Last visit shows the haircut |
-| Groomer interface | `web/` (Next.js + Tailwind, shadcn-style components) on a thin FastAPI backend (`api/`), on its own demo database, `grooming_demo`. Three tabs. **Check-in**: pick who's grooming, find a dog by its name or its owner's (photo, green check when every vaccine is current), see whether today's groom can start and why not, allergies and handling notes; start the groom and record the haircut when it is done; book one; sign up a walk-in and photograph the paperwork they brought, then check it now (with **Have the AI read it**) or leave it for a manager; add the dog's photo; put right a typo. **Calendar** (everyone): grooms, bookings and vaccine expiries by month, a day's timeline by groomer, focus on one dog, book, change or cancel. **Admin** (managers): an overview of count cards, each opening its own screen: dogs on the books, cleared to groom, can't groom, expired, no paperwork, expiring soon; and the to-do list in the shop's amber: shots waiting to be verified, paperwork to check, shots checked by hand to look over, allergy changes to review. Also how the AI is doing, and the way into the records tool |
+| Opening Admin (§33) | Everyday screens need only a tap on your name; **Admin** needs proof. It opens for a manager who verifies with a **passkey** (their fingerprint, face or device PIN, or their own phone scanned from the counter tablet) or their **Admin PIN**, and locks again after 30 minutes, on **Lock Admin**, or when someone taps Switch. The shop never sees a fingerprint: the device signs a one-time challenge, checked by the standard WebAuthn library against the public key kept in `manager_passkey`. PINs are kept hashed (bcrypt); five wrong in a row lock PIN entry for 15 minutes, while a passkey still works. A manager sets up Admin the first time they open it; after that only they, with Admin open, add or remove passkeys or change the PIN, and the last way in can't be removed (GR037). Only a manager's own passkey or PIN opens it (GR036), and every Admin job is done as the manager who opened it. Passkeys belong to `localhost`; put online, they are set up again for the shop's https address (`PASSKEY_RP_ID`, `PASSKEY_ORIGINS`). The records tool on port 8501 is not behind this door |
+| Groomer interface | `web/` (Next.js + Tailwind, shadcn-style components) on a thin FastAPI backend (`api/`), on its own demo database, `grooming_demo`. Three tabs. **Check-in**: pick who's grooming, find a dog by its name or its owner's (photo, green check when every vaccine is current), see whether today's groom can start and why not, allergies and handling notes; start the groom and record the haircut when it is done; book one; sign up a walk-in and photograph the paperwork they brought, then check it now (with **Have the AI read it**) or leave it for a manager; add the dog's photo; put right a typo. **Calendar** (everyone): grooms, bookings and vaccine expiries by month, a day's timeline by groomer, focus on one dog, book, change or cancel. **Admin** (managers, behind a passkey or PIN): an overview of count cards, each opening its own screen: dogs on the books, cleared to groom, can't groom, expired, no paperwork, expiring soon; and the to-do list in the shop's amber: shots waiting to be verified, paperwork to check, shots checked by hand to look over, allergy changes to review. Also how the AI is doing, and the way into the records tool |
 | Extraction harness | Built — scores a model run against the answer keys; self-check passing |
 | Photo preparation | Built — a photo is turned upright, stripped of EXIF and GPS, and downscaled before it is sent |
 | Labelling & review tool | Built — Streamlit; writes answer keys from a form, and reconciles a run against its key |
@@ -292,6 +293,8 @@ Lamb ones.
 | `GR033` | A pelted coat is shaved only once the groomer says the owner was told what it means |
 | `GR034` | A haircut different from the dog's usual style says why |
 | `GR035` | A haircut the rules would stop (a shave-down the coat doesn't justify, a puppy under age) is OK'd by a manager |
+| `GR036` | Admin opens only with a manager's own passkey or PIN, and not after too many wrong PINs |
+| `GR037` | Only that manager, with Admin open, changes how they open it, and the last way in stays |
 
 Each raises its own SQLSTATE so tests assert on a stable identifier rather than on
 error prose, and the API layer can map codes to user-facing messages without
@@ -347,6 +350,7 @@ stopped. Every rejection test is paired with the valid case — a rule that reje
 | `26` | Booking: a full groom is 90 minutes; nobody in two places at once (GR031); shop hours and the past; a regular client's usual groomer, or a reason (GR032); free times; vaccines warn, never refuse; a dog in good standing only when every vaccine is current and verified; moving and cancelling |
 | `27` | Dog photos: kept in three sizes, replaced, removed, all or nothing |
 | `28` | Recording the haircut: what is planned is what is recorded; today's changes flagged, never refused; the usual style kept, audited, and the next plan starts from it; a different cut says why (GR034); a pelted shave needs the owner told (GR033); a manager's OK, and only a manager's (GR035); finishing once |
+| `29` | Opening Admin: first setup with nobody to vouch, then only that manager (GR037); the PIN kept hashed; a wrong PIN counted, five lock it (GR036); a passkey only for its owner; locking on time or by hand; the last way in stays |
 
 ---
 
@@ -430,20 +434,22 @@ Done:
    coat, haircut zone by zone, and the dog's usual style. The Feet row in
    [`reference/style_tier_mapping.md`](reference/style_tier_mapping.md) is
    still a best guess, waiting for a groomer's review.
+6. ~~Locking Admin.~~ Section 33: passkeys or a PIN for managers, everyday
+   screens unchanged.
 
 Next:
 
-6. Groomers' working days and hours, so booking only offers real
+7. Groomers' working days and hours, so booking only offers real
    availability; and linking a booking to the groom when it starts.
-7. Reminder consent asked at walk-in sign-up, so a new client's missing
+8. Reminder consent asked at walk-in sign-up, so a new client's missing
    paperwork is chased by the reminders and not only at the counter.
-8. Graded counter readings exported as answer keys, so the harness's test
+9. Graded counter readings exported as answer keys, so the harness's test
    bench grows from the shop's own paperwork.
-9. Duplicate-upload warning — a near-duplicate image check before the model is
+10. Duplicate-upload warning — a near-duplicate image check before the model is
    called (a resized or re-saved copy of a page already on file). Exact copies
    are already refused per owner; a re-read of a shot already on file is
    already caught at confirmation (`already_on_file`).
-10. Polish: a second held-out photo.
+11. Polish: a second held-out photo.
 
 **Possible extension, not planned:** real delivery for owner outreach. The
 rules, consent, outbox and sender are built and tested in test mode; going live
