@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import type { DogSummary, SearchBy } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { GoodStanding } from "@/components/ui/good-standing";
 
 const MODES: { by: SearchBy; label: string; placeholder: string }[] = [
   { by: "any", label: "Both", placeholder: "Dog or owner name" },
@@ -69,7 +70,7 @@ export function DogList({
               )}
             >
               <span className="min-w-0">
-                <span className="block font-medium">{d.name}</span>
+                <span className="flex items-center gap-1.5 font-medium">{d.name}<GoodStanding show={d.in_good_standing} /></span>
                 <span className="block truncate text-sm text-muted-foreground">{d.owner}</span>
               </span>
               <Badge tone={d.blocks_service ? "stop" : "ok"}>

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Logo } from "@/components/brand/logo";
 import { AdminView } from "@/components/check-in/admin-view";
 import { CalendarView, type CalendarDog } from "@/components/calendar/calendar-view";
+import type { BookingStart } from "@/components/calendar/booking-form";
 import { DogCard } from "@/components/check-in/dog-card";
 import { DogList } from "@/components/check-in/dog-list";
 import { WalkInForm, type WalkInFor } from "@/components/check-in/walk-in-form";
@@ -37,6 +38,8 @@ export default function CheckInPage() {
   const [adminList, setAdminList] = useState<string | null>(null);
   // The one dog the calendar is narrowed to, if any.
   const [calendarDog, setCalendarDog] = useState<CalendarDog | null>(null);
+  // A booking being made or changed on the calendar.
+  const [booking, setBooking] = useState<BookingStart | null>(null);
   const [query, setQuery] = useState("");
   const [by, setBy] = useState<SearchBy>("any");
   const [dogs, setDogs] = useState<DogSummary[]>([]);
@@ -76,7 +79,7 @@ export default function CheckInPage() {
   }, [selectedId, loadCard]);
 
   function signIn(g: Groomer) { remember(g.id); setMe(g); setView("check-in"); }
-  function signOut() { remember(null); setMe(null); setSelectedId(null); setWalkIn(null); setQuery(""); setAdminList(null); setCalendarDog(null); setView("check-in"); }
+  function signOut() { remember(null); setMe(null); setSelectedId(null); setWalkIn(null); setQuery(""); setAdminList(null); setCalendarDog(null); setBooking(null); setView("check-in"); }
   function select(id: string | null) { setWalkIn(null); setSelectedId(id); }
   // A search that found no one is usually the new client's name: carry it over.
   function newClient() {
@@ -135,7 +138,7 @@ export default function CheckInPage() {
         {trouble}
 
         {view === "calendar" ? (
-          <CalendarView dog={calendarDog} onDog={setCalendarDog}
+          <CalendarView me={me.id} dog={calendarDog} onDog={setCalendarDog} booking={booking} onBooking={setBooking}
                         onOpenDog={(id) => { select(id); setView("check-in"); }} />
         ) : view === "admin" && manager ? (
           <AdminView groomerId={me.id} onOpenDog={(id) => { select(id); setView("check-in"); }}
@@ -156,7 +159,11 @@ export default function CheckInPage() {
                             onDone={walkInDone} onCancel={() => setWalkIn(null)} />
               ) : card ? (
                 <DogCard key={card.dog.id} card={card} groomerId={me.id} detailsOpen={manager}
-                         onCalendar={() => { setCalendarDog({ id: card.dog.id, name: card.dog.name }); setView("calendar"); }}
+                         onCalendar={() => { setCalendarDog({ id: card.dog.id, name: card.dog.name }); setBooking(null); setView("calendar"); }}
+                         onBook={() => {
+                           const d = { id: card.dog.id, name: card.dog.name };
+                           setCalendarDog(d); setBooking({ dog: d }); setView("calendar");
+                         }}
                          onAddDog={(ownerId, ownerName) => { setSelectedId(null); setWalkIn({ ownerId, ownerName }); }}
                          onChanged={() => { loadCard(card.dog.id); api.findDogs(query, by).then(setDogs); }} />
               ) : (
