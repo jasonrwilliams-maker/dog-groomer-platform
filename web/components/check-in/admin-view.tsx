@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { CopyPages, PaperworkIntake } from "@/components/check-in/paperwork-intake";
 import { RecordFixForm } from "@/components/check-in/record-fix-form";
 import {
-  api, paperworkUrl, type AiAccuracy, type ComplianceLine, type ComplianceSummary, type HandChecked, type Review,
+  api, paperworkUrl, type AiAccuracy, type DogSummary, type ComplianceLine, type ComplianceSummary, type HandChecked, type Review,
   type WaitingCopy, type WaitingShot,
 } from "@/lib/api";
 import { cn, formatDate } from "@/lib/utils";
@@ -75,6 +75,8 @@ export function AdminView({ groomerId, onOpenDog, list, onList }: {
   const [checking, setChecking] = useState<WaitingCopy | null>(null);
   const [aiScore, setAiScore] = useState<AiAccuracy[]>([]);
   const [typedIn, setTypedIn] = useState<WaitingShot[]>([]);
+  // Every dog on the books, as the check-in list has them: who can be groomed today.
+  const [book, setBook] = useState<DogSummary[]>([]);
   // The one record whose form is open: verifying a typed-in shot, or fixing a hand-checked one.
   const [fixing, setFixing] = useState<string | null>(null);
 
@@ -86,6 +88,7 @@ export function AdminView({ groomerId, onOpenDog, list, onList }: {
     api.waitingVerification().then(setTypedIn).catch(fail);
     api.aiAccuracy().then(setAiScore).catch(fail);
     api.compliance().then(setSummary).catch(fail);
+    api.findDogs("").then(setBook).catch(fail);
   };
   useEffect(() => {
     loadPaperwork();
@@ -281,6 +284,31 @@ export function AdminView({ groomerId, onOpenDog, list, onList }: {
           </CardContent>
         </Card>
       ) },
+    book: { empty: "No dogs on the books yet.", node: book.length > 0 && (
+      <Card>
+        <CardHeader>
+          <CardTitle>Dogs on the books · {book.length}</CardTitle>
+          <p className="text-sm text-muted-foreground">Every active dog, and whether it can be groomed today.</p>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-5">
+          <DogRows title="Can't groom today" dogs={book.filter((d) => d.blocks_service)} onOpenDog={onOpenDog} />
+          <DogRows title="Cleared to groom" dogs={book.filter((d) => !d.blocks_service)} onOpenDog={onOpenDog} />
+        </CardContent>
+      </Card>
+    ) },
+    cleared: { empty: "No dogs are cleared to groom right now.", node: book.some((d) => !d.blocks_service) && (
+      <Card>
+        <CardHeader>
+          <CardTitle>Cleared to groom · {dogs(book.filter((d) => !d.blocks_service).length)}</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            Nothing stops these dogs being groomed today. Any note beside one is worth raising with the owner.
+          </p>
+        </CardHeader>
+        <CardContent>
+          <DogRows dogs={book.filter((d) => !d.blocks_service)} onOpenDog={onOpenDog} />
+        </CardContent>
+      </Card>
+    ) },
     ...Object.fromEntries([...grouped.filter((g) => g.id !== "waiting"), { ...OTHER, lines: other }].map((g) => [g.id, {
       empty: "Nothing on this list now.",
       node: g.lines.length > 0 && (
@@ -305,7 +333,7 @@ export function AdminView({ groomerId, onOpenDog, list, onList }: {
     );
   }
 
-  const stat = (label: string, value: number, tone: Tone, target: string) =>
+  const stat = (label: string, value: number, tone: Tone | undefined, target: string) =>
     <Stat label={label} value={value} tone={tone} todo={TODO.has(target)} onOpen={() => onList(target)} />;
 
   return (
@@ -314,8 +342,8 @@ export function AdminView({ groomerId, onOpenDog, list, onList }: {
       <section className="flex flex-col gap-2">
         <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Vaccinations</h2>
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-          <Stat label="Dogs on the books" value={summary.dogs} />
-          <Stat label="Cleared to groom" value={summary.cleared} tone="ok" />
+          {stat("Dogs on the books", summary.dogs, undefined, "book")}
+          {stat("Cleared to groom", summary.cleared, "ok", "cleared")}
           {stat("Can't groom", dogsIn(byId["cant-groom"].lines), "stop", "cant-groom")}
           {stat("Expired", dogsIn(byId["expired"].lines), "stop", "expired")}
           {stat("No paperwork on file", dogsIn(byId["missing"].lines), "warn", "missing")}
@@ -438,6 +466,41 @@ function Stat({ label, value, tone, todo, onOpen }: {
       {body}
       <p className="mt-1 text-xs font-medium text-primary group-hover:underline">Open the list →</p>
     </button>
+  );
+}
+
+/** Dogs as the check-in list shows them: the one thing to know first, and whether they can be groomed. */
+function DogRows({ title, dogs: rows, onOpenDog }: {
+  title?: string; dogs: DogSummary[]; onOpenDog: (dogId: string) => void;
+}) {
+  if (rows.length === 0) return null;
+  return (
+    <div>
+      {title && (
+        <h3 className="mb-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          {title} · {dogs(rows.length)}
+        </h3>
+      )}
+      <ul className="flex flex-col divide-y divide-border">
+        {rows.map((d) => (
+          <li key={d.id}>
+            <button onClick={() => onOpenDog(d.id)}
+                    className="flex w-full flex-wrap items-center justify-between gap-x-3 gap-y-1 py-2.5 text-left hover:bg-muted/50">
+              <span className="min-w-0">
+                <span className="font-medium">{d.name}</span>
+                <span className="text-muted-foreground"> · {d.owner}</span>
+                {(d.breed || d.attention) && (
+                  <span className="block text-sm text-muted-foreground">
+                    {[d.breed, d.attention].filter(Boolean).join(" · ")}
+                  </span>
+                )}
+              </span>
+              <Badge tone={d.blocks_service ? "stop" : "ok"}>{d.blocks_service ? "Can't groom" : "Cleared"}</Badge>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 
