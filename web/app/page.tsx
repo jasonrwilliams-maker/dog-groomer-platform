@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { Logo } from "@/components/brand/logo";
+import { AdminGate } from "@/components/check-in/admin-door";
 import { AdminView } from "@/components/check-in/admin-view";
 import { CalendarView, type CalendarDog } from "@/components/calendar/calendar-view";
 import type { BookingStart } from "@/components/calendar/booking-form";
@@ -11,7 +12,7 @@ import { WalkInForm, type WalkInFor } from "@/components/check-in/walk-in-form";
 import { ViewerProvider } from "@/lib/viewer";
 import { Welcome } from "@/components/check-in/welcome";
 import { Button } from "@/components/ui/button";
-import { api, type CheckInCard, type DogSummary, type Groomer, type SearchBy } from "@/lib/api";
+import { api, setAdminSession, type CheckInCard, type DogSummary, type Groomer, type SearchBy } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 // Who is at the counter survives a page reload on this device, until someone
@@ -79,7 +80,8 @@ export default function CheckInPage() {
   }, [selectedId, loadCard]);
 
   function signIn(g: Groomer) { remember(g.id); setMe(g); setView("check-in"); }
-  function signOut() { remember(null); setMe(null); setSelectedId(null); setWalkIn(null); setQuery(""); setAdminList(null); setCalendarDog(null); setBooking(null); setView("check-in"); }
+  // Someone else at the counter: Admin locks behind whoever had it open.
+  function signOut() { api.lockAdmin().catch(() => {}); setAdminSession(null); remember(null); setMe(null); setSelectedId(null); setWalkIn(null); setQuery(""); setAdminList(null); setCalendarDog(null); setBooking(null); setView("check-in"); }
   function select(id: string | null) { setWalkIn(null); setSelectedId(id); }
   // A search that found no one is usually the new client's name: carry it over.
   function newClient() {
@@ -141,8 +143,10 @@ export default function CheckInPage() {
           <CalendarView me={me.id} dog={calendarDog} onDog={setCalendarDog} booking={booking} onBooking={setBooking}
                         onOpenDog={(id) => { select(id); setView("check-in"); }} />
         ) : view === "admin" && manager ? (
-          <AdminView groomerId={me.id} onOpenDog={(id) => { select(id); setView("check-in"); }}
-                     list={adminList} onList={setAdminList} />
+          <AdminGate me={me}>
+            <AdminView groomerId={me.id} onOpenDog={(id) => { select(id); setView("check-in"); }}
+                       list={adminList} onList={setAdminList} />
+          </AdminGate>
         ) : (
           <div className="grid gap-6 md:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]">
             {/* On a phone the list and the card take turns; side by side from tablet up. */}

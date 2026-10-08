@@ -7,6 +7,7 @@ Pillow>=10.4
 pillow-heif>=0.18
 anthropic>=1.0             # the AI reading a copy (app/reader.py)
 pypdfium2>=4.30          # drawing an emailed PDF's pages as images
+webauthn>=2.2            # passkeys for opening Admin (app/passkeys.py)
 # tests
 pytest>=8
 httpx>=0.27

@@ -1,4 +1,4 @@
-%% Tables added after the original schema (sections 15–32), and the columns
+%% Tables added after the original schema (sections 15–33), and the columns
 %% later sections added to the original tables. The three other diagrams in
 %% this folder are sections 0–14; a table drawn there is shown here by name
 %% only, as the thing it joins to. Key columns only: the SQL files are the
@@ -136,4 +136,26 @@ erDiagram
     CUT_SPECIFICATION {
         uuid shave_acknowledged_by FK "32: a pelted coat, owner told (GR033)"
         timestamptz shave_acknowledged_at
+    }
+
+    %% 33: opening Admin
+    GROOMER ||--o{ MANAGER_PASSKEY : "a manager's passkeys (GR036)"
+    GROOMER ||--o{ ADMIN_SESSION : "Admin opened"
+    GROOMER {
+        text admin_pin_hash "33: bcrypt, never the PIN"
+    }
+    MANAGER_PASSKEY {
+        uuid id PK
+        uuid groomer_id FK
+        bytea credential_id "unique"
+        bytea public_key "the private half stays on the device"
+        bigint sign_count
+        text label
+    }
+    ADMIN_SESSION {
+        uuid id PK
+        uuid groomer_id FK
+        text token_hash "the token itself only in the browser"
+        text opened_with "passkey, pin or setup"
+        timestamptz expires_at
     }

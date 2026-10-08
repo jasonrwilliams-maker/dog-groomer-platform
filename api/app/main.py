@@ -24,7 +24,9 @@ from pydantic import BaseModel
 import json
 import os
 
-from . import db, dog_photos, paperwork, reader
+from starlette.concurrency import run_in_threadpool
+
+from . import db, dog_photos, paperwork, passkeys, reader
 
 app = FastAPI(title="Paws & Polish — groomer API", version="0.1.0")
 
@@ -43,6 +45,33 @@ class Refusal(Exception):
 @app.exception_handler(Refusal)
 async def refusal_handler(_: Request, r: Refusal):
     return JSONResponse(status_code=409, content={"code": r.code, "message": r.message, "hint": r.hint})
+
+
+# --------------------------------------------------------------- the Admin lock
+
+ADMIN_HEADER = "X-Admin-Session"
+
+
+@app.middleware("http")
+async def admin_lock(request: Request, call_next):
+    """Everything under /admin/ needs Admin open: a manager verified with a
+    passkey or PIN (section 33). Opening it, under /admin/access/, does not."""
+    path = request.url.path
+    if path.startswith("/admin/") and not path.startswith("/admin/access/"):
+        token_hash = passkeys.token_hash(request.headers.get(ADMIN_HEADER))
+        found = await run_in_threadpool(db.row, "SELECT admin_session_manager(%s) AS id", (token_hash,))
+        if found is None or found["id"] is None:
+            return JSONResponse(status_code=401, content={
+                "code": "locked", "message": "Admin is locked.", "hint": "Verify with your passkey or PIN to open it."})
+        request.state.admin_id = found["id"]
+    return await call_next(request)
+
+
+def _as_admin(request: Request, groomer_id: UUID):
+    """A manager's job is done by the manager who opened Admin, not by a name
+    picked on the screen."""
+    if request.state.admin_id != groomer_id:
+        raise Refusal("GR036", "Admin is open for another manager.", "Lock Admin and open it as yourself.")
 
 
 # A form answer the database turned down — a missing name, an email already
@@ -537,7 +566,8 @@ class Reviewer(BaseModel):
 
 
 @app.post("/admin/reviews/{review_id}/reviewed")
-def review_done(review_id: UUID, body: Reviewer):
+def review_done(review_id: UUID, body: Reviewer, request: Request):
+    _as_admin(request, body.groomer_id)
     _write("SELECT mark_reviewed(%s, %s) AS ok", (review_id, body.groomer_id))
     return {"reviewed": True}
 
@@ -726,7 +756,8 @@ def hand_checked():
 
 
 @app.post("/admin/hand-checked/{record_id}/looked")
-def second_look(record_id: UUID, body: Reviewer):
+def second_look(record_id: UUID, body: Reviewer, request: Request):
+    _as_admin(request, body.groomer_id)
     _write("SELECT give_second_look(%s, %s) AS ok", (record_id, body.groomer_id))
     return {"looked": True}
 
@@ -761,18 +792,20 @@ def _manager_write(statements: list[tuple[str, tuple]]):
 
 
 @app.post("/admin/records/{record_id}/fix")
-def fix_record(record_id: UUID, body: FixedDates):
+def fix_record(record_id: UUID, body: FixedDates, request: Request):
     """A manager puts a shot's dates right. On a hand-checked shot, that is
     its second look."""
+    _as_admin(request, body.groomer_id)
     _manager_write([("SELECT correct_counter_shot(%s, %s, %s, %s)",
                      (record_id, body.administered_on, body.expires_on, body.groomer_id))])
     return {"fixed": True}
 
 
 @app.post("/admin/records/{record_id}/verify")
-def verify_record(record_id: UUID, body: Verification):
+def verify_record(record_id: UUID, body: Verification, request: Request):
     """A manager verifies a shot typed in with no photo, saying how they
     checked it, and puts its dates right first if they were wrong."""
+    _as_admin(request, body.groomer_id)
     _manager_write([("SELECT correct_counter_shot(%s, %s, %s, %s)",
                      (record_id, body.administered_on, body.expires_on, body.groomer_id)),
                     ("SELECT verify_counter_shot(%s, %s, %s)", (record_id, body.how, body.groomer_id))])
@@ -1151,3 +1184,171 @@ def finish_groom(visit_id: UUID, body: Finish):
         if "already finished" in str(e):
             raise Refusal("finished", e.diag.message_primary, e.diag.message_hint) from None
         raise
+
+
+# --------------------------------------------------------------- opening Admin
+
+def _db_refusal(e: psycopg.Error):
+    if (r := refusal_from(e, form=True)) is not None:
+        raise r from None
+    raise e
+
+
+def _opened(conn, manager_id: UUID, token: str, expires_at) -> dict:
+    name = conn.execute("SELECT display_name AS n FROM groomer WHERE id = %s", (manager_id,)).fetchone()["n"]
+    return {"token": token, "expires_at": expires_at, "manager_id": manager_id, "name": name}
+
+
+@app.get("/admin/access/{groomer_id}")
+def admin_access(groomer_id: UUID, request: Request):
+    """How this person opens Admin: whether they are a manager, whether they
+    have set it up (a PIN, how many passkeys), and whether it is open now."""
+    token_hash = passkeys.token_hash(request.headers.get(ADMIN_HEADER))
+    return db.row("""
+        SELECT g.display_name AS name, is_active_manager(g.id) AS is_manager, admin_is_set_up(g.id) AS set_up,
+               g.admin_pin_hash IS NOT NULL AS has_pin,
+               (SELECT count(*) FROM manager_passkey k WHERE k.groomer_id = g.id)::int AS passkeys,
+               COALESCE(admin_session_manager(%s) = g.id, false) AS open
+          FROM groomer g WHERE g.id = %s""", (token_hash, groomer_id)) or {}
+
+
+class PinEntry(BaseModel):
+    groomer_id: UUID
+    pin: str
+
+
+@app.post("/admin/access/pin")
+def open_with_pin(body: PinEntry):
+    token, token_hash = passkeys.new_token()
+    try:
+        with db.connect() as conn:
+            expires = conn.execute("SELECT open_admin_with_pin(%s, %s, %s) AS e",
+                                   (body.groomer_id, body.pin, token_hash)).fetchone()["e"]
+            opened = expires and _opened(conn, body.groomer_id, token, expires)
+    except psycopg.Error as e:
+        _db_refusal(e)
+    # Raised only once the wrong try is saved, so the lock counts it.
+    if not opened:
+        raise Refusal("GR036", "That PIN isn't right.", "Try again, or use your passkey.")
+    return opened
+
+
+class Who(BaseModel):
+    groomer_id: UUID
+
+
+@app.post("/admin/access/passkey/options")
+def opening_options(body: Who):
+    """The one-time challenge a passkey signs to open Admin."""
+    keys = [r["credential_id"] for r in db.rows(
+        "SELECT credential_id FROM manager_passkey WHERE groomer_id = %s", (body.groomer_id,))]
+    if not keys:
+        raise Refusal("GR036", "No passkey is set up for you yet.", "Use your PIN, then add a passkey.")
+    options, challenge = passkeys.opening_options(keys)
+    db.row("SELECT new_passkey_challenge(%s, 'open', %s) AS ok", (body.groomer_id, challenge))
+    return options
+
+
+class PasskeyReply(BaseModel):
+    groomer_id: UUID
+    credential: dict
+    label: str | None = None
+
+
+@app.post("/admin/access/passkey")
+def open_with_passkey(body: PasskeyReply):
+    challenge = db.row("SELECT take_passkey_challenge(%s, 'open') AS c", (body.groomer_id,))["c"]
+    key = db.row("""SELECT public_key, sign_count FROM manager_passkey
+                     WHERE groomer_id = %s AND credential_id = %s""",
+                 (body.groomer_id, passkeys.credential_id(body.credential)))
+    if challenge is None or key is None:
+        raise Refusal("GR036", "That passkey doesn't open Admin for you.", "Try again, or use your PIN.")
+    try:
+        checked = passkeys.check_opening(body.credential, bytes(challenge), bytes(key["public_key"]), key["sign_count"])
+    except Exception:
+        raise Refusal("GR036", "That passkey couldn't be checked.", "Try again, or use your PIN.") from None
+    token, token_hash = passkeys.new_token()
+    try:
+        with db.connect() as conn:
+            expires = conn.execute("SELECT open_admin_with_passkey(%s, %s, %s, %s) AS e",
+                                   (body.groomer_id, checked.credential_id, checked.new_sign_count,
+                                    token_hash)).fetchone()["e"]
+            return _opened(conn, body.groomer_id, token, expires)
+    except psycopg.Error as e:
+        _db_refusal(e)
+
+
+def _first_setup_session(conn, groomer_id: UUID, token_hash: str | None) -> dict | None:
+    """A manager setting up Admin for the first time is let in by doing so."""
+    if conn.execute("SELECT admin_session_manager(%s) AS id", (token_hash,)).fetchone()["id"] == groomer_id:
+        return None
+    token, new_hash = passkeys.new_token()
+    expires = conn.execute("SELECT open_admin_session(%s, 'setup', %s) AS e", (groomer_id, new_hash)).fetchone()["e"]
+    return _opened(conn, groomer_id, token, expires)
+
+
+@app.post("/admin/access/register/options")
+def register_options(body: Who, request: Request):
+    """The challenge for adding a passkey: the manager's first, or another
+    one with Admin open."""
+    token_hash = passkeys.token_hash(request.headers.get(ADMIN_HEADER))
+    who = db.row("""SELECT g.email, g.display_name, may_change_admin_access(g.id, %s) AS may
+                      FROM groomer g WHERE g.id = %s""", (token_hash, body.groomer_id))
+    if who is None or not who["may"]:
+        raise Refusal("GR037", "Only that manager, with Admin open, can add a passkey.", "Open Admin as yourself first.")
+    existing = [r["credential_id"] for r in db.rows(
+        "SELECT credential_id FROM manager_passkey WHERE groomer_id = %s", (body.groomer_id,))]
+    options, challenge = passkeys.registration_options(body.groomer_id, who["email"], who["display_name"], existing)
+    db.row("SELECT new_passkey_challenge(%s, 'register', %s) AS ok", (body.groomer_id, challenge))
+    return options
+
+
+@app.post("/admin/access/register", status_code=201)
+def register_passkey(body: PasskeyReply, request: Request):
+    token_hash = passkeys.token_hash(request.headers.get(ADMIN_HEADER))
+    challenge = db.row("SELECT take_passkey_challenge(%s, 'register') AS c", (body.groomer_id,))["c"]
+    if challenge is None:
+        raise Refusal("GR037", "That took too long.", "Start adding the passkey again.")
+    try:
+        checked = passkeys.check_registration(body.credential, bytes(challenge))
+    except Exception:
+        raise Refusal("GR037", "That passkey couldn't be checked.", "Start adding it again.") from None
+    try:
+        with db.connect() as conn:
+            conn.execute("SELECT add_manager_passkey(%s, %s, %s, %s, %s, %s)",
+                         (body.groomer_id, checked.credential_id, checked.credential_public_key,
+                          checked.sign_count, body.label, token_hash))
+            return {"added": True, "session": _first_setup_session(conn, body.groomer_id, token_hash)}
+    except psycopg.Error as e:
+        _db_refusal(e)
+
+
+@app.post("/admin/access/set-pin")
+def set_pin(body: PinEntry, request: Request):
+    token_hash = passkeys.token_hash(request.headers.get(ADMIN_HEADER))
+    try:
+        with db.connect() as conn:
+            conn.execute("SELECT set_admin_pin(%s, %s, %s)", (body.groomer_id, body.pin, token_hash))
+            return {"set": True, "session": _first_setup_session(conn, body.groomer_id, token_hash)}
+    except psycopg.Error as e:
+        _db_refusal(e)
+
+
+@app.post("/admin/access/lock")
+def lock_admin(request: Request):
+    db.row("SELECT close_admin_session(%s) AS ok", (passkeys.token_hash(request.headers.get(ADMIN_HEADER)),))
+    return {"locked": True}
+
+
+@app.get("/admin/passkeys")
+def my_passkeys(request: Request):
+    """The passkeys of the manager who has Admin open."""
+    return db.rows("""SELECT id, label, added_at, last_used_at FROM manager_passkey
+                       WHERE groomer_id = %s ORDER BY added_at""", (request.state.admin_id,))
+
+
+@app.post("/admin/passkeys/{passkey_id}/remove")
+def remove_passkey(passkey_id: UUID, request: Request):
+    _write("SELECT remove_manager_passkey(%s, %s) AS ok",
+           (passkey_id, passkeys.token_hash(request.headers.get(ADMIN_HEADER))))
+    return {"removed": True}

@@ -33,7 +33,13 @@ def client():
 
     from fastapi.testclient import TestClient
     from app.main import app
-    return TestClient(app)
+    c = TestClient(app)
+    # Admin is locked to a verified manager (section 33): Nadia sets up a PIN,
+    # which opens it, and every request in the run carries her session.
+    nadia = next(g["id"] for g in c.get("/groomers").json() if g["name"] == "Nadia")
+    session = c.post("/admin/access/set-pin", json={"groomer_id": nadia, "pin": "2468"}).json()["session"]
+    c.headers["X-Admin-Session"] = session["token"]
+    return c
 
 
 def dog_named(client, name: str) -> dict:
@@ -236,7 +242,7 @@ def test_allergies_are_kept_from_the_counter_and_a_weaker_one_waits_for_a_manage
     assert [(r["dog"], r["summary"], r["reason"]) for r in waiting] == [
         ("Tank", "Chicken (Moderate) taken off", "Owner says it was the beef")]
     not_manager = client.post(f"/admin/reviews/{waiting[0]['id']}/reviewed", json={"groomer_id": groomer(client)})
-    assert not_manager.status_code == 409 and not_manager.json()["code"] == "GR026"
+    assert not_manager.status_code == 409 and not_manager.json()["code"] == "GR036", "Admin is Nadia's"
     done = client.post(f"/admin/reviews/{waiting[0]['id']}/reviewed", json={"groomer_id": groomer(client, "Nadia")})
     assert done.status_code == 200 and client.get("/admin/reviews").json() == []
 
@@ -320,7 +326,7 @@ def test_a_photo_of_the_paperwork_is_downsized_checked_by_hand_and_waits_for_a_s
     open_ = [r for r in client.get("/admin/hand-checked").json() if r["dog"] == "Jaddi"]
     assert [r["vaccine"] for r in open_] == ["Rabies"]
     refused = client.post(f"/admin/hand-checked/{open_[0]['id']}/looked", json={"groomer_id": tanya})
-    assert refused.status_code == 409 and refused.json()["code"] == "GR028"
+    assert refused.status_code == 409 and refused.json()["code"] == "GR036"
     assert client.post(f"/admin/hand-checked/{open_[0]['id']}/looked", json={"groomer_id": nadia}).status_code == 200
     assert not [r for r in client.get("/admin/hand-checked").json() if r["dog"] == "Jaddi"]
 
@@ -399,7 +405,7 @@ def test_a_manager_verifies_a_typed_in_shot_and_fixes_a_misread_one(client):
     form = {"how": "Called the vet's office", "administered_on": daisy["administered_on"],
             "expires_on": daisy["expires_on"]}
     refused = client.post(f"/admin/records/{daisy['id']}/verify", json={**form, "groomer_id": tanya})
-    assert refused.status_code == 409 and refused.json()["code"] == "GR030"
+    assert refused.status_code == 409 and refused.json()["code"] == "GR036"
     blank = client.post(f"/admin/records/{daisy['id']}/verify", json={**form, "how": " ", "groomer_id": nadia})
     assert blank.status_code == 409 and "how you checked" in blank.json()["message"]
     ok = client.post(f"/admin/records/{daisy['id']}/verify", json={**form, "groomer_id": nadia})
@@ -630,3 +636,39 @@ def test_finishing_is_all_or_nothing_and_refusals_come_back_in_their_own_words(c
         "haircut": {"style": "shaved", "shave_acknowledged": True}})
     assert told.status_code == 200, told.text
     assert client.get(f"/dogs/{olive}").json()["last_visit"]["haircut"] == "Shaved (remedial)"
+
+
+def test_admin_opens_only_for_a_verified_manager(client):
+    nadia, tanya = groomer(client, "Nadia"), groomer(client)
+    locked = client.get("/admin/compliance", headers={"X-Admin-Session": ""})
+    assert locked.status_code == 401 and locked.json()["code"] == "locked"
+
+    assert client.get(f"/admin/access/{nadia}").json() | {"passkeys": 0} == {
+        "name": "Nadia", "is_manager": True, "set_up": True, "has_pin": True, "passkeys": 0, "open": True}
+    wrong = client.post("/admin/access/pin", json={"groomer_id": nadia, "pin": "0000"})
+    assert wrong.status_code == 409 and wrong.json()["code"] == "GR036"
+    right = client.post("/admin/access/pin", json={"groomer_id": nadia, "pin": "2468"}).json()
+    mine = {"X-Admin-Session": right["token"]}
+    assert right["name"] == "Nadia" and client.get("/admin/reviews", headers=mine).status_code == 200
+
+    groomer_try = client.post("/admin/access/set-pin", json={"groomer_id": tanya, "pin": "1357"},
+                              headers={"X-Admin-Session": ""})
+    assert groomer_try.status_code == 409 and groomer_try.json()["code"] == "GR037"
+    no_pin = client.post("/admin/access/pin", json={"groomer_id": tanya, "pin": "1357"})
+    assert no_pin.status_code == 409 and no_pin.json()["code"] == "GR036"
+
+    assert client.post("/admin/access/lock", headers=mine).status_code == 200
+    assert client.get("/admin/reviews", headers=mine).status_code == 401
+
+
+def test_adding_a_passkey_starts_with_a_challenge_and_a_forged_one_is_refused(client):
+    nadia = groomer(client, "Nadia")
+    options = client.post("/admin/access/register/options", json={"groomer_id": nadia}).json()
+    assert options["rp"]["id"] == "localhost" and options["challenge"]
+    assert options["authenticatorSelection"]["userVerification"] == "required"
+    forged = client.post("/admin/access/register", json={"groomer_id": nadia, "credential": {
+        "id": "AAAA", "rawId": "AAAA", "type": "public-key",
+        "response": {"clientDataJSON": "e30", "attestationObject": "oA"}}})
+    assert forged.status_code == 409 and forged.json()["code"] == "GR037"
+    no_keys = client.post("/admin/access/passkey/options", json={"groomer_id": nadia})
+    assert no_keys.status_code == 409, "no passkey was added"
