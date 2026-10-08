@@ -12,7 +12,7 @@ job is two translations:
 """
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from typing import Literal
 from uuid import UUID
 
@@ -204,6 +204,11 @@ def check_in_card(dog_id: UUID):
     waiting = db.rows("""SELECT document_id, mime_type, received_by, received_at FROM v_paperwork_waiting
                           WHERE dog_id = %s ORDER BY received_at""", (dog_id,))
 
+    upcoming = db.rows("""SELECT id, groomer, starts_at, ends_at, minutes, service, note FROM v_appointment
+                           WHERE dog_id = %s AND status = 'booked' AND starts_at >= shop_now()::date
+                           ORDER BY starts_at""", (dog_id,))
+    usual = db.row("""SELECT g.id, g.display_name AS name FROM groomer g WHERE g.id = regular_groomer(%s)""", (dog_id,))
+
     blocking = [v for v in vaccines if v["blocks_service"]]
     return {
         "dog": {**dog, "age": _age(dog["date_of_birth"])},
@@ -218,6 +223,8 @@ def check_in_card(dog_id: UUID):
         "open_visit": open_visit,
         "paperwork_requests": requests,
         "paperwork_waiting": waiting,
+        "appointments": upcoming,
+        "usual_groomer": usual,
     }
 
 
@@ -776,13 +783,89 @@ def calendar(start: date | None = None, end: date | None = None, dog_id: UUID | 
     if start and end and (end - start).days > 400:
         raise HTTPException(422, "Ask for a year or less at a time.")
     return db.rows("""
-        SELECT on_date, kind, dog_id, dog, owner, vaccine, groomer, note, stops_grooms, in_progress
+        SELECT on_date, kind, dog_id, dog, owner, vaccine, groomer, note, stops_grooms, in_progress,
+               appointment_id, starts_at, minutes, service
           FROM v_calendar_event
          WHERE (%(start)s::date IS NULL OR on_date >= %(start)s)
            AND (%(end)s::date   IS NULL OR on_date <= %(end)s)
            AND (%(dog)s::uuid   IS NULL OR dog_id = %(dog)s)
-         ORDER BY on_date, kind DESC, stops_grooms DESC, dog, vaccine""",
+         ORDER BY on_date, starts_at NULLS LAST, kind DESC, stops_grooms DESC, dog, vaccine""",
                    {"start": start, "end": end, "dog": dog_id})
+
+
+# --------------------------------------------------------------- booking ahead
+
+@app.get("/services")
+def services():
+    """What can be booked, and how long each usually takes."""
+    return db.rows("SELECT code, name, default_minutes FROM service_type ORDER BY display_order")
+
+
+@app.get("/booking/hours")
+def booking_hours():
+    """The shop's hours and today's date, as the shop's clock has them."""
+    return db.row("""SELECT shop_opens() AS opens, shop_closes() AS closes, shop_now()::date AS today,
+                            shop_policy_int('booking_step_minutes') AS step""")
+
+
+@app.get("/booking/choices")
+def booking_choices(dog_id: UUID, starts_at: datetime, minutes: int, ignore: UUID | None = None):
+    """Every groomer for this dog on this day, the usual one first, each with
+    whether this time is free and their free start times; and what about the
+    dog's vaccines will be out of date by then."""
+    choices = db.rows("SELECT * FROM booking_choices(%s, %s, %s, %s)", (dog_id, starts_at, minutes, ignore))
+    for c in choices:
+        c["free_starts"] = [r["s"] for r in db.rows(
+            "SELECT s FROM free_starts(%s, %s::date, %s, %s) AS s", (c["groomer_id"], starts_at, minutes, ignore))]
+    warnings = db.rows("SELECT * FROM appointment_warnings(%s, %s::date)", (dog_id, starts_at))
+    return {"choices": choices, "warnings": warnings}
+
+
+@app.get("/appointments")
+def appointments(day: date):
+    """Everything booked on a day, by start time."""
+    return db.rows("""SELECT * FROM v_appointment WHERE status = 'booked' AND starts_at::date = %s
+                       ORDER BY starts_at, groomer""", (day,))
+
+
+class Booking(BaseModel):
+    groomer_id: UUID              # who will groom
+    starts_at: datetime           # the shop's own time
+    minutes: int
+    note: str | None = None
+    other_groomer_reason: str | None = None
+    booked_by: UUID               # who is at the screen
+
+
+class NewBooking(Booking):
+    dog_id: UUID
+    service: str = "full_groom"
+
+
+@app.post("/appointments", status_code=201)
+def book(body: NewBooking):
+    return _write("SELECT book_appointment(%s, %s, %s, %s, %s, %s, %s, %s) AS id",
+                  (body.dog_id, body.groomer_id, body.starts_at, body.minutes, body.service, body.note,
+                   body.other_groomer_reason, body.booked_by))
+
+
+@app.put("/appointments/{appointment_id}")
+def change_booking(appointment_id: UUID, body: Booking):
+    _write("SELECT change_appointment(%s, %s, %s, %s, %s, %s, %s) AS ok",
+           (appointment_id, body.groomer_id, body.starts_at, body.minutes, body.note,
+            body.other_groomer_reason, body.booked_by))
+    return {"changed": True}
+
+
+class Cancellation(BaseModel):
+    groomer_id: UUID
+    reason: str | None = None
+
+
+@app.post("/appointments/{appointment_id}/cancel")
+def cancel_booking(appointment_id: UUID, body: Cancellation):
+    _write("SELECT cancel_appointment(%s, %s, %s) AS ok", (appointment_id, body.reason, body.groomer_id))
+    return {"cancelled": True}
 
 
 # --------------------------------------------------------------- the AI's suggestions

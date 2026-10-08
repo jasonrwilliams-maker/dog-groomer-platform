@@ -9,13 +9,13 @@ import { HandlingCard } from "@/components/check-in/handling-card";
 import { PaperworkIntake } from "@/components/check-in/paperwork-intake";
 import { ProfileEditForm } from "@/components/check-in/profile-edit-form";
 import { api, paperworkUrl, Refusal, type CheckInCard } from "@/lib/api";
-import { cn, formatDate, formatTime } from "@/lib/utils";
+import { cn, dayLabel, formatDate, formatTime } from "@/lib/utils";
 
 const SEX = { male: "Male", female: "Female", unknown: "" } as Record<string, string>;
 const CHANNEL = { email: "by email", sms: "by text", verbal_at_counter: "at the counter" } as Record<string, string>;
 
 export function DogCard({
-  card, groomerId, onChanged, onAddDog, onCalendar, detailsOpen = false,
+  card, groomerId, onChanged, onAddDog, onCalendar, onBook, detailsOpen = false,
 }: {
   card: CheckInCard;
   groomerId: string;
@@ -24,6 +24,8 @@ export function DogCard({
   onAddDog: (ownerId: string, ownerName: string) => void;
   /** Open the calendar on this dog's grooms and expiries. */
   onCalendar: () => void;
+  /** Book this dog a groom. */
+  onBook: () => void;
   /** Managers see everything unfolded; groomers get the short card. */
   detailsOpen?: boolean;
 }) {
@@ -134,6 +136,21 @@ export function DogCard({
                 Add paperwork
               </Button>
             )}
+            <Button variant="outline" size="lg" onClick={onBook}>Book a groom</Button>
+          </div>
+        )}
+        {/* What is already booked, so nobody books it twice. */}
+        {card.appointments.length > 0 && (
+          <div className="mt-3 flex flex-wrap items-start justify-between gap-2 border-t border-border/60 pt-2 text-sm">
+            <ul>
+              {card.appointments.map((a) => (
+                <li key={a.id}>
+                  <span className="font-medium">Booked {dayLabel(a.starts_at)}, {formatTime(a.starts_at)}–{formatTime(a.ends_at)}</span>
+                  {" "}with {a.groomer}{a.note && <span className="text-muted-foreground"> · {a.note}</span>}
+                </li>
+              ))}
+            </ul>
+            <Button variant="outline" size="sm" onClick={onCalendar}>See on the calendar</Button>
           </div>
         )}
         {refusal && (

@@ -3,14 +3,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { api, type CalendarEvent, type DogSummary } from "@/lib/api";
-import { cn, formatDate } from "@/lib/utils";
+import { BookingForm, type BookingStart } from "@/components/calendar/booking-form";
+import { DaySchedule } from "@/components/calendar/day-schedule";
+import { DogPicker } from "@/components/calendar/dog-picker";
+import { api, type Appointment, type CalendarEvent, type Groomer, type ShopHours } from "@/lib/api";
+import { cn, duration, formatDate, formatTime } from "@/lib/utils";
 
 /** One dog the calendar is showing on its own. */
 export type CalendarDog = { id: string; name: string };
 
-type Kind = "groom" | "expiry";
+type Kind = "groom" | "expiry" | "booking";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -27,8 +29,16 @@ function gridDays(month: Date): Date[] {
   return Array.from({ length: 42 }, (_, i) => new Date(start.getFullYear(), start.getMonth(), start.getDate() + i));
 }
 
-/** How one thing reads, and its colour: a groom in the shop's mauve, an expiry by how much it matters. */
+/**
+ * How one thing reads, and its colour: a groom done in solid mauve, one booked
+ * in outline, an expiry by how much it matters.
+ */
 function look(e: CalendarEvent, today: string) {
+  if (e.kind === "booking") {
+    const start = formatTime(e.starts_at);
+    return { tone: "border border-primary bg-card text-primary", short: `${start.replace(/ [AP]M$/, "")} ${e.dog}`,
+             long: `booked ${start}, ${duration(e.minutes ?? 0)} with ${e.groomer}` };
+  }
   if (e.kind === "groom") {
     return { tone: "bg-primary text-primary-foreground", short: e.dog,
              long: e.in_progress ? `being groomed by ${e.groomer}` : `groomed by ${e.groomer}` };
@@ -44,13 +54,22 @@ function look(e: CalendarEvent, today: string) {
  * vaccines run out. Filter by what kind, or narrow it to one dog and jump
  * between that dog's dates.
  */
-export function CalendarView({ dog, onDog, onOpenDog }: {
+export function CalendarView({ me, dog, onDog, onOpenDog, booking, onBooking }: {
+  /** Who is at the screen: they are the one booking. */
+  me: string;
   dog: CalendarDog | null; onDog: (dog: CalendarDog | null) => void; onOpenDog: (dogId: string) => void;
+  /** A booking being made or changed (null: none), kept by the page so a dog's card can start one. */
+  booking: BookingStart | null; onBooking: (b: BookingStart | null) => void;
 }) {
   const today = iso(new Date());
   const [month, setMonth] = useState(() => firstOfMonth(new Date()));
   const [day, setDay] = useState<string | null>(today);
-  const [shown, setShown] = useState<Record<Kind, boolean>>({ groom: true, expiry: true });
+  const [shown, setShown] = useState<Record<Kind, boolean>>({ groom: true, expiry: true, booking: true });
+  const [hours, setHours] = useState<ShopHours | null>(null);
+  const [groomers, setGroomers] = useState<Groomer[]>([]);
+  const [dayBookings, setDayBookings] = useState<Appointment[]>([]);
+  // Bumped after a booking is saved, so everything on screen is read again.
+  const [rev, setRev] = useState(0);
   const [monthEvents, setMonthEvents] = useState<CalendarEvent[]>([]);
   const [dogEvents, setDogEvents] = useState<CalendarEvent[] | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
@@ -59,13 +78,23 @@ export function CalendarView({ dog, onDog, onOpenDog }: {
   const span = { start: iso(days[0]), end: iso(days[days.length - 1]) };
 
   // Opened from further down a dog's card: start at the top.
-  useEffect(() => { window.scrollTo({ top: 0 }); }, []);
+  useEffect(() => {
+    window.scrollTo({ top: 0 });
+    api.shopHours().then(setHours).catch((e) => setProblem(String(e.message ?? e)));
+    api.groomers().then(setGroomers).catch((e) => setProblem(String(e.message ?? e)));
+  }, []);
+
+  // The chosen day's bookings, for the day's schedule.
+  useEffect(() => {
+    if (!day) { setDayBookings([]); return; }
+    api.dayAppointments(day).then(setDayBookings).catch((e) => setProblem(String(e.message ?? e)));
+  }, [day, rev]);
 
   // The month on screen, for every dog.
   useEffect(() => {
     if (dog) return;
     api.calendar(span).then(setMonthEvents).catch((e) => setProblem(String(e.message ?? e)));
-  }, [dog, span.start, span.end]);
+  }, [dog, span.start, span.end, rev]);
 
   // One dog: its whole history, and straight to its latest groom (or, with
   // none, its next expiry).
@@ -76,9 +105,9 @@ export function CalendarView({ dog, onDog, onOpenDog }: {
       const lastGroom = [...evs].reverse().find((e) => e.kind === "groom" && e.on_date <= today);
       const next = evs.find((e) => e.on_date >= today) ?? evs[evs.length - 1];
       const go = lastGroom ?? next;
-      if (go) jumpTo(go.on_date);
+      if (go && rev === 0) jumpTo(go.on_date);
     }).catch((e) => setProblem(String(e.message ?? e)));
-  }, [dog?.id]);
+  }, [dog?.id, rev]);
 
   function jumpTo(date: string) {
     setMonth(firstOfMonth(parse(date)));
@@ -93,9 +122,21 @@ export function CalendarView({ dog, onDog, onOpenDog }: {
     return m;
   }, [events]);
   const onDay = day ? byDay.get(day) ?? [] : [];
+  const canBook = !!day && !!hours && day >= hours.today;
+  const openBooking = (id: string | null) => {
+    const a = dayBookings.find((x) => x.id === id);
+    if (a) onBooking({ appointment: a });
+  };
 
   return (
+    <div className="flex flex-col gap-6">
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
+      <div className="min-w-0">
+      {booking ? (
+        <BookingForm key={booking.appointment?.id ?? "new"} me={me} start={booking}
+                     onClose={() => onBooking(null)}
+                     onDone={(d) => { onBooking(null); jumpTo(d); setRev((r) => r + 1); }} />
+      ) : (
       <Card>
         <CardHeader className="gap-3">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -109,7 +150,7 @@ export function CalendarView({ dog, onDog, onOpenDog }: {
             </div>
             {/* What to show. */}
             <div className="flex flex-wrap gap-2">
-              {([["groom", "Grooms"], ["expiry", "Vaccine expiries"]] as const).map(([k, label]) => (
+              {([["booking", "Bookings"], ["groom", "Grooms"], ["expiry", "Vaccine expiries"]] as const).map(([k, label]) => (
                 <Button key={k} variant="outline" size="sm" aria-pressed={shown[k]}
                         className={shown[k] ? "border-primary bg-primary/10 hover:bg-primary/10" : "text-muted-foreground"}
                         onClick={() => setShown({ ...shown, [k]: !shown[k] })}>
@@ -119,7 +160,8 @@ export function CalendarView({ dog, onDog, onOpenDog }: {
             </div>
           </div>
           <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-            <Key tone="bg-primary text-primary-foreground" label="A groom" />
+            <Key tone="border border-primary bg-card" label="Booked" />
+            <Key tone="bg-primary text-primary-foreground" label="Groomed" />
             <Key tone="bg-stop-soft text-stop" label="Expires and stops grooms (rabies)" />
             <Key tone="bg-warn-soft text-warn" label="Expires, groom can go ahead" />
           </p>
@@ -157,7 +199,7 @@ export function CalendarView({ dog, onDog, onOpenDog }: {
                   </span>
                   <span className="flex flex-wrap gap-0.5 sm:hidden">
                     {list.slice(0, 4).map((e, i) => (
-                      <span key={i} className={cn("size-1.5 rounded-full", e.kind === "groom" ? "bg-primary" : e.stops_grooms ? "bg-stop" : "bg-warn")} />
+                      <span key={i} className={cn("size-1.5 rounded-full", e.kind === "booking" ? "border border-primary" : e.kind === "groom" ? "bg-primary" : e.stops_grooms ? "bg-stop" : "bg-warn")} />
                     ))}
                   </span>
                 </button>
@@ -166,11 +208,14 @@ export function CalendarView({ dog, onDog, onOpenDog }: {
           </div>
         </CardContent>
       </Card>
+      )}
+      </div>
 
       <div className="flex flex-col gap-4">
         <DogFilter dog={dog} onDog={onDog} />
         {dog && dogEvents && (
-          <DogDates dog={dog} events={dogEvents} today={today} day={day} onJump={jumpTo} onOpenDog={onOpenDog} />
+          <DogDates dog={dog} events={dogEvents} today={today} day={day} onJump={jumpTo} onOpenDog={onOpenDog}
+                    onBook={() => onBooking({ dog, day: canBook ? day ?? undefined : undefined })} />
         )}
         <Card>
           <CardHeader>
@@ -197,6 +242,11 @@ export function CalendarView({ dog, onDog, onOpenDog }: {
                         {e.kind === "expiry" && e.stops_grooms && <span className="text-xs text-stop">stops grooms</span>}
                       </span>
                       {e.note && <span className="mt-1 block text-muted-foreground">{e.note}</span>}
+                      {e.kind === "booking" && e.on_date >= today && (
+                        <Button variant="outline" size="sm" className="mt-2" onClick={() => openBooking(e.appointment_id)}>
+                          Change or cancel
+                        </Button>
+                      )}
                     </li>
                   );
                 })}
@@ -205,6 +255,12 @@ export function CalendarView({ dog, onDog, onOpenDog }: {
           </CardContent>
         </Card>
       </div>
+    </div>
+    {!booking && day && hours && (canBook || dayBookings.length > 0) && (
+        <DaySchedule day={day} hours={hours} groomers={groomers} appointments={dayBookings} canBook={canBook}
+                     onOpen={(a) => onBooking({ appointment: a })}
+                     onBook={() => onBooking({ day, dog })} />
+      )}
     </div>
   );
 }
@@ -218,37 +274,8 @@ function Key({ tone, label }: { tone: string; label: string }) {
   );
 }
 
-/**
- * Narrow the calendar to one dog: a drop-down of every dog and its owner,
- * which typing narrows by either name. Arrow keys and Enter work too.
- */
+/** Narrow the calendar to one dog. */
 function DogFilter({ dog, onDog }: { dog: CalendarDog | null; onDog: (dog: CalendarDog | null) => void }) {
-  const [all, setAll] = useState<DogSummary[]>([]);
-  const [q, setQ] = useState("");
-  const [open, setOpen] = useState(false);
-  const [active, setActive] = useState(0);
-
-  useEffect(() => {
-    api.findDogs("").then((d) => setAll([...d].sort((a, b) => a.name.localeCompare(b.name)))).catch(() => setAll([]));
-  }, []);
-
-  const needle = q.trim().toLowerCase();
-  const hits = needle
-    ? all.filter((d) => d.name.toLowerCase().includes(needle) || d.owner.toLowerCase().includes(needle))
-    : all;
-
-  function pick(d: DogSummary) {
-    setQ(""); setOpen(false); setActive(0);
-    onDog({ id: d.id, name: d.name });
-  }
-
-  function onKey(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (e.key === "ArrowDown") { e.preventDefault(); setOpen(true); setActive((a) => Math.min(a + 1, hits.length - 1)); }
-    else if (e.key === "ArrowUp") { e.preventDefault(); setActive((a) => Math.max(a - 1, 0)); }
-    else if (e.key === "Enter" && open && hits[active]) { e.preventDefault(); pick(hits[active]); }
-    else if (e.key === "Escape") setOpen(false);
-  }
-
   if (dog) {
     return (
       <Card className="border-primary/40">
@@ -262,44 +289,16 @@ function DogFilter({ dog, onDog }: { dog: CalendarDog | null; onDog: (dog: Calen
   return (
     <Card>
       <CardContent className="pt-5">
-        <label htmlFor="calendar-dog" className="mb-1 block text-sm font-medium">Focus calendar view:</label>
-        <div className="relative">
-          <Input id="calendar-dog" role="combobox" aria-expanded={open} aria-controls="calendar-dog-list"
-                 aria-activedescendant={open && hits[active] ? `calendar-dog-${hits[active].id}` : undefined}
-                 autoComplete="off" placeholder="Pick or type a name"
-                 className="pr-9" value={q}
-                 onChange={(e) => { setQ(e.target.value); setOpen(true); setActive(0); }}
-                 onFocus={() => setOpen(true)}
-                 // A beat, so a click on the list lands before it closes.
-                 onBlur={() => setTimeout(() => setOpen(false), 150)}
-                 onKeyDown={onKey} />
-          <span aria-hidden className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">▾</span>
-          {open && (
-            <ul id="calendar-dog-list" role="listbox"
-                className="absolute z-20 mt-1 max-h-72 w-full overflow-auto rounded-[var(--radius)] border border-border bg-card py-1 shadow-lg">
-              {hits.length === 0 ? (
-                <li className="px-3 py-2 text-sm text-muted-foreground">No dog or owner by that name.</li>
-              ) : hits.map((d, i) => (
-                <li key={d.id} id={`calendar-dog-${d.id}`} role="option" aria-selected={i === active}
-                    onMouseDown={(e) => { e.preventDefault(); pick(d); }}
-                    onMouseEnter={() => setActive(i)}
-                    className={cn("cursor-pointer px-3 py-2 text-sm", i === active && "bg-muted")}>
-                  <span className="font-medium">{d.name}</span>
-                  <span className="text-muted-foreground"> · {d.owner}</span>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+        <DogPicker id="calendar-dog" label="Focus calendar view:" onPick={(d) => onDog({ id: d.id, name: d.name })} />
       </CardContent>
     </Card>
   );
 }
 
 /** One dog's dates, newest first; each one jumps the calendar to it. */
-function DogDates({ dog, events, today, day, onJump, onOpenDog }: {
+function DogDates({ dog, events, today, day, onJump, onOpenDog, onBook }: {
   dog: CalendarDog; events: CalendarEvent[]; today: string; day: string | null;
-  onJump: (date: string) => void; onOpenDog: (dogId: string) => void;
+  onJump: (date: string) => void; onOpenDog: (dogId: string) => void; onBook: () => void;
 }) {
   const lastGroom = [...events].reverse().find((e) => e.kind === "groom" && e.on_date <= today);
   return (
@@ -323,7 +322,7 @@ function DogDates({ dog, events, today, day, onJump, onOpenDog }: {
                           className={cn("w-full justify-between font-normal", day === e.on_date && "border-primary")}
                           onClick={() => onJump(e.on_date)}>
                     <span className={cn("truncate rounded px-1.5 text-xs", l.tone)}>
-                      {e.kind === "groom" ? "Groomed" : l.long}
+                      {e.kind === "groom" ? "Groomed" : e.kind === "booking" ? `Booked ${formatTime(e.starts_at)}` : l.long}
                     </span>
                     <span className="shrink-0 text-muted-foreground">{formatDate(e.on_date)}</span>
                   </Button>
@@ -332,9 +331,10 @@ function DogDates({ dog, events, today, day, onJump, onOpenDog }: {
             })}
           </ul>
         )}
-        <Button variant="outline" size="sm" className="self-start" onClick={() => onOpenDog(dog.id)}>
-          Open {dog.name}&apos;s card
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" onClick={onBook}>Book {dog.name}</Button>
+          <Button variant="outline" size="sm" onClick={() => onOpenDog(dog.id)}>Open {dog.name}&apos;s card</Button>
+        </div>
       </CardContent>
     </Card>
   );

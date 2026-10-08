@@ -445,6 +445,35 @@ def test_the_calendar_shows_grooms_and_expiries_by_month_or_by_dog(client):
     assert client.get("/calendar").status_code == 422
 
 
+def test_a_groom_is_booked_with_the_usual_groomer_and_shows_on_card_and_calendar(client):
+    olive = dog_named(client, "Olive")["id"]
+    tanya, nadia = groomer(client), groomer(client, "Nadia")
+    day = date.fromisoformat(client.get("/booking/hours").json()["today"]) + timedelta(days=1)
+    at = f"{day.isoformat()}T10:00:00"
+
+    offer = client.get("/booking/choices", params={"dog_id": olive, "starts_at": at, "minutes": 60}).json()
+    assert offer["choices"][0]["groomer"] == "Tanya" and offer["choices"][0]["is_regular"] is True
+    assert at in offer["choices"][0]["free_starts"]
+
+    form = {"dog_id": olive, "groomer_id": tanya, "starts_at": at, "minutes": 60, "booked_by": nadia}
+    booked = client.post("/appointments", json=form)
+    assert booked.status_code == 201, booked.text
+    clash = client.post("/appointments", json={**form, "dog_id": dog_named(client, "Pepper")["id"]})
+    assert clash.status_code == 409 and clash.json()["code"] == "GR031"
+    elsewhere = client.post("/appointments", json={**form, "groomer_id": nadia, "starts_at": f"{day.isoformat()}T14:00:00"})
+    assert elsewhere.status_code == 409 and elsewhere.json()["code"] == "GR032"
+
+    card = client.get(f"/dogs/{olive}").json()
+    assert [a["groomer"] for a in card["appointments"]] == ["Tanya"]
+    assert card["usual_groomer"]["name"] == "Tanya"
+    month = client.get("/calendar", params={"start": day.isoformat(), "end": day.isoformat()}).json()
+    assert any(e["kind"] == "booking" and e["dog"] == "Olive" and e["starts_at"] == "10:00:00" for e in month)
+
+    appt = booked.json()["id"]
+    assert client.post(f"/appointments/{appt}/cancel", json={"groomer_id": tanya, "reason": "Owner sick"}).status_code == 200
+    assert client.get(f"/dogs/{olive}").json()["appointments"] == []
+
+
 class FakeReply:
     """What the SDK's final message looks like, enough for app/reader.py."""
     def __init__(self, text: str, stop_reason: str = "end_turn"):

@@ -50,6 +50,10 @@ export type CheckInCard = {
   paperwork_requests: { vaccine: string; status: string; channel: string; next_reminder_on: string | null }[];
   /** Copies taken at the counter that nobody has finished checking. */
   paperwork_waiting: { document_id: string; mime_type: string; received_by: string; received_at: string }[];
+  /** Grooms booked from today on. */
+  appointments: { id: string; groomer: string; starts_at: string; ends_at: string; minutes: number; service: string; note: string | null }[];
+  /** Whoever groomed the dog last (or first booked it); null for a new client. */
+  usual_groomer: { id: string; name: string } | null;
 };
 
 /** What the counter's upload saved. */
@@ -71,12 +75,35 @@ export type HandChecked = {
 };
 /** One thing on the calendar: a groom that happened, or a vaccine running out. */
 export type CalendarEvent = {
-  on_date: string; kind: "groom" | "expiry"; dog_id: string; dog: string; owner: string;
+  on_date: string; kind: "groom" | "expiry" | "booking"; dog_id: string; dog: string; owner: string;
   vaccine: string | null; groomer: string | null; note: string | null;
   /** The vaccine's lapse stops a groom (rabies, as the shop is set up). */
   stops_grooms: boolean;
   /** A groom that started today and isn't finished. */
   in_progress: boolean;
+  /** A booking: which one, its start (hh:mm:ss), length and service. A groom has its check-in time. */
+  appointment_id: string | null; starts_at: string | null; minutes: number | null; service: string | null;
+};
+
+/** Something the shop offers, and how long it usually takes. */
+export type Service = { code: string; name: string; default_minutes: number };
+export type ShopHours = { opens: string; closes: string; today: string; step: number };
+/** One groomer as a choice for a booking: the usual one comes first. */
+export type BookingChoice = {
+  groomer_id: string; groomer: string; is_regular: boolean; last_groomed_on: string | null;
+  /** Start times (shop time, yyyy-mm-ddThh:mm:ss) free for a groom this long. */
+  free_starts: string[];
+};
+/** What will be out of date about the dog's vaccines by the booking. A warning only. */
+export type BookingWarning = { vaccine: string; expires_on: string | null; warning: string };
+export type Appointment = {
+  id: string; dog_id: string; dog: string; owner: string; groomer_id: string; groomer: string;
+  service_code: string; service: string; starts_at: string; ends_at: string; minutes: number;
+  note: string | null; other_groomer_reason: string | null; not_usual_groomer: boolean;
+};
+export type NewBooking = {
+  dog_id: string; groomer_id: string; starts_at: string; minutes: number; service: string;
+  note: string | null; other_groomer_reason: string | null; booked_by: string;
 };
 /** A shot typed in with no copy of the paperwork, waiting for a manager to verify it. */
 export type WaitingShot = {
@@ -273,6 +300,17 @@ export const api = {
   /** Grooms and expiries between two dates (yyyy-mm-dd), or one dog's whole history. */
   calendar: (span: { start: string; end: string } | { dogId: string }) =>
     get<CalendarEvent[]>("dogId" in span ? `/calendar?dog_id=${span.dogId}` : `/calendar?start=${span.start}&end=${span.end}`),
+  services: () => get<Service[]>("/services"),
+  shopHours: () => get<ShopHours>("/booking/hours"),
+  bookingChoices: (dogId: string, startsAt: string, minutes: number, ignore?: string) =>
+    get<{ choices: BookingChoice[]; warnings: BookingWarning[] }>(
+      `/booking/choices?dog_id=${dogId}&starts_at=${startsAt}&minutes=${minutes}${ignore ? `&ignore=${ignore}` : ""}`),
+  dayAppointments: (day: string) => get<Appointment[]>(`/appointments?day=${day}`),
+  book: (b: NewBooking) => post<{ id: string }>("/appointments", b),
+  changeBooking: (id: string, b: Omit<NewBooking, "dog_id" | "service">) =>
+    send<{ changed: boolean }>("PUT", `/appointments/${id}`, b),
+  cancelBooking: (id: string, groomerId: string, reason: string) =>
+    post<{ cancelled: boolean }>(`/appointments/${id}/cancel`, { groomer_id: groomerId, reason }),
   waitingVerification: () => get<WaitingShot[]>("/admin/waiting-verification"),
   /** A manager puts a shot's dates right. */
   fixRecord: (recordId: string, groomerId: string, administeredOn: string, expiresOn: string) =>
