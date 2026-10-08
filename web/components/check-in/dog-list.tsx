@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import type { DogSummary, SearchBy } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { GoodStanding } from "@/components/ui/good-standing";
+import { DogPhoto } from "@/components/ui/dog-photo";
 
 const MODES: { by: SearchBy; label: string; placeholder: string }[] = [
   { by: "any", label: "Both", placeholder: "Dog or owner name" },
@@ -69,9 +70,12 @@ export function DogList({
                 d.id === selectedId ? "border-primary bg-card shadow-sm" : "border-transparent hover:bg-card",
               )}
             >
-              <span className="min-w-0">
-                <span className="flex items-center gap-1.5 font-medium">{d.name}<GoodStanding show={d.in_good_standing} /></span>
-                <span className="block truncate text-sm text-muted-foreground">{d.owner}</span>
+              <span className="flex min-w-0 items-center gap-3">
+                <DogPhoto dogId={d.id} photo={d.photo} name={d.name} />
+                <span className="min-w-0">
+                  <span className="flex items-center gap-1.5 font-medium">{d.name}<GoodStanding show={d.in_good_standing} /></span>
+                  <span className="block truncate text-sm text-muted-foreground">{d.owner}</span>
+                </span>
               </span>
               <Badge tone={d.blocks_service ? "stop" : "ok"}>
                 {d.blocks_service ? "Can't groom" : "Cleared"}

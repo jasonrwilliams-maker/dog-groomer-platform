@@ -11,6 +11,8 @@ export type DogSummary = {
   attention: string | null;
   /** Every vaccine current: the green check. */
   in_good_standing: boolean;
+  /** The profile photo's id (it changes with each new photo), or null for none. */
+  photo: string | null;
 };
 
 export type VaccineLine = {
@@ -58,6 +60,7 @@ export type CheckInCard = {
   usual_groomer: { id: string; name: string } | null;
   /** Every vaccine current: the green check. */
   in_good_standing: boolean;
+  photo: { id: string; uploaded_at: string } | null;
 };
 
 /** What the counter's upload saved. */
@@ -227,6 +230,10 @@ async function send<T>(method: "POST" | "PUT", path: string, body: unknown): Pro
 }
 const post = <T,>(path: string, body: unknown) => send<T>("POST", path, body);
 
+/** The dog's photo in one size. `photoId` makes a new photo a new address, so no browser shows the old one. */
+export const dogPhotoUrl = (dogId: string, photoId: string, size: "thumb" | "display" | "original" = "display") =>
+  `/api/dogs/${dogId}/photo?size=${size}&v=${photoId}`;
+
 export const api = {
   groomers: () => get<Groomer[]>("/groomers"),
   findDogs: (q: string, by: SearchBy = "any") => get<DogSummary[]>(`/dogs?q=${encodeURIComponent(q)}&by=${by}`),
@@ -308,6 +315,14 @@ export const api = {
   /** Grooms and expiries between two dates (yyyy-mm-dd), or one dog's whole history. */
   calendar: (span: { start: string; end: string } | { dogId: string }) =>
     get<CalendarEvent[]>("dogId" in span ? `/calendar?dog_id=${span.dogId}` : `/calendar?start=${span.start}&end=${span.end}`),
+  addDogPhoto: (dogId: string, groomerId: string, file: File) => {
+    const form = new FormData();
+    form.append("groomer_id", groomerId);
+    form.append("file", file);
+    return post<{ photo: string }>(`/dogs/${dogId}/photo`, form);
+  },
+  removeDogPhoto: (dogId: string, groomerId: string) =>
+    post<{ removed: boolean }>(`/dogs/${dogId}/photo/remove`, { groomer_id: groomerId }),
   services: () => get<Service[]>("/services"),
   shopHours: () => get<ShopHours>("/booking/hours"),
   bookingChoices: (dogId: string, startsAt: string, minutes: number, ignore?: string) =>

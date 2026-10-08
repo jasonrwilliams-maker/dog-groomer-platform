@@ -11,6 +11,7 @@ import { ProfileEditForm } from "@/components/check-in/profile-edit-form";
 import { api, paperworkUrl, Refusal, type CheckInCard } from "@/lib/api";
 import { cn, dayLabel, formatDate, formatTime } from "@/lib/utils";
 import { GoodStanding } from "@/components/ui/good-standing";
+import { DogPhotoEditor } from "@/components/check-in/dog-photo-editor";
 
 const SEX = { male: "Male", female: "Female", unknown: "" } as Record<string, string>;
 const CHANNEL = { email: "by email", sms: "by text", verbal_at_counter: "at the counter" } as Record<string, string>;
@@ -67,16 +68,20 @@ export function DogCard({
   return (
     <div className="flex flex-col gap-4">
       {/* Who */}
-      <div>
-        <div className="flex items-start justify-between gap-3">
-          <h2 className="flex items-center gap-2 text-3xl font-semibold tracking-tight">{dog.name}<GoodStanding show={card.in_good_standing} className="size-6 text-sm" /></h2>
-          <Button variant="outline" size="sm" onClick={() => setEditing(true)}>Edit profile</Button>
+      <div className="flex items-start gap-4">
+        <DogPhotoEditor dogId={dog.id} name={dog.name} photo={card.photo?.id ?? null} groomerId={groomerId}
+                        onChanged={onChanged} />
+        <div className="min-w-0 flex-1">
+          <div className="flex items-start justify-between gap-3">
+            <h2 className="flex items-center gap-2 text-3xl font-semibold tracking-tight">{dog.name}<GoodStanding show={card.in_good_standing} className="size-6 text-sm" /></h2>
+            <Button variant="outline" size="sm" onClick={() => setEditing(true)}>Edit profile</Button>
+          </div>
+          <p className="text-muted-foreground">{details}</p>
+          <p className="mt-1 text-sm">
+            {dog.owner}
+            {dog.phone && <> · <a className="underline-offset-2 hover:underline" href={`tel:${dog.phone}`}>{dog.phone}</a></>}
+          </p>
         </div>
-        <p className="text-muted-foreground">{details}</p>
-        <p className="mt-1 text-sm">
-          {dog.owner}
-          {dog.phone && <> · <a className="underline-offset-2 hover:underline" href={`tel:${dog.phone}`}>{dog.phone}</a></>}
-        </p>
       </div>
 
       {/* Can the groom start? — the one thing this screen exists to answer */}

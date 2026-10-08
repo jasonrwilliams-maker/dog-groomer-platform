@@ -24,7 +24,7 @@ from pydantic import BaseModel
 import json
 import os
 
-from . import db, paperwork, reader
+from . import db, dog_photos, paperwork, reader
 
 app = FastAPI(title="Paws & Polish — groomer API", version="0.1.0")
 
@@ -99,6 +99,7 @@ def find_dogs(q: str = "", by: str = "any"):
                c.state::text AS state, c.plain_language_label AS label,
                COALESCE(c.blocks_service, false) AS blocks_service,
                vaccines_all_current(d.id) AS in_good_standing,
+               (SELECT p.photo_group_id FROM dog_photo p WHERE p.dog_id = d.id LIMIT 1) AS photo,
                -- The one line a groomer should know about first, named:
                -- 'Bordetella: expired' says more than the dog's worst state.
                (SELECT l.vaccine || ': ' || lower(l.label) FROM v_check_in_vaccine l
@@ -227,6 +228,8 @@ def check_in_card(dog_id: UUID):
         "appointments": upcoming,
         "usual_groomer": usual,
         "in_good_standing": db.row("SELECT vaccines_all_current(%s) AS ok", (dog_id,))["ok"],
+        "photo": db.row("""SELECT photo_group_id AS id, uploaded_at FROM dog_photo
+                            WHERE dog_id = %s AND rendition = 'display'""", (dog_id,)),
     }
 
 
@@ -794,6 +797,51 @@ def calendar(start: date | None = None, end: date | None = None, dog_id: UUID | 
            AND (%(dog)s::uuid   IS NULL OR dog_id = %(dog)s)
          ORDER BY on_date, starts_at NULLS LAST, kind DESC, stops_grooms DESC, dog, vaccine""",
                    {"start": start, "end": end, "dog": dog_id})
+
+
+# --------------------------------------------------------------- the dog's photo
+
+@app.get("/dogs/{dog_id}/photo")
+def dog_photo(dog_id: UUID, size: Literal["thumb", "display", "original"] = "display"):
+    """The dog's profile photo, in one of its sizes. This machine only."""
+    row = db.row("SELECT object_key FROM dog_photo WHERE dog_id = %s AND rendition = %s", (dog_id, size))
+    path = paperwork.path_of(row["object_key"]) if row else None
+    if path is None:
+        raise HTTPException(404, "No photo of this dog on this computer.")
+    return FileResponse(path, media_type="image/jpeg", headers={"Cache-Control": "private, max-age=86400"})
+
+
+@app.post("/dogs/{dog_id}/photo", status_code=201)
+def add_dog_photo(dog_id: UUID, groomer_id: UUID = Form(...), file: UploadFile = File(...)):
+    """A photo of the dog, made its profile photo: turned upright, stripped of
+    the camera's details, kept in three sizes. It replaces any photo before."""
+    try:
+        sizes = dog_photos.prepare(file.file.read(paperwork.MAX_UPLOAD_BYTES + 1))
+    except dog_photos.NotAPhoto as e:
+        raise HTTPException(422, str(e)) from None
+    try:
+        with db.connect() as conn:
+            row = conn.execute("SELECT set_dog_photo(%s, %s::jsonb, %s) AS old", (
+                dog_id, json.dumps([{"rendition": r.rendition, "object_key": r.object_key,
+                                     "width": r.width, "height": r.height} for r in sizes]), groomer_id)).fetchone()
+            # Written before the database commits: if saving fails, nothing is recorded.
+            dog_photos.save(sizes)
+    except psycopg.Error as e:
+        dog_photos.discard([r.object_key for r in sizes])
+        if (r := refusal_from(e, form=True)) is not None:
+            raise r from None
+        if "not an active client" in str(e):
+            raise HTTPException(404, "No active dog with that id.") from None
+        raise
+    dog_photos.discard(row["old"])
+    return {"photo": db.row("SELECT photo_group_id AS id FROM dog_photo WHERE dog_id = %s LIMIT 1", (dog_id,))["id"]}
+
+
+@app.post("/dogs/{dog_id}/photo/remove")
+def remove_dog_photo(dog_id: UUID, body: Reviewer):
+    row = _write("SELECT remove_dog_photo(%s, %s) AS keys", (dog_id, body.groomer_id))
+    dog_photos.discard(row["keys"])
+    return {"removed": True}
 
 
 # --------------------------------------------------------------- booking ahead

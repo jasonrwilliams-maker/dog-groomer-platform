@@ -474,6 +474,39 @@ def test_a_groom_is_booked_with_the_usual_groomer_and_shows_on_card_and_calendar
     assert client.get(f"/dogs/{olive}").json()["appointments"] == []
 
 
+def test_a_dog_photo_is_kept_in_three_sizes_replaced_and_removed(client):
+    from PIL import Image
+    noodle = dog_named(client, "Noodle")["id"]
+    tanya = groomer(client)
+    assert client.get(f"/dogs/{noodle}").json()["photo"] is None
+    assert client.get(f"/dogs/{noodle}/photo").status_code == 404, "no photo yet: the screen shows the placeholder"
+
+    not_a_photo = client.post(f"/dogs/{noodle}/photo", data={"groomer_id": tanya},
+                              files={"file": ("notes.txt", b"a good boy", "text/plain")})
+    assert not_a_photo.status_code == 422
+
+    first = client.post(f"/dogs/{noodle}/photo", data={"groomer_id": tanya},
+                        files={"file": ("IMG_0002.jpg", tablet_photo(), "image/jpeg")})
+    assert first.status_code == 201, first.text
+    card = client.get(f"/dogs/{noodle}").json()
+    assert card["photo"]["id"] == first.json()["photo"]
+    assert dog_named(client, "Noodle")["photo"] == first.json()["photo"], "the dog list knows there is a photo"
+    thumb = Image.open(io.BytesIO(client.get(f"/dogs/{noodle}/photo", params={"size": "thumb"}).content))
+    display = Image.open(io.BytesIO(client.get(f"/dogs/{noodle}/photo").content))
+    assert thumb.size == (256, 256) and max(display.size) == 1200
+    assert len(display.getexif()) == 0, "no camera details or GPS kept"
+
+    old_files = list(Path(os.environ["PRIVATE_DIR"]).rglob("*.jpg"))
+    second = client.post(f"/dogs/{noodle}/photo", data={"groomer_id": tanya},
+                         files={"file": ("IMG_0003.jpg", tablet_photo(800, 1000), "image/jpeg")})
+    assert second.status_code == 201 and second.json()["photo"] != first.json()["photo"]
+    assert len(list(Path(os.environ["PRIVATE_DIR"]).rglob("*.jpg"))) == len(old_files), "the old photo's files are gone"
+
+    assert client.post(f"/dogs/{noodle}/photo/remove", json={"groomer_id": tanya}).status_code == 200
+    assert client.get(f"/dogs/{noodle}").json()["photo"] is None
+    assert client.get(f"/dogs/{noodle}/photo").status_code == 404
+
+
 class FakeReply:
     """What the SDK's final message looks like, enough for app/reader.py."""
     def __init__(self, text: str, stop_reason: str = "end_turn"):

@@ -11,6 +11,7 @@ import {
 } from "@/lib/api";
 import { cn, dayLabel, duration, formatDate, formatTime } from "@/lib/utils";
 import { GoodStanding } from "@/components/ui/good-standing";
+import { DogPhoto } from "@/components/ui/dog-photo";
 
 export type BookingStart = {
   dog?: { id: string; name: string } | null;
@@ -119,6 +120,8 @@ export function BookingForm({ me, start, onDone, onClose }: {
         {/* The dog */}
         {dog ? (
           <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start gap-3">
+            <DogPhoto dogId={dog.id} photo={about?.photo?.id} name={dog.name} size="md" />
             <div>
               <p className="flex items-center gap-1.5 text-lg font-semibold">{dog.name}<GoodStanding show={about?.in_good_standing} /></p>
               {about && (
@@ -136,6 +139,7 @@ export function BookingForm({ me, start, onDone, onClose }: {
                 {usual ? `Usually with ${usual.groomer}` : "New client: no usual groomer yet"}
                 {about?.last_visit && ` · last groomed ${formatDate(about.last_visit.visit_date)}`}
               </p>
+            </div>
             </div>
             {!appt && <Button variant="outline" size="sm" onClick={() => { setDog(null); setChoices([]); setGroomerId(null); }}>Change dog</Button>}
           </div>
