@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Logo } from "@/components/brand/logo";
 import { AdminView } from "@/components/check-in/admin-view";
+import { CalendarView, type CalendarDog } from "@/components/calendar/calendar-view";
 import { DogCard } from "@/components/check-in/dog-card";
 import { DogList } from "@/components/check-in/dog-list";
 import { WalkInForm, type WalkInFor } from "@/components/check-in/walk-in-form";
@@ -23,7 +24,8 @@ function remember(id: string | null) {
   try { if (id) localStorage.setItem(WHO, id); else localStorage.removeItem(WHO); } catch { /* ask again next time */ }
 }
 
-type View = "check-in" | "admin";
+type View = "check-in" | "calendar" | "admin";
+const VIEW_NAME: Record<View, string> = { "check-in": "Check-in", calendar: "Calendar", admin: "Admin" };
 
 export default function CheckInPage() {
   const [groomers, setGroomers] = useState<Groomer[]>([]);
@@ -33,6 +35,8 @@ export default function CheckInPage() {
   // Which Admin list is open (null: the overview), kept here so it is still
   // open when the manager comes back from a dog.
   const [adminList, setAdminList] = useState<string | null>(null);
+  // The one dog the calendar is narrowed to, if any.
+  const [calendarDog, setCalendarDog] = useState<CalendarDog | null>(null);
   const [query, setQuery] = useState("");
   const [by, setBy] = useState<SearchBy>("any");
   const [dogs, setDogs] = useState<DogSummary[]>([]);
@@ -72,7 +76,7 @@ export default function CheckInPage() {
   }, [selectedId, loadCard]);
 
   function signIn(g: Groomer) { remember(g.id); setMe(g); setView("check-in"); }
-  function signOut() { remember(null); setMe(null); setSelectedId(null); setWalkIn(null); setQuery(""); setAdminList(null); }
+  function signOut() { remember(null); setMe(null); setSelectedId(null); setWalkIn(null); setQuery(""); setAdminList(null); setCalendarDog(null); setView("check-in"); }
   function select(id: string | null) { setWalkIn(null); setSelectedId(id); }
   // A search that found no one is usually the new client's name: carry it over.
   function newClient() {
@@ -100,9 +104,8 @@ export default function CheckInPage() {
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-3 md:px-8">
           <Logo onBrand />
           <div className="flex flex-wrap items-center gap-3">
-            {manager && (
-              <nav className="flex rounded-[var(--radius)] bg-primary-hover p-1 text-sm" aria-label="Screens">
-                {(["check-in", "admin"] as View[]).map((v) => (
+            <nav className="flex rounded-[var(--radius)] bg-primary-hover p-1 text-sm" aria-label="Screens">
+                {((manager ? ["check-in", "calendar", "admin"] : ["check-in", "calendar"]) as View[]).map((v) => (
                   <button
                     key={v}
                     // Admin again, from inside one of its lists: back to the overview.
@@ -113,11 +116,10 @@ export default function CheckInPage() {
                       view === v ? "bg-accent text-accent-foreground shadow-sm" : "text-primary-foreground/80 hover:text-primary-foreground",
                     )}
                   >
-                    {v === "check-in" ? "Check-in" : "Admin"}
+                    {VIEW_NAME[v]}
                   </button>
                 ))}
-              </nav>
-            )}
+            </nav>
             <span className="text-sm">
               <span className="text-primary-foreground/70">Grooming: </span>
               <span className="font-medium">{me.name}</span>
@@ -132,7 +134,10 @@ export default function CheckInPage() {
       <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-6 md:px-8">
         {trouble}
 
-        {view === "admin" && manager ? (
+        {view === "calendar" ? (
+          <CalendarView dog={calendarDog} onDog={setCalendarDog}
+                        onOpenDog={(id) => { select(id); setView("check-in"); }} />
+        ) : view === "admin" && manager ? (
           <AdminView groomerId={me.id} onOpenDog={(id) => { select(id); setView("check-in"); }}
                      list={adminList} onList={setAdminList} />
         ) : (
@@ -151,6 +156,7 @@ export default function CheckInPage() {
                             onDone={walkInDone} onCancel={() => setWalkIn(null)} />
               ) : card ? (
                 <DogCard key={card.dog.id} card={card} groomerId={me.id} detailsOpen={manager}
+                         onCalendar={() => { setCalendarDog({ id: card.dog.id, name: card.dog.name }); setView("calendar"); }}
                          onAddDog={(ownerId, ownerName) => { setSelectedId(null); setWalkIn({ ownerId, ownerName }); }}
                          onChanged={() => { loadCard(card.dog.id); api.findDogs(query, by).then(setDogs); }} />
               ) : (

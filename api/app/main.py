@@ -765,6 +765,26 @@ def verify_record(record_id: UUID, body: Verification):
     return {"verified": True}
 
 
+# --------------------------------------------------------------- the calendar
+
+@app.get("/calendar")
+def calendar(start: date | None = None, end: date | None = None, dog_id: UUID | None = None):
+    """Grooms and vaccine expiries by date: those between start and end (a
+    month on screen), or one dog's whole history when dog_id is given."""
+    if dog_id is None and (start is None or end is None):
+        raise HTTPException(422, "Give a span of dates (start and end), or a dog.")
+    if start and end and (end - start).days > 400:
+        raise HTTPException(422, "Ask for a year or less at a time.")
+    return db.rows("""
+        SELECT on_date, kind, dog_id, dog, owner, vaccine, groomer, note, stops_grooms, in_progress
+          FROM v_calendar_event
+         WHERE (%(start)s::date IS NULL OR on_date >= %(start)s)
+           AND (%(end)s::date   IS NULL OR on_date <= %(end)s)
+           AND (%(dog)s::uuid   IS NULL OR dog_id = %(dog)s)
+         ORDER BY on_date, kind DESC, stops_grooms DESC, dog, vaccine""",
+                   {"start": start, "end": end, "dog": dog_id})
+
+
 # --------------------------------------------------------------- the AI's suggestions
 
 @app.get("/ai/status")

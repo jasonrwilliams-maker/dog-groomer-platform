@@ -15,13 +15,15 @@ const SEX = { male: "Male", female: "Female", unknown: "" } as Record<string, st
 const CHANNEL = { email: "by email", sms: "by text", verbal_at_counter: "at the counter" } as Record<string, string>;
 
 export function DogCard({
-  card, groomerId, onChanged, onAddDog, detailsOpen = false,
+  card, groomerId, onChanged, onAddDog, onCalendar, detailsOpen = false,
 }: {
   card: CheckInCard;
   groomerId: string;
   onChanged: () => void;
   /** Start a walk-in for another dog of this owner. */
   onAddDog: (ownerId: string, ownerName: string) => void;
+  /** Open the calendar on this dog's grooms and expiries. */
+  onCalendar: () => void;
   /** Managers see everything unfolded; groomers get the short card. */
   detailsOpen?: boolean;
 }) {
@@ -208,6 +210,7 @@ export function DogCard({
               ) : (
                 <p className="text-sm text-muted-foreground">No visits recorded yet.</p>
               )}
+              <Button variant="outline" size="sm" className="mt-3" onClick={onCalendar}>See on the calendar</Button>
               <p className="mt-4 text-sm">
                 <span className="block font-medium">{dog.owner}</span>
                 {dog.phone && <a className="block underline-offset-2 hover:underline" href={`tel:${dog.phone}`}>{dog.phone}</a>}

@@ -430,6 +430,21 @@ def test_a_manager_verifies_a_typed_in_shot_and_fixes_a_misread_one(client):
     assert bordetella["hand_checked"]["fixed_by"] == "Nadia"
 
 
+def test_the_calendar_shows_grooms_and_expiries_by_month_or_by_dog(client):
+    olive = dog_named(client, "Olive")["id"]
+    whole = client.get("/calendar", params={"dog_id": olive}).json()
+    kinds = {e["kind"] for e in whole}
+    assert kinds == {"groom", "expiry"} and all(e["dog"] == "Olive" for e in whole)
+    groom = next(e for e in whole if e["kind"] == "groom")
+    month = client.get("/calendar", params={"start": groom["on_date"][:8] + "01", "end": groom["on_date"]}).json()
+    assert any(e["kind"] == "groom" and e["dog"] == "Olive" for e in month)
+    assert all(e["on_date"] <= groom["on_date"] for e in month)
+    rabies = [e for e in client.get("/calendar", params={"dog_id": dog_named(client, "Moose")["id"]}).json()
+              if e["vaccine"] == "Rabies"]
+    assert rabies and rabies[0]["stops_grooms"] is True
+    assert client.get("/calendar").status_code == 422
+
+
 class FakeReply:
     """What the SDK's final message looks like, enough for app/reader.py."""
     def __init__(self, text: str, stop_reason: str = "end_turn"):
