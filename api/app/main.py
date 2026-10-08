@@ -22,11 +22,14 @@ from fastapi.responses import FileResponse, JSONResponse
 from pydantic import BaseModel
 
 import json
+import logging
 import os
 
 from starlette.concurrency import run_in_threadpool
 
 from . import db, dog_photos, paperwork, passkeys, reader
+
+log = logging.getLogger("uvicorn.error")
 
 app = FastAPI(title="Paws & Polish — groomer API", version="0.1.0")
 
@@ -1262,10 +1265,12 @@ def open_with_passkey(body: PasskeyReply):
                      WHERE groomer_id = %s AND credential_id = %s""",
                  (body.groomer_id, passkeys.credential_id(body.credential)))
     if challenge is None or key is None:
+        log.warning("passkey for %s: challenge found %s, key found %s", body.groomer_id, challenge is not None, key is not None)
         raise Refusal("GR036", "That passkey doesn't open Admin for you.", "Try again, or use your PIN.")
     try:
         checked = passkeys.check_opening(body.credential, bytes(challenge), bytes(key["public_key"]), key["sign_count"])
-    except Exception:
+    except Exception as e:
+        log.warning("passkey for %s not accepted: %s", body.groomer_id, e)
         raise Refusal("GR036", "That passkey couldn't be checked.", "Try again, or use your PIN.") from None
     token, token_hash = passkeys.new_token()
     try:
@@ -1311,7 +1316,8 @@ def register_passkey(body: PasskeyReply, request: Request):
         raise Refusal("GR037", "That took too long.", "Start adding the passkey again.")
     try:
         checked = passkeys.check_registration(body.credential, bytes(challenge))
-    except Exception:
+    except Exception as e:
+        log.warning("new passkey for %s not accepted: %s", body.groomer_id, e)
         raise Refusal("GR037", "That passkey couldn't be checked.", "Start adding it again.") from None
     try:
         with db.connect() as conn:

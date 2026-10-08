@@ -672,3 +672,83 @@ def test_adding_a_passkey_starts_with_a_challenge_and_a_forged_one_is_refused(cl
     assert forged.status_code == 409 and forged.json()["code"] == "GR037"
     no_keys = client.post("/admin/access/passkey/options", json={"groomer_id": nadia})
     assert no_keys.status_code == 409, "no passkey was added"
+
+
+class SoftPasskey:
+    """A stand-in for a fingerprint reader: makes a key pair and answers the
+    backend's challenges the way a browser and Windows Hello would."""
+
+    ORIGIN = "http://localhost:3000"
+
+    def __init__(self):
+        import secrets
+        from cryptography.hazmat.primitives.asymmetric import ec
+        self.key = ec.generate_private_key(ec.SECP256R1())
+        self.cred_id = secrets.token_bytes(16)
+
+    @staticmethod
+    def b64(b: bytes) -> str:
+        import base64
+        return base64.urlsafe_b64encode(b).rstrip(b"=").decode()
+
+    def _client_data(self, kind: str, challenge: str) -> bytes:
+        import json as j
+        return j.dumps({"type": kind, "challenge": challenge, "origin": self.ORIGIN, "crossOrigin": False}).encode()
+
+    def _rp_hash(self) -> bytes:
+        import hashlib
+        return hashlib.sha256(b"localhost").digest()
+
+    def register(self, options: dict) -> dict:
+        import cbor2
+        nums = self.key.public_key().public_numbers()
+        cose = cbor2.dumps({1: 2, 3: -7, -1: 1, -2: nums.x.to_bytes(32, "big"), -3: nums.y.to_bytes(32, "big")})
+        auth = (self._rp_hash() + bytes([0x45]) + (0).to_bytes(4, "big") + bytes(16)
+                + len(self.cred_id).to_bytes(2, "big") + self.cred_id + cose)
+        return {"id": self.b64(self.cred_id), "rawId": self.b64(self.cred_id), "type": "public-key",
+                "response": {"clientDataJSON": self.b64(self._client_data("webauthn.create", options["challenge"])),
+                             "attestationObject": self.b64(cbor2.dumps({"fmt": "none", "attStmt": {}, "authData": auth})),
+                             "transports": ["internal"]},
+                "clientExtensionResults": {}, "authenticatorAttachment": "platform"}
+
+    def sign(self, options: dict, user_handle: bytes | None = None, verified: bool = True) -> dict:
+        import hashlib
+        from cryptography.hazmat.primitives import hashes
+        from cryptography.hazmat.primitives.asymmetric import ec
+        client = self._client_data("webauthn.get", options["challenge"])
+        # Present, verified if so; Windows Hello keeps its counter at 0.
+        auth = self._rp_hash() + bytes([0x05 if verified else 0x01]) + (0).to_bytes(4, "big")
+        sig = self.key.sign(auth + hashlib.sha256(client).digest(), ec.ECDSA(hashes.SHA256()))
+        return {"id": self.b64(self.cred_id), "rawId": self.b64(self.cred_id), "type": "public-key",
+                "response": {"clientDataJSON": self.b64(client), "authenticatorData": self.b64(auth),
+                             "signature": self.b64(sig), "userHandle": self.b64(user_handle) if user_handle else None},
+                "clientExtensionResults": {}, "authenticatorAttachment": "platform"}
+
+
+def test_a_passkey_added_opens_admin_again_and_again(client):
+    from uuid import UUID
+    nadia = groomer(client, "Nadia")
+    device = SoftPasskey()
+    added = client.post("/admin/access/register", json={
+        "groomer_id": nadia, "label": "Test device",
+        "credential": device.register(client.post("/admin/access/register/options", json={"groomer_id": nadia}).json())})
+    assert added.status_code == 201, added.text
+
+    # Twice, as after a page reload; the second answer without the "verified"
+    # flag, as a real Windows laptop sent it.
+    for verified in (True, False):
+        options = client.post("/admin/access/passkey/options", json={"groomer_id": nadia}).json()
+        opened = client.post("/admin/access/passkey", json={
+            "groomer_id": nadia, "credential": device.sign(options, UUID(nadia).bytes, verified)},
+            headers={"X-Admin-Session": ""})
+        assert opened.status_code == 200, opened.text
+        assert client.get("/admin/reviews", headers={"X-Admin-Session": opened.json()["token"]}).status_code == 200
+
+    stranger = SoftPasskey()      # a key that was never added
+    options = client.post("/admin/access/passkey/options", json={"groomer_id": nadia}).json()
+    forged = client.post("/admin/access/passkey", json={"groomer_id": nadia, "credential": stranger.sign(options)},
+                         headers={"X-Admin-Session": ""})
+    assert forged.status_code == 409 and forged.json()["code"] == "GR036"
+    replay = client.post("/admin/access/passkey", json={"groomer_id": nadia, "credential": device.sign(options)},
+                         headers={"X-Admin-Session": ""})
+    assert replay.status_code == 409, "a challenge opens Admin once at most"

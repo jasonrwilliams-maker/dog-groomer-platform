@@ -89,9 +89,17 @@ def credential_id(credential: dict) -> bytes:
 
 
 def check_opening(credential: dict, challenge: bytes, public_key: bytes, sign_count: int):
-    """The passkey's new counter, once its signature over the challenge checks out."""
+    """The passkey's new counter, once its signature over the challenge checks out.
+
+    The fingerprint is asked for, but its flag is not insisted on here: on a
+    real Windows laptop the answer came back signed by the right key without
+    it (Windows Hello had just verified, or a password manager answered for
+    it), and refusing that locked a manager out of her own Admin. Adding a
+    passkey does insist on it, so every key on file was made by its owner
+    with their fingerprint; opening needs that key's signature over a
+    challenge used once."""
     return verify_authentication_response(
         credential=credential, expected_challenge=challenge,
         expected_rp_id=rp_id(), expected_origin=origins(),
         credential_public_key=public_key, credential_current_sign_count=sign_count,
-        require_user_verification=True)
+        require_user_verification=False)
