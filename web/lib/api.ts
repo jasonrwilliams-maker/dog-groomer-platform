@@ -69,6 +69,15 @@ export type HandChecked = {
   id: string; dog_id: string; dog: string; owner: string; vaccine: string; administered_on: string;
   expires_on: string; document_id: string; mime_type: string; checked_by: string; checked_at: string;
 };
+/** One thing on the calendar: a groom that happened, or a vaccine running out. */
+export type CalendarEvent = {
+  on_date: string; kind: "groom" | "expiry"; dog_id: string; dog: string; owner: string;
+  vaccine: string | null; groomer: string | null; note: string | null;
+  /** The vaccine's lapse stops a groom (rabies, as the shop is set up). */
+  stops_grooms: boolean;
+  /** A groom that started today and isn't finished. */
+  in_progress: boolean;
+};
 /** A shot typed in with no copy of the paperwork, waiting for a manager to verify it. */
 export type WaitingShot = {
   id: string; dog_id: string; dog: string; owner: string; vaccine: string; administered_on: string;
@@ -261,6 +270,9 @@ export const api = {
   handChecked: () => get<HandChecked[]>("/admin/hand-checked"),
   secondLook: (recordId: string, groomerId: string) =>
     post<{ looked: boolean }>(`/admin/hand-checked/${recordId}/looked`, { groomer_id: groomerId }),
+  /** Grooms and expiries between two dates (yyyy-mm-dd), or one dog's whole history. */
+  calendar: (span: { start: string; end: string } | { dogId: string }) =>
+    get<CalendarEvent[]>("dogId" in span ? `/calendar?dog_id=${span.dogId}` : `/calendar?start=${span.start}&end=${span.end}`),
   waitingVerification: () => get<WaitingShot[]>("/admin/waiting-verification"),
   /** A manager puts a shot's dates right. */
   fixRecord: (recordId: string, groomerId: string, administeredOn: string, expiresOn: string) =>
