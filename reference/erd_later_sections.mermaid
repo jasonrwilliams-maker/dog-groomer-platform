@@ -1,0 +1,133 @@
+%% Tables added after the original schema (sections 15–31), and the columns
+%% later sections added to the original tables. The three other diagrams in
+%% this folder are sections 0–14; a table drawn there is shown here by name
+%% only, as the thing it joins to. Key columns only: the SQL files are the
+%% full definition.
+erDiagram
+    %% 15 - 18: reading a page, and turning it into records
+    VACCINE_TYPE ||--o{ DOCUMENT_TERM : "a printed name resolves to"
+    DOCUMENT_TERM {
+        uuid id PK
+        text raw_term "as printed: DHPP 3YR W/ LEPTO"
+        text normalized "generated; unique"
+        uuid vaccine_type_id FK "NULL = ruled not a vaccine"
+        text confidence
+        uuid ruled_by
+    }
+    EXTRACTION ||--o{ EXTRACTION_LINE_ITEM : "one row per printed line"
+    EXTRACTION_LINE_ITEM ||--o{ EXTRACTION_FIELD : "its fields stay fields"
+    EXTRACTION_LINE_ITEM {
+        uuid id PK
+        uuid extraction_id FK
+        int n "line number on the page"
+        int page_number
+        text source_region
+    }
+    EXTRACTION ||--o| EXTRACTION_CONFIRMATION : "confirmed once (GR015)"
+    EXTRACTION_CONFIRMATION {
+        uuid extraction_id PK
+        uuid dog_id FK
+        uuid confirmed_by FK
+        timestamptz confirmed_at
+    }
+    EXTRACTION_LINE_ITEM ||--o| LINE_ITEM_OUTCOME : "what became of it"
+    LINE_ITEM_OUTCOME }o--o| VACCINATION_RECORD : "created or matched"
+    LINE_ITEM_OUTCOME ||--o{ LINE_ITEM_REQUEST : "asked the owner"
+    LINE_ITEM_REQUEST }o--|| RECORD_REQUEST : ""
+    LINE_ITEM_OUTCOME {
+        uuid line_item_id PK
+        uuid extraction_id FK
+        line_outcome outcome "record_created, already_on_file, ..."
+        uuid vaccine_type_id FK
+        uuid vaccination_record_id FK
+    }
+
+    %% 19: owner outreach
+    OWNER ||--o{ CONTACT_CONSENT : "a history, latest wins"
+    CONTACT_CONSENT {
+        uuid id PK
+        uuid owner_id FK
+        request_channel channel "email or sms"
+        bool granted
+        text source "how the shop knows"
+        uuid recorded_by FK
+    }
+    OWNER ||--o{ OUTREACH_MESSAGE : "one per owner per dog"
+    OUTREACH_MESSAGE ||--o{ OUTREACH_MESSAGE_REQUEST : "names every certificate needed"
+    OUTREACH_MESSAGE_REQUEST }o--|| RECORD_REQUEST : ""
+    OUTREACH_MESSAGE {
+        uuid id PK
+        uuid owner_id FK
+        uuid dog_id FK
+        text recipient_address
+        bool is_reminder
+        outreach_status status "queued, sent, failed, ..."
+        timestamptz sent_at
+    }
+
+    %% 22 - 25: walk-ins, mixes, allergies and handling
+    DOG {
+        bool is_mixed "22"
+        uuid second_breed_id FK "22: the other breed, if known"
+    }
+    ALLERGY {
+        timestamptz removed_at "24: taken off, kept"
+        uuid removed_by FK
+        text removed_reason "24: required (GR025)"
+    }
+    BEHAVIOR_NOTE {
+        text side "24: front, back, left, right"
+    }
+    DOG ||--o{ CHANGE_REVIEW : "waits for a manager (GR026)"
+    CHANGE_REVIEW {
+        uuid id PK
+        uuid dog_id FK
+        text entity_type
+        uuid entity_id
+        text summary
+        uuid changed_by FK
+        uuid reviewed_by FK
+    }
+
+    %% 26 - 28: paperwork at the counter, the AI, a manager's fixes
+    DOCUMENT ||--o{ COUNTER_PAPERWORK : "taken at the counter"
+    DOG ||--o{ COUNTER_PAPERWORK : ""
+    COUNTER_PAPERWORK {
+        uuid document_id PK
+        uuid dog_id PK
+        uuid received_by FK
+        uuid checked_by FK "NULL: waiting to be checked"
+        timestamptz checked_at
+    }
+    VACCINATION_RECORD {
+        bool checked_by_hand "26: typed in reading a photo"
+        uuid second_look_by FK "26: a manager's second look (GR028)"
+        text verified_how "28: how a manager checked it"
+        uuid fixed_by FK "28: who put its dates right (GR030)"
+    }
+    EXTRACTION {
+        bool read_at_counter "27: Have the AI read it"
+        uuid requested_by FK
+    }
+
+    %% 30 - 31: booking ahead, and the dog's photo
+    DOG ||--o{ APPOINTMENT : "booked"
+    GROOMER ||--o{ APPOINTMENT : "no double-booking (GR031)"
+    SERVICE_TYPE ||--o{ APPOINTMENT : ""
+    APPOINTMENT {
+        uuid id PK
+        uuid dog_id FK
+        uuid groomer_id FK
+        uuid service_type_id FK
+        timestamp starts_at "shop time"
+        int minutes
+        timestamp ends_at "generated"
+        text other_groomer_reason "a regular client away from their usual groomer (GR032)"
+        appointment_status status "booked or cancelled"
+        uuid booked_by FK
+        text cancel_reason
+    }
+    SERVICE_TYPE {
+        int default_minutes "30: a full groom is 90"
+    }
+    DOG ||--o{ DOG_PHOTO : "one profile photo, in three sizes (31)"
