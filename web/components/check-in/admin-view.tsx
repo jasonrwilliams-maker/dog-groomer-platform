@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Badge, toneFor } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,7 +10,7 @@ import {
   api, paperworkUrl, type AiAccuracy, type ComplianceLine, type ComplianceSummary, type HandChecked, type Review,
   type WaitingCopy, type WaitingShot,
 } from "@/lib/api";
-import { formatDate } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 
 // The labelling and review tool (extraction/review/). Managers only.
 const RECORDS_URL = process.env.NEXT_PUBLIC_RECORDS_URL ?? "http://localhost:8501";
@@ -50,12 +50,22 @@ const OTHER = { id: "other", title: "Anything else", note: "A state this screen 
 const dogsIn = (lines: ComplianceLine[]) => new Set(lines.map((l) => l.dog_id)).size;
 const dogs = (n: number) => `${n} ${n === 1 ? "dog" : "dogs"}`;
 
-/** Bring a section into view, below the page's top edge. */
-function goTo(id: string) {
-  document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
-}
+// The manager's own jobs, as against the state of the book. They share the
+// shop's amber (the logo, the spaniel's eyes), card and screen alike, so a job
+// and its list are plainly the same thing.
+const TODO = new Set(["waiting", "paperwork", "hand-checked", "reviews"]);
+const TODO_SURFACE = "border-todo-border bg-todo";
 
-export function AdminView({ groomerId, onOpenDog }: { groomerId: string; onOpenDog: (dogId: string) => void }) {
+/**
+ * The Admin view: an overview of counts, and behind each count its own screen
+ * with just that list and its tools. `list` is which screen is open (null:
+ * the overview); the page keeps it, so a manager who opens a dog from a list
+ * comes back to the same list.
+ */
+export function AdminView({ groomerId, onOpenDog, list, onList }: {
+  groomerId: string; onOpenDog: (dogId: string) => void;
+  list: string | null; onList: (list: string | null) => void;
+}) {
   const [summary, setSummary] = useState<ComplianceSummary | null>(null);
   const [reviews, setReviews] = useState<Review[]>([]);
   const [problem, setProblem] = useState<string | null>(null);
@@ -81,6 +91,7 @@ export function AdminView({ groomerId, onOpenDog }: { groomerId: string; onOpenD
     loadPaperwork();
     loadReviews();
   }, []);
+  useEffect(() => { window.scrollTo({ top: 0 }); }, [list]);
 
   if (problem) {
     return <p role="alert" className="rounded-[var(--radius)] border border-stop/30 bg-stop-soft p-3 text-sm text-stop">{problem}</p>;
@@ -93,53 +104,11 @@ export function AdminView({ groomerId, onOpenDog }: { groomerId: string; onOpenD
   const byId = Object.fromEntries(grouped.map((g) => [g.id, g]));
   const typedInDogs = new Set(typedIn.map((r) => r.dog_id)).size;
 
-  return (
-    <div className="flex flex-col gap-6">
-      {/* The book at a glance, then the manager's own jobs. A card with a list behind it opens that list. */}
-      <section className="flex flex-col gap-2">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Vaccinations</h2>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-          <Stat label="Dogs on the books" value={summary.dogs} />
-          <Stat label="Cleared to groom" value={summary.cleared} tone="ok" />
-          <Stat label="Can't groom" value={dogsIn(byId["cant-groom"].lines)} tone="stop" target="cant-groom" />
-          <Stat label="Expired" value={dogsIn(byId["expired"].lines)} tone="stop" target="expired" />
-          <Stat label="No paperwork on file" value={dogsIn(byId["missing"].lines)} tone="warn" target="missing" />
-          <Stat label="Expiring soon" value={dogsIn(byId["expiring"].lines)} tone="warn" target="expiring" />
-        </div>
-      </section>
-      <section className="flex flex-col gap-2">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Your to-do list</h2>
-        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-          <Stat label="Waiting to be verified" value={typedInDogs} tone="info" target="waiting" />
-          <Stat label="Paperwork to check" value={waiting.length} tone="info" target="paperwork" />
-          <Stat label="Checked by hand, to look over" value={handChecked.length} tone="info" target="hand-checked" />
-          <Stat label="Allergy changes to review" value={reviews.length} tone="info" target="reviews" />
-        </div>
-      </section>
-
-      <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardContent className="flex h-full flex-col justify-between gap-4 pt-5">
-            <div>
-              <p className="font-semibold">Vaccination records</p>
-              <p className="text-sm text-muted-foreground">
-                The test bench: label sample paperwork, compare AI prompts and models, and manage owner reminders.
-              </p>
-            </div>
-            <a
-              href={RECORDS_URL}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex h-10 items-center self-start rounded-[var(--radius)] border border-border bg-card px-4 text-sm font-medium hover:bg-muted"
-            >
-              Open records tool ↗
-            </a>
-          </CardContent>
-        </Card>
-        <AiScoreboard rows={aiScore} />
-      </div>
-
-      {checking && (
+  // Each screen behind a count: its list, and the tools that go with it.
+  const screens: Record<string, { empty: string; node: ReactNode }> = {
+    paperwork: { empty: "No copies waiting to be checked.", node: (checking || waiting.length > 0) && (
+      <>
+        {checking && (
         <Card className="border-primary/40">
           <CardHeader>
             <CardTitle>{checking.dog}&apos;s paperwork</CardTitle>
@@ -154,10 +123,9 @@ export function AdminView({ groomerId, onOpenDog }: { groomerId: string; onOpenD
                              onChanged={loadPaperwork} onClose={() => { setChecking(null); loadPaperwork(); }} />
           </CardContent>
         </Card>
-      )}
-
-      {waiting.length > 0 && (
-        <Card id="paperwork" className="scroll-mt-6 border-warn/40">
+        )}
+        {waiting.length > 0 && (
+        <Card className={TODO_SURFACE}>
           <CardHeader>
             <CardTitle>Paperwork to check · {waiting.length}</CardTitle>
             <p className="text-sm text-muted-foreground">
@@ -194,10 +162,11 @@ export function AdminView({ groomerId, onOpenDog }: { groomerId: string; onOpenD
             </ul>
           </CardContent>
         </Card>
-      )}
-
-      {handChecked.length > 0 && (
-        <Card id="hand-checked" className="scroll-mt-6">
+        )}
+      </>
+    ) },
+    "hand-checked": { empty: "Nothing checked by hand is waiting for a second look.", node: handChecked.length > 0 && (
+        <Card className={TODO_SURFACE}>
           <CardHeader>
             <CardTitle>Checked by hand · {handChecked.length}</CardTitle>
             <p className="text-sm text-muted-foreground">
@@ -243,10 +212,9 @@ export function AdminView({ groomerId, onOpenDog }: { groomerId: string; onOpenD
             </ul>
           </CardContent>
         </Card>
-      )}
-
-      {typedIn.length > 0 && (
-        <Card id="waiting" className="scroll-mt-6">
+      ) },
+    waiting: { empty: "No shots waiting to be verified.", node: typedIn.length > 0 && (
+        <Card className={TODO_SURFACE}>
           <CardHeader>
             <CardTitle>Waiting to be verified · {dogs(typedInDogs)}</CardTitle>
             <p className="text-sm text-muted-foreground">
@@ -281,10 +249,9 @@ export function AdminView({ groomerId, onOpenDog }: { groomerId: string; onOpenD
             </ul>
           </CardContent>
         </Card>
-      )}
-
-      {reviews.length > 0 && (
-        <Card id="reviews" className="scroll-mt-6 border-warn/40">
+      ) },
+    reviews: { empty: "No allergy changes to review.", node: reviews.length > 0 && (
+        <Card className={TODO_SURFACE}>
           <CardHeader>
             <CardTitle>Changes to review · {reviews.length}</CardTitle>
             <p className="text-sm text-muted-foreground">
@@ -313,16 +280,84 @@ export function AdminView({ groomerId, onOpenDog }: { groomerId: string; onOpenD
             </ul>
           </CardContent>
         </Card>
-      )}
+      ) },
+    ...Object.fromEntries([...grouped.filter((g) => g.id !== "waiting"), { ...OTHER, lines: other }].map((g) => [g.id, {
+      empty: "Nothing on this list now.",
+      node: g.lines.length > 0 && (
+        <Group id={g.id} title={`${g.title} · ${dogs(dogsIn(g.lines))}`} note={g.note} lines={g.lines} onOpenDog={onOpenDog} />
+      ),
+    }])),
+  };
 
-      {grouped.map((g) => g.lines.length > 0 && g.id !== "waiting" && (
-        <Group key={g.id} id={g.id} title={`${g.title} · ${dogs(dogsIn(g.lines))}`} note={g.note} lines={g.lines}
-               onOpenDog={onOpenDog} />
-      ))}
+  const open = list ? screens[list] : undefined;
+  if (list && open) {
+    return (
+      <div className="flex flex-col gap-4">
+        <Button variant="outline" size="sm" className="self-start" onClick={() => onList(null)}>
+          ← Back to the overview
+        </Button>
+        {open.node || (
+          <Card className={TODO.has(list) ? TODO_SURFACE : ""}>
+            <CardContent className="pt-5 text-muted-foreground">{open.empty}</CardContent>
+          </Card>
+        )}
+      </div>
+    );
+  }
+
+  const stat = (label: string, value: number, tone: Tone, target: string) =>
+    <Stat label={label} value={value} tone={tone} todo={TODO.has(target)} onOpen={() => onList(target)} />;
+
+  return (
+    <div className="flex flex-col gap-6">
+      {/* The book at a glance, then the manager's own jobs. A card with a list behind it opens that list. */}
+      <section className="flex flex-col gap-2">
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Vaccinations</h2>
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          <Stat label="Dogs on the books" value={summary.dogs} />
+          <Stat label="Cleared to groom" value={summary.cleared} tone="ok" />
+          {stat("Can't groom", dogsIn(byId["cant-groom"].lines), "stop", "cant-groom")}
+          {stat("Expired", dogsIn(byId["expired"].lines), "stop", "expired")}
+          {stat("No paperwork on file", dogsIn(byId["missing"].lines), "warn", "missing")}
+          {stat("Expiring soon", dogsIn(byId["expiring"].lines), "warn", "expiring")}
+        </div>
+      </section>
+      <section className="flex flex-col gap-2">
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Your to-do list</h2>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {stat("Waiting to be verified", typedInDogs, "info", "waiting")}
+          {stat("Paperwork to check", waiting.length, "info", "paperwork")}
+          {stat("Checked by hand, to look over", handChecked.length, "info", "hand-checked")}
+          {stat("Allergy changes to review", reviews.length, "info", "reviews")}
+        </div>
+      </section>
       {other.length > 0 && (
         <Group id={OTHER.id} title={`${OTHER.title} · ${dogs(dogsIn(other))}`} note={OTHER.note} lines={other}
                onOpenDog={onOpenDog} />
       )}
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <Card>
+          <CardContent className="flex h-full flex-col justify-between gap-4 pt-5">
+            <div>
+              <p className="font-semibold">Vaccination records</p>
+              <p className="text-sm text-muted-foreground">
+                The test bench: label sample paperwork, compare AI prompts and models, and manage owner reminders.
+              </p>
+            </div>
+            <a
+              href={RECORDS_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex h-10 items-center self-start rounded-[var(--radius)] border border-border bg-card px-4 text-sm font-medium hover:bg-muted"
+            >
+              Open records tool ↗
+            </a>
+          </CardContent>
+        </Card>
+        <AiScoreboard rows={aiScore} />
+      </div>
+
       {summary.lines.length === 0 && (
         <p className="text-muted-foreground">Every dog&apos;s vaccinations are in order.</p>
       )}
@@ -382,7 +417,9 @@ const when = (at: string) =>
 
 const TONE: Record<Tone, string> = { ok: "text-ok", stop: "text-stop", warn: "text-warn", info: "text-primary" };
 
-function Stat({ label, value, tone, target }: { label: string; value: number; tone?: Tone; target?: string }) {
+function Stat({ label, value, tone, todo, onOpen }: {
+  label: string; value: number; tone?: Tone; todo?: boolean; onOpen?: () => void;
+}) {
   const colour = tone && value > 0 ? TONE[tone] : "";
   const body = (
     <>
@@ -391,14 +428,15 @@ function Stat({ label, value, tone, target }: { label: string; value: number; to
     </>
   );
   // Nothing behind it, or nothing in the list: a plain count.
-  if (!target || value === 0) {
-    return <Card><CardContent className="pt-5">{body}</CardContent></Card>;
+  if (!onOpen || value === 0) {
+    return <Card className={todo ? TODO_SURFACE : ""}><CardContent className="pt-5">{body}</CardContent></Card>;
   }
   return (
-    <button onClick={() => goTo(target)}
-            className="group flex flex-col items-start justify-start rounded-[var(--radius)] border border-border bg-card p-5 text-left shadow-sm transition-colors hover:border-primary hover:bg-muted">
+    <button onClick={onOpen}
+            className={cn("group flex flex-col items-start justify-start rounded-[var(--radius)] border p-5 text-left shadow-sm transition-colors hover:border-primary",
+                          todo ? `${TODO_SURFACE} hover:bg-todo-hover` : "border-border bg-card hover:bg-muted")}>
       {body}
-      <p className="mt-1 text-xs font-medium text-primary group-hover:underline">See the list ↓</p>
+      <p className="mt-1 text-xs font-medium text-primary group-hover:underline">Open the list →</p>
     </button>
   );
 }
@@ -407,7 +445,7 @@ function Group({ id, title, note, lines, onOpenDog }: {
   id: string; title: string; note: string; lines: ComplianceLine[]; onOpenDog: (dogId: string) => void;
 }) {
   return (
-    <Card id={id} className="scroll-mt-6">
+    <Card id={id}>
       <CardHeader>
         <CardTitle>{title}</CardTitle>
         <p className="text-sm text-muted-foreground">{note}</p>

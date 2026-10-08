@@ -10,7 +10,11 @@
 
    The amber is decoration only: the logo, focus rings, the active tab. The
    three colours that mean something for today's groom (ok, warn, stop) stay
-   separate, so a brand colour is never mistaken for a warning. */
+   separate, so a brand colour is never mistaken for a warning.
+
+   The amber also comes pale, as a surface (--todo): the manager's own jobs in
+   the Admin view, their count cards and the lists behind them, so a job and
+   its list read as one thing. */
 :root {
   --background: #edeaeb;
   --foreground: #231d2c;
@@ -24,6 +28,9 @@
   --accent: #ffb44e;
   --accent-foreground: #231d2c;
   --ring: #ffb44e;
+  --todo: #fff5e3;
+  --todo-hover: #ffecc9;
+  --todo-border: #f1d29c;
 
   --ok: oklch(0.5 0.12 150);
   --ok-soft: oklch(0.95 0.04 150);
@@ -46,6 +53,9 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-ring: var(--ring);
+  --color-todo: var(--todo);
+  --color-todo-hover: var(--todo-hover);
+  --color-todo-border: var(--todo-border);
   --color-ok: var(--ok);
   --color-ok-soft: var(--ok-soft);
   --color-warn: var(--warn);

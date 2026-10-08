@@ -30,6 +30,9 @@ export default function CheckInPage() {
   const [me, setMe] = useState<Groomer | null>(null);
   const [ready, setReady] = useState(false);
   const [view, setView] = useState<View>("check-in");
+  // Which Admin list is open (null: the overview), kept here so it is still
+  // open when the manager comes back from a dog.
+  const [adminList, setAdminList] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [by, setBy] = useState<SearchBy>("any");
   const [dogs, setDogs] = useState<DogSummary[]>([]);
@@ -69,7 +72,7 @@ export default function CheckInPage() {
   }, [selectedId, loadCard]);
 
   function signIn(g: Groomer) { remember(g.id); setMe(g); setView("check-in"); }
-  function signOut() { remember(null); setMe(null); setSelectedId(null); setWalkIn(null); setQuery(""); }
+  function signOut() { remember(null); setMe(null); setSelectedId(null); setWalkIn(null); setQuery(""); setAdminList(null); }
   function select(id: string | null) { setWalkIn(null); setSelectedId(id); }
   // A search that found no one is usually the new client's name: carry it over.
   function newClient() {
@@ -102,7 +105,8 @@ export default function CheckInPage() {
                 {(["check-in", "admin"] as View[]).map((v) => (
                   <button
                     key={v}
-                    onClick={() => setView(v)}
+                    // Admin again, from inside one of its lists: back to the overview.
+                    onClick={() => { if (v === "admin" && view === "admin") setAdminList(null); setView(v); }}
                     aria-current={view === v ? "page" : undefined}
                     className={cn(
                       "rounded-[calc(var(--radius)-0.2rem)] px-3 py-1.5 font-medium transition-colors",
@@ -129,7 +133,8 @@ export default function CheckInPage() {
         {trouble}
 
         {view === "admin" && manager ? (
-          <AdminView groomerId={me.id} onOpenDog={(id) => { select(id); setView("check-in"); }} />
+          <AdminView groomerId={me.id} onOpenDog={(id) => { select(id); setView("check-in"); }}
+                     list={adminList} onList={setAdminList} />
         ) : (
           <div className="grid gap-6 md:grid-cols-[minmax(0,20rem)_minmax(0,1fr)]">
             {/* On a phone the list and the card take turns; side by side from tablet up. */}
