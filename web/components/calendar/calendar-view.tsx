@@ -36,7 +36,7 @@ function look(e: CalendarEvent, today: string) {
   const past = e.on_date < today;
   return { tone: e.stops_grooms ? "bg-stop-soft text-stop" : "bg-warn-soft text-warn",
            short: `${e.dog} · ${e.vaccine}`,
-           long: `${e.vaccine} ${past ? "ran out" : "runs out"}` };
+           long: `${e.vaccine} ${past ? "expired" : "expires"}` };
 }
 
 /**
@@ -109,7 +109,7 @@ export function CalendarView({ dog, onDog, onOpenDog }: {
             </div>
             {/* What to show. */}
             <div className="flex flex-wrap gap-2">
-              {([["groom", "Grooms"], ["expiry", "Vaccines running out"]] as const).map(([k, label]) => (
+              {([["groom", "Grooms"], ["expiry", "Vaccine expiries"]] as const).map(([k, label]) => (
                 <Button key={k} variant="outline" size="sm" aria-pressed={shown[k]}
                         className={shown[k] ? "border-primary bg-primary/10 hover:bg-primary/10" : "text-muted-foreground"}
                         onClick={() => setShown({ ...shown, [k]: !shown[k] })}>
@@ -120,8 +120,8 @@ export function CalendarView({ dog, onDog, onOpenDog }: {
           </div>
           <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
             <Key tone="bg-primary text-primary-foreground" label="A groom" />
-            <Key tone="bg-stop-soft text-stop" label="Runs out and stops grooms (rabies)" />
-            <Key tone="bg-warn-soft text-warn" label="Runs out, groom can go ahead" />
+            <Key tone="bg-stop-soft text-stop" label="Expires and stops grooms (rabies)" />
+            <Key tone="bg-warn-soft text-warn" label="Expires, groom can go ahead" />
           </p>
         </CardHeader>
         <CardContent>
@@ -218,22 +218,42 @@ function Key({ tone, label }: { tone: string; label: string }) {
   );
 }
 
-/** Narrow the calendar to one dog, found by its name or its owner's. */
+/**
+ * Narrow the calendar to one dog: a drop-down of every dog and its owner,
+ * which typing narrows by either name. Arrow keys and Enter work too.
+ */
 function DogFilter({ dog, onDog }: { dog: CalendarDog | null; onDog: (dog: CalendarDog | null) => void }) {
+  const [all, setAll] = useState<DogSummary[]>([]);
   const [q, setQ] = useState("");
-  const [hits, setHits] = useState<DogSummary[]>([]);
+  const [open, setOpen] = useState(false);
+  const [active, setActive] = useState(0);
 
   useEffect(() => {
-    if (!q.trim()) { setHits([]); return; }
-    const t = setTimeout(() => api.findDogs(q).then((d) => setHits(d.slice(0, 6))).catch(() => setHits([])), 200);
-    return () => clearTimeout(t);
-  }, [q]);
+    api.findDogs("").then((d) => setAll([...d].sort((a, b) => a.name.localeCompare(b.name)))).catch(() => setAll([]));
+  }, []);
+
+  const needle = q.trim().toLowerCase();
+  const hits = needle
+    ? all.filter((d) => d.name.toLowerCase().includes(needle) || d.owner.toLowerCase().includes(needle))
+    : all;
+
+  function pick(d: DogSummary) {
+    setQ(""); setOpen(false); setActive(0);
+    onDog({ id: d.id, name: d.name });
+  }
+
+  function onKey(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "ArrowDown") { e.preventDefault(); setOpen(true); setActive((a) => Math.min(a + 1, hits.length - 1)); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setActive((a) => Math.max(a - 1, 0)); }
+    else if (e.key === "Enter" && open && hits[active]) { e.preventDefault(); pick(hits[active]); }
+    else if (e.key === "Escape") setOpen(false);
+  }
 
   if (dog) {
     return (
       <Card className="border-primary/40">
         <CardContent className="flex items-center justify-between gap-3 pt-5">
-          <p className="text-sm">Showing <span className="font-semibold">{dog.name}</span> only</p>
+          <p className="text-sm">Focused on <span className="font-semibold">{dog.name}</span></p>
           <Button variant="outline" size="sm" onClick={() => onDog(null)}>Show every dog</Button>
         </CardContent>
       </Card>
@@ -241,24 +261,36 @@ function DogFilter({ dog, onDog }: { dog: CalendarDog | null; onDog: (dog: Calen
   }
   return (
     <Card>
-      <CardContent className="flex flex-col gap-2 pt-5">
-        <label className="flex flex-col gap-1 text-sm">
-          <span className="font-medium">Show one dog</span>
-          <Input placeholder="Dog or owner name" value={q} onChange={(e) => setQ(e.target.value)} />
-        </label>
-        {hits.length > 0 && (
-          <ul className="flex flex-col gap-1">
-            {hits.map((d) => (
-              <li key={d.id}>
-                <Button variant="outline" size="sm" className="w-full justify-start"
-                        onClick={() => { setQ(""); onDog({ id: d.id, name: d.name }); }}>
-                  {d.name}<span className="font-normal text-muted-foreground">· {d.owner}</span>
-                </Button>
-              </li>
-            ))}
-          </ul>
-        )}
-        {q.trim() && hits.length === 0 && <p className="text-sm text-muted-foreground">No dog by that name.</p>}
+      <CardContent className="pt-5">
+        <label htmlFor="calendar-dog" className="mb-1 block text-sm font-medium">Focus calendar view:</label>
+        <div className="relative">
+          <Input id="calendar-dog" role="combobox" aria-expanded={open} aria-controls="calendar-dog-list"
+                 aria-activedescendant={open && hits[active] ? `calendar-dog-${hits[active].id}` : undefined}
+                 autoComplete="off" placeholder="Pick or type a name"
+                 className="pr-9" value={q}
+                 onChange={(e) => { setQ(e.target.value); setOpen(true); setActive(0); }}
+                 onFocus={() => setOpen(true)}
+                 // A beat, so a click on the list lands before it closes.
+                 onBlur={() => setTimeout(() => setOpen(false), 150)}
+                 onKeyDown={onKey} />
+          <span aria-hidden className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground">▾</span>
+          {open && (
+            <ul id="calendar-dog-list" role="listbox"
+                className="absolute z-20 mt-1 max-h-72 w-full overflow-auto rounded-[var(--radius)] border border-border bg-card py-1 shadow-lg">
+              {hits.length === 0 ? (
+                <li className="px-3 py-2 text-sm text-muted-foreground">No dog or owner by that name.</li>
+              ) : hits.map((d, i) => (
+                <li key={d.id} id={`calendar-dog-${d.id}`} role="option" aria-selected={i === active}
+                    onMouseDown={(e) => { e.preventDefault(); pick(d); }}
+                    onMouseEnter={() => setActive(i)}
+                    className={cn("cursor-pointer px-3 py-2 text-sm", i === active && "bg-muted")}>
+                  <span className="font-medium">{d.name}</span>
+                  <span className="text-muted-foreground"> · {d.owner}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </CardContent>
     </Card>
   );
