@@ -5,6 +5,7 @@ import { Input } from "@/components/ui/input";
 import { api, type DogSummary } from "@/lib/api";
 import { cn } from "@/lib/utils";
 import { GoodStanding } from "@/components/ui/good-standing";
+import { DogPhoto } from "@/components/ui/dog-photo";
 
 /**
  * Pick a dog: a drop-down of every dog and its owner, which typing narrows by
@@ -59,9 +60,12 @@ export function DogPicker({ id, label, onPick }: { id: string; label: string; on
               <li key={d.id} id={`${id}-${d.id}`} role="option" aria-selected={i === active}
                   onMouseDown={(e) => { e.preventDefault(); pick(d); }}
                   onMouseEnter={() => setActive(i)}
-                  className={cn("cursor-pointer px-3 py-2 text-sm", i === active && "bg-muted")}>
-                <span className="font-medium">{d.name}</span> <GoodStanding show={d.in_good_standing} />
-                <span className="text-muted-foreground"> · {d.owner}</span>
+                  className={cn("flex cursor-pointer items-center gap-2 px-3 py-1.5 text-sm", i === active && "bg-muted")}>
+                <DogPhoto dogId={d.id} photo={d.photo} name={d.name} className="size-8" />
+                <span>
+                  <span className="font-medium">{d.name}</span> <GoodStanding show={d.in_good_standing} />
+                  <span className="text-muted-foreground"> · {d.owner}</span>
+                </span>
               </li>
             ))}
           </ul>

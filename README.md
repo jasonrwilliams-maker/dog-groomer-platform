@@ -6,7 +6,7 @@ A system of record for a small grooming practice, with the business rules
 enforced **in the database** rather than in the application.
 
 Twenty-nine numbered rules, each with a dedicated error code, each proven by a test
-that asserts the *refusal* — not the happy path. 434 assertions, all passing.
+that asserts the *refusal* — not the happy path. 440 assertions, all passing.
 How strictly each groom-time rule is enforced (block, warn, or off) is itself a
 row of data, changed by `UPDATE` and recorded in the audit log — not a migration.
 
@@ -79,9 +79,9 @@ for a better copy instead of recording a guess.
 
 | Component | State |
 |---|---|
-| Schema | Sections 0–14 stable, in one file; later sections appended as separate files (15–30) |
+| Schema | Sections 0–14 stable, in one file; later sections appended as separate files (15–31) |
 | Business rules | 32, codes `GR001`–`GR032` |
-| Test suite | 26 files, 434 pgTAP assertions, passing; 25 API tests |
+| Test suite | 27 files, 440 pgTAP assertions, passing; 26 API tests |
 | Document vocabulary (§15) | 29 rulings seeded from the labelled corpus; `resolve_term()` fails closed |
 | Extraction line items (§16) | One row per printed line; review views; the shape the harness loads |
 | Confirmation — Layer 3 (§18) | `confirm_extraction()` turns a fully reviewed page into verified records, records every line's outcome, and asks the owner for what the page is missing |
@@ -98,6 +98,7 @@ for a better copy instead of recording a guess.
 | Manager fixes (§28) | On the Admin view, a manager **verifies** a shot typed in with no photo (`verify_counter_shot()`), saying how they checked it (saw the owner's paper, called the vet), which is kept on the record; and when a hand-checked shot doesn't match its photo, **fixes** its dates (`correct_counter_shot()`), which counts as its second look; the card still names who checked it by hand, and now who fixed it. If the AI had read that copy, its grade for those dates is redone against the manager's, so a wrong date the groomer accepted counts against the AI. A shot verified some other way goes back to waiting when its dates change. Fixed dates keep the counter's rules (GR021, GR022); the groomer's dates stay in the audit log, before and after. Only a manager does either (GR030). A record read in the records tool is fixed there |
 | Calendar (§29) | A **Calendar** tab for every groomer: a month of grooms that happened (who groomed, the note) and the day each dog's vaccines expire, the ones that stop a groom (rabies) in red (`v_calendar_event`). Show or hide grooms and expiries; focus it on one dog (a drop-down of every dog and owner, narrowed by typing) to list its dates and jump to any of them, starting at its last groom. A dog's card has **See on the calendar**. Bookings show too (see §30) |
 | Booking ahead (§30) | Anyone books a groom from a dog's card (**Book a groom**) or the calendar: service, length (each service has a usual length, a full groom 1 hr 30 min; tick "Set a different length" for anything up to the whole day), day, groomer and one of their free start times, within the shop's hours (`shop_opens`, `shop_closes`). The form shows the dog's breed, age, coat, owner and phone. The dog's **usual groomer** (whoever groomed it last) is offered first, then whoever is signed in; booking a regular client with someone else asks why, and the reason is kept (GR032). Nobody is booked twice at once, groomer or dog (GR031, backed by an exclusion constraint). Vaccines that will be out of date by the day are a warning, not a refusal; check-in still decides on the day. The calendar shows bookings, and the day's timeline is the signed-in groomer's day first, the team below; a booking can be changed or cancelled (reason kept). A green check beside a dog's name, on the dog list, card, calendar and booking form, means every vaccine is current and verified (`vaccines_all_current()`): stricter than cleared to groom |
+| Dog photos (§31) | Each dog can have one profile photo, added from its card (**Add photo**: take one with the tablet camera or webcam, or choose one), changed or removed. Turned upright, stripped of the camera's details and GPS, and kept in three sizes under `private/dogs/` (`set_dog_photo()`, `remove_dog_photo()`); a new photo replaces the old and its files are deleted. Shown on the card, the booking form, the dog list and the dog pickers; a drawn placeholder until one is added |
 | Groomer interface | **Check-in screen** (`web/`, Next.js + Tailwind, shadcn-style components) on a thin FastAPI backend (`api/`): pick who's grooming, find a dog by its name or its owner's, see whether today's groom can start and why not, allergies, handling notes; start the groom; sign up a walk-in and photograph the paperwork they brought, then check it now or leave it for a manager; put right a typo in a dog's or an owner's details; keep its allergies and handling notes. Managers see allergy changes to review, paperwork waiting to be checked, and shots checked by hand waiting for a second look. Managers also get an Admin view: the whole book's compliance at a glance and the way into the records tool. Runs on its own demo database, `grooming_demo` |
 | Extraction harness | Built — scores a model run against the answer keys; self-check passing |
 | Photo preparation | Built — a photo is turned upright, stripped of EXIF and GPS, and downscaled before it is sent |
