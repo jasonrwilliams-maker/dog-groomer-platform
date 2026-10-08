@@ -49,7 +49,11 @@ export type CheckInCard = {
   vaccines: VaccineLine[];
   allergies: Allergy[];
   behaviour: BehaviourNote[];
-  last_visit: { visit_date: string; groomer: string; note: string | null } | null;
+  last_visit: {
+    visit_date: string; groomer: string; note: string | null;
+    /** "Teddy Bear, medium", when a haircut was recorded. */
+    haircut: string | null; haircut_changes: HaircutChange[] | null;
+  } | null;
   open_visit: { id: string; check_in: string; groomer: string } | null;
   paperwork_requests: { vaccine: string; status: string; channel: string; next_reminder_on: string | null }[];
   /** Copies taken at the counter that nobody has finished checking. */
@@ -202,6 +206,57 @@ export type BreedSuggestion = { name: string; coat: string };
 /** What an edit changed, as the audit log records it. */
 export type Changed = Record<string, { old: unknown; new: unknown }>;
 
+/** One way to cut a zone: a blade, a comb on a #30, scissors, or hand stripping. */
+export type Cut = {
+  tool: "clipper" | "scissors" | "hand_strip"; blade_id: string | null; comb_id: string | null;
+  label: string; kind: "Blade" | "Comb" | "Other";
+};
+export type HaircutOptions = {
+  services: { code: string; name: string; haircut: boolean }[];
+  /** shave_down: keyed on the coat, not a length; needs the coat at min_coat or worse. */
+  styles: { code: string; name: string; description: string | null; shave_down: boolean; min_coat: number | null }[];
+  lengths: string[];
+  cuts: Cut[];
+  coat_condition: { level: number; label: string }[];
+  coat_density: { level: number; label: string }[];
+  /** The coat level at which a shave-down needs the owner told first. */
+  pelted_level: number;
+  managers: { id: string; name: string }[];
+};
+/** One zone of a planned haircut. source: the dog's usual change, the style, or a hygiene cut. */
+export type PlanZone = {
+  zone_code: string; zone: string; is_hygiene: boolean;
+  tool: Cut["tool"]; blade_id: string | null; comb_id: string | null; cut: string;
+  source: "usual" | "style" | "hygiene";
+};
+/** A zone cut differently from the style: the dog's usual change, or today's own. */
+export type HaircutChange = { zone: string; cut: string; today?: boolean; flagged?: boolean };
+export type HaircutStart = {
+  visit: { id: string; check_in: string; groomer: string } | null;
+  usual: { style_code: string; style: string; length: string | null; changes: HaircutChange[] } | null;
+  last: {
+    visit_date: string; groomer: string; style_code: string; style: string; length: string | null;
+    changes: HaircutChange[]; deviation_reason: string | null; coat: string | null;
+  } | null;
+  /** Where today starts: the usual style, else the last haircut. */
+  start: { style: string; length: string | null } | null;
+  /** A puppy under the shop's grooming age: the haircut needs a manager's OK. */
+  under_age: boolean;
+  booked_service: string | null;
+};
+export type FinishGroom = {
+  groomer_id: string;
+  services: string[];
+  coat: { condition: number; density: number; note: string | null } | null;
+  haircut: {
+    style: string; length: string | null;
+    changes: { zone: string; tool: Cut["tool"]; blade_id: string | null; comb_id: string | null }[];
+    why_different: string | null; keep_as_usual: boolean;
+    override_reason: string | null; approved_by: string | null; shave_acknowledged: boolean;
+  } | null;
+  note: string | null;
+};
+
 /** A refusal from the database, passed through by the backend as a 409. */
 export class Refusal extends Error {
   constructor(public code: string, message: string, public hint: string | null) {
@@ -334,6 +389,13 @@ export const api = {
     send<{ changed: boolean }>("PUT", `/appointments/${id}`, b),
   cancelBooking: (id: string, groomerId: string, reason: string) =>
     post<{ cancelled: boolean }>(`/appointments/${id}/cancel`, { groomer_id: groomerId, reason }),
+  haircutOptions: () => get<HaircutOptions>("/haircut/options"),
+  haircutStart: (dogId: string) => get<HaircutStart>(`/dogs/${dogId}/haircut`),
+  /** A style and length on this dog, zone by zone; a shave-down by the coat's level. */
+  haircutPlan: (dogId: string, style: string, length: string | null, coat: number | null) =>
+    get<PlanZone[]>(`/dogs/${dogId}/haircut/plan?style=${style}${length ? `&length=${length}` : ""}${coat ? `&coat=${coat}` : ""}`),
+  /** The end of the groom: services, coat, haircut, note; the dog goes home. All or nothing. */
+  finishGroom: (visitId: string, body: FinishGroom) => post<{ finished: boolean }>(`/visits/${visitId}/finish`, body),
   waitingVerification: () => get<WaitingShot[]>("/admin/waiting-verification"),
   /** A manager puts a shot's dates right. */
   fixRecord: (recordId: string, groomerId: string, administeredOn: string, expiresOn: string) =>

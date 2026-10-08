@@ -12,6 +12,7 @@ import { api, paperworkUrl, Refusal, type CheckInCard } from "@/lib/api";
 import { cn, dayLabel, formatDate, formatTime } from "@/lib/utils";
 import { GoodStanding } from "@/components/ui/good-standing";
 import { DogPhotoEditor } from "@/components/check-in/dog-photo-editor";
+import { describeHaircut, HaircutForm } from "@/components/check-in/haircut-form";
 
 const SEX = { male: "Male", female: "Female", unknown: "" } as Record<string, string>;
 const CHANNEL = { email: "by email", sms: "by text", verbal_at_counter: "at the counter" } as Record<string, string>;
@@ -38,6 +39,7 @@ export function DogCard({
   // Open: a new copy (true), or one already waiting to be checked.
   const [paperwork, setPaperwork] = useState<boolean | { documentId: string }>(false);
   const [editing, setEditing] = useState(false);
+  const [finishing, setFinishing] = useState(false);
 
   async function start() {
     setBusy(true); setRefusal(null); setError(null);
@@ -63,6 +65,10 @@ export function DogCard({
   if (editing) {
     return <ProfileEditForm card={card} groomerId={groomerId} onCancel={() => setEditing(false)}
                             onDone={() => { setEditing(false); onChanged(); }} />;
+  }
+  if (finishing) {
+    return <HaircutForm card={card} groomerId={groomerId} onCancel={() => setFinishing(false)}
+                        onDone={() => { setFinishing(false); onChanged(); }} />;
   }
 
   return (
@@ -93,9 +99,14 @@ export function DogCard({
         )}
       >
         {card.open_visit ? (
-          <p className="text-lg font-semibold">
-            Being groomed — checked in at {formatTime(card.open_visit.check_in)} by {card.open_visit.groomer}
-          </p>
+          <>
+            <p className="text-lg font-semibold">
+              Being groomed — checked in at {formatTime(card.open_visit.check_in)} by {card.open_visit.groomer}
+            </p>
+            <Button variant="go" size="lg" className="mt-4" onClick={() => setFinishing(true)}>
+              Record the haircut
+            </Button>
+          </>
         ) : card.can_start ? (
           <p className="text-lg font-semibold text-ok">Cleared for today&apos;s groom</p>
         ) : (
@@ -228,6 +239,9 @@ export function DogCard({
               {card.last_visit ? (
                 <p className="text-sm">
                   <span className="font-medium">{formatDate(card.last_visit.visit_date)}</span> with {card.last_visit.groomer}
+                  {card.last_visit.haircut && (
+                    <span className="block">{describeHaircut(card.last_visit.haircut, null, card.last_visit.haircut_changes ?? [])}</span>
+                  )}
                   {card.last_visit.note && <span className="block text-muted-foreground">{card.last_visit.note}</span>}
                 </p>
               ) : (
