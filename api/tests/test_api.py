@@ -580,3 +580,53 @@ def test_the_ai_says_plainly_when_it_is_not_set_up(client, monkeypatch):
     assert client.get("/ai/status").json()["available"] is False
     r = client.post(f"/paperwork/{doc}/ai", json={"groomer_id": groomer(client)})
     assert r.status_code == 503 and "isn't set up" in r.json()["detail"]
+
+
+def test_a_groom_is_finished_with_its_haircut_and_the_next_one_starts_from_it(client):
+    willow, tanya = dog_named(client, "Willow")["id"], groomer(client)
+    visit = client.post(f"/dogs/{willow}/visits", json={"groomer_id": tanya}).json()["id"]
+
+    start = client.get(f"/dogs/{willow}/haircut").json()
+    assert start["visit"]["id"] == visit and start["usual"] is None and start["start"] is None
+    plan = {z["zone_code"]: z for z in client.get(f"/dogs/{willow}/haircut/plan",
+                                                    params={"style": "teddy_bear", "length": "medium"}).json()}
+    assert plan["ears"]["cut"] == "#4F" and plan["sanitary"]["is_hygiene"] is True
+
+    done = client.post(f"/visits/{visit}/finish", json={
+        "groomer_id": tanya, "services": ["full_groom", "bath"],
+        "coat": {"condition": 2, "density": 3},
+        "haircut": {"style": "teddy_bear", "length": "medium", "keep_as_usual": True,
+                    "changes": [{"zone": "ears", "tool": "scissors"}]},
+        "note": "Muzzle on for ears only, as usual."})
+    assert done.status_code == 200, done.text
+
+    card = client.get(f"/dogs/{willow}").json()
+    assert card["open_visit"] is None
+    assert card["last_visit"]["haircut"] == "Teddy Bear, medium"
+    assert card["last_visit"]["haircut_changes"] == [{"zone": "Ears", "cut": "Scissors", "today": True, "flagged": False}]
+    usual = client.get(f"/dogs/{willow}/haircut").json()["usual"]
+    assert usual["style"] == "Teddy Bear" and usual["changes"] == [{"zone": "Ears", "cut": "Scissors"}]
+
+    again = client.post(f"/visits/{visit}/finish", json={"groomer_id": tanya, "services": ["bath"]})
+    assert again.status_code == 409
+
+
+def test_finishing_is_all_or_nothing_and_refusals_come_back_in_their_own_words(client):
+    olive, tanya = dog_named(client, "Olive")["id"], groomer(client)
+    visit = client.post(f"/dogs/{olive}/visits", json={"groomer_id": tanya}).json()["id"]
+
+    pelted = client.post(f"/visits/{visit}/finish", json={
+        "groomer_id": tanya, "services": ["full_groom"], "coat": {"condition": 5, "density": 4},
+        "haircut": {"style": "shaved"}})
+    assert pelted.status_code == 409 and pelted.json()["code"] == "GR033"
+    assert pelted.json()["hint"]
+    bath_only = client.post(f"/visits/{visit}/finish", json={
+        "groomer_id": tanya, "services": ["bath"], "haircut": {"style": "teddy_bear", "length": "short"}})
+    assert bath_only.status_code == 409 and bath_only.json()["code"] == "GR004"
+    assert client.get(f"/dogs/{olive}").json()["open_visit"]["id"] == visit, "nothing was saved"
+
+    told = client.post(f"/visits/{visit}/finish", json={
+        "groomer_id": tanya, "services": ["full_groom"], "coat": {"condition": 5, "density": 4},
+        "haircut": {"style": "shaved", "shave_acknowledged": True}})
+    assert told.status_code == 200, told.text
+    assert client.get(f"/dogs/{olive}").json()["last_visit"]["haircut"] == "Shaved (remedial)"

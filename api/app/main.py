@@ -173,7 +173,9 @@ def check_in_card(dog_id: UUID):
           LEFT JOIN groomer g    ON g.id = n.observed_by
          WHERE n.dog_id = %s ORDER BY n.observed_at DESC LIMIT 5""", (dog_id,))
     last_visit = db.row("""
-        SELECT v.visit_date, g.display_name AS groomer, v.overall_note AS note
+        SELECT v.visit_date, g.display_name AS groomer, v.overall_note AS note,
+               (SELECT h.style || COALESCE(', ' || h.length, '') FROM v_haircut h WHERE h.visit_id = v.id) AS haircut,
+               (SELECT h.changes FROM v_haircut h WHERE h.visit_id = v.id) AS haircut_changes
           FROM visit v JOIN groomer g ON g.id = v.performed_by
          WHERE v.dog_id = %s AND v.check_out IS NOT NULL
          ORDER BY v.visit_date DESC, v.check_in DESC NULLS LAST LIMIT 1""", (dog_id,))
@@ -998,3 +1000,154 @@ def rule_on_term(document_id: UUID, body: TermRuling):
 def ai_accuracy():
     """How the AI has done on real paperwork, as graded at the counter."""
     return db.rows("SELECT * FROM v_counter_ai_accuracy ORDER BY copy_kind")
+
+
+# --------------------------------------------------------------- recording the haircut
+
+# The coat scales, in the words a groomer uses. Level 4 is where a shave-down
+# becomes defensible; level 5 is shaved close, owner told first (GR033).
+COAT_CONDITION = {1: "Brushes out", 2: "A few tangles", 3: "Matted in places", 4: "Matted all over", 5: "Pelted"}
+COAT_DENSITY = {1: "Thin", 2: "Light", 3: "Average", 4: "Thick", 5: "Very thick"}
+
+
+@app.get("/haircut/options")
+def haircut_options():
+    """What the haircut screen offers: services, styles, lengths, every cut a
+    zone can have (blades, combs on a #30, scissors), the coat scales, and the
+    managers who can OK a haircut the rules would stop."""
+    cuts = db.rows("""
+        SELECT 'clipper' AS tool, b.id AS blade_id, NULL::uuid AS comb_id,
+               describe_tooling('clipper', b.id, NULL) AS label, b.length_in, 'Blade' AS kind
+          FROM blade b
+        UNION ALL
+        SELECT 'clipper', b.id, c.id, describe_tooling('clipper', b.id, c.id), c.length_in, 'Comb'
+          FROM comb c CROSS JOIN blade b WHERE b.number = 30 AND NOT b.is_finish
+         ORDER BY kind, length_in DESC, label""")
+    cuts += [{"tool": "scissors", "blade_id": None, "comb_id": None, "label": "Scissors", "length_in": None, "kind": "Other"},
+             {"tool": "hand_strip", "blade_id": None, "comb_id": None, "label": "Hand strip", "length_in": None, "kind": "Other"}]
+    return {
+        "services": db.rows("SELECT code, name, carries_cut_spec AS haircut FROM service_type ORDER BY display_order"),
+        "styles": db.rows("""SELECT code, name, plain_language_description AS description, is_remedial AS shave_down,
+                                    min_coat_ordinal_required AS min_coat
+                               FROM style_template ORDER BY is_remedial, name"""),
+        "lengths": [r["code"] for r in db.rows("SELECT code FROM length_tier ORDER BY sort_order")],
+        "cuts": cuts,
+        "coat_condition": [{"level": k, "label": v} for k, v in COAT_CONDITION.items()],
+        "coat_density": [{"level": k, "label": v} for k, v in COAT_DENSITY.items()],
+        "pelted_level": db.row("SELECT shop_policy_int('pelted_coat_level') AS n")["n"],
+        "managers": db.rows("""SELECT id, display_name AS name FROM groomer
+                                WHERE is_active AND role = 'manager' ORDER BY display_name"""),
+    }
+
+
+def _haircut(row: dict | None) -> dict | None:
+    """A recorded haircut, as the card and the next groom read it."""
+    if row is None:
+        return None
+    return {k: row[k] for k in ("visit_date", "groomer", "style_code", "style", "length", "changes",
+                                "deviation_reason", "override_reason", "approved_by")} | {
+        "coat": COAT_CONDITION.get(row["coat_condition"])}
+
+
+@app.get("/dogs/{dog_id}/haircut")
+def haircut_start(dog_id: UUID):
+    """Where today's haircut starts: the dog's usual style, else its last
+    haircut; whether a puppy's haircut needs a manager's OK; and what was
+    booked for today, so the services are already ticked."""
+    visit = db.row("""SELECT v.id, v.check_in, g.display_name AS groomer FROM visit v
+                        JOIN groomer g ON g.id = v.performed_by
+                       WHERE v.dog_id = %s AND v.check_out IS NULL AND v.visit_date = shop_now()::date
+                       ORDER BY v.created_at DESC LIMIT 1""", (dog_id,))
+    usual = db.row("""SELECT t.code AS style_code, lt.code AS length, usual_style_summary(p.id) AS summary
+                        FROM dog_style_profile p JOIN style_template t ON t.id = p.style_template_id
+                        LEFT JOIN length_tier lt ON lt.id = p.length_tier_id
+                       WHERE p.id = usual_style_id(%s)""", (dog_id,))
+    last = db.row("SELECT * FROM v_haircut WHERE dog_id = %s ORDER BY visit_date DESC LIMIT 1", (dog_id,))
+    booked = db.row("""SELECT st.code FROM appointment a JOIN service_type st ON st.id = a.service_type_id
+                        WHERE a.dog_id = %s AND a.status = 'booked' AND a.starts_at::date = shop_now()::date
+                        ORDER BY a.starts_at LIMIT 1""", (dog_id,))
+    # The usual style; else the last haircut, unless that was a shave-down.
+    if usual:
+        start = {"style": usual["style_code"], "length": usual["length"]}
+    elif last and last["coat_ordinal_applied"] is None:
+        start = {"style": last["style_code"], "length": last["length"]}
+    else:
+        start = None
+    return {
+        "visit": visit,
+        "usual": usual and {"style_code": usual["style_code"], **usual["summary"]},
+        "last": _haircut(last),
+        "start": start,
+        "under_age": db.row("SELECT under_groom_age(%s, shop_now()::date) AS u", (dog_id,))["u"],
+        "booked_service": booked and booked["code"],
+    }
+
+
+@app.get("/dogs/{dog_id}/haircut/plan")
+def haircut_plan(dog_id: UUID, style: str, length: str | None = None, coat: int | None = None):
+    """A style and length on this dog, zone by zone, before anything is saved."""
+    return db.rows("""SELECT zone_code, zone, is_hygiene, tool::text AS tool, blade_id, comb_id, cut, source
+                        FROM haircut_plan(%s, %s, %s, %s::smallint)""", (dog_id, style, length, coat))
+
+
+class Coat(BaseModel):
+    condition: Literal[1, 2, 3, 4, 5]
+    density: Literal[1, 2, 3, 4, 5]
+    note: str | None = None
+
+
+class ZoneChange(BaseModel):
+    zone: str
+    tool: Literal["clipper", "scissors", "hand_strip"]
+    blade_id: UUID | None = None
+    comb_id: UUID | None = None
+
+
+class Haircut(BaseModel):
+    style: str
+    length: str | None = None
+    changes: list[ZoneChange] = []
+    why_different: str | None = None      # from the dog's usual style
+    keep_as_usual: bool = False
+    override_reason: str | None = None    # a shave the coat doesn't justify, a puppy
+    approved_by: UUID | None = None       # the manager who OK'd it
+    shave_acknowledged: bool = False      # a pelted coat: the owner was told
+
+
+class Finish(BaseModel):
+    groomer_id: UUID
+    services: list[str]
+    coat: Coat | None = None
+    haircut: Haircut | None = None
+    note: str | None = None
+
+
+@app.post("/visits/{visit_id}/finish")
+def finish_groom(visit_id: UUID, body: Finish):
+    """The end of the groom, all or nothing: what was done, the coat, the
+    haircut (and keeping it as the usual), the note, and the dog goes home."""
+    if not body.services:
+        raise Refusal("form", "Tick what was done today.", None)
+    try:
+        with db.connect() as conn:
+            conn.execute("SELECT record_visit_services(%s, %s)", (visit_id, body.services))
+            if body.coat:
+                conn.execute("SELECT record_coat(%s, %s, %s::smallint, %s::smallint, %s)",
+                             (visit_id, body.groomer_id, body.coat.condition, body.coat.density, body.coat.note))
+            if body.haircut:
+                h = body.haircut
+                spec = conn.execute(
+                    "SELECT record_haircut(%s, %s, %s, %s, %s::jsonb, %s, %s, %s, %s) AS id",
+                    (visit_id, body.groomer_id, h.style, h.length,
+                     json.dumps([c.model_dump(mode="json") for c in h.changes]),
+                     h.why_different, h.override_reason, h.approved_by, h.shave_acknowledged)).fetchone()
+                if h.keep_as_usual:
+                    conn.execute("SELECT save_usual_style(%s, %s, %s)", (spec["id"], body.groomer_id, h.why_different))
+            conn.execute("SELECT finish_visit(%s, %s, %s)", (visit_id, body.groomer_id, body.note))
+        return {"finished": True}
+    except psycopg.Error as e:
+        if (r := refusal_from(e, form=True)) is not None:
+            raise r from None
+        if "already finished" in str(e):
+            raise Refusal("finished", e.diag.message_primary, e.diag.message_hint) from None
+        raise

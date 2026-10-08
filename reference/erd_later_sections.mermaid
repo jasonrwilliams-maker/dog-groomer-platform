@@ -1,4 +1,4 @@
-%% Tables added after the original schema (sections 15–31), and the columns
+%% Tables added after the original schema (sections 15–32), and the columns
 %% later sections added to the original tables. The three other diagrams in
 %% this folder are sections 0–14; a table drawn there is shown here by name
 %% only, as the thing it joins to. Key columns only: the SQL files are the
@@ -131,3 +131,9 @@ erDiagram
         int default_minutes "30: a full groom is 90"
     }
     DOG ||--o{ DOG_PHOTO : "one profile photo, in three sizes (31)"
+
+    %% 32: recording the haircut
+    CUT_SPECIFICATION {
+        uuid shave_acknowledged_by FK "32: a pelted coat, owner told (GR033)"
+        timestamptz shave_acknowledged_at
+    }

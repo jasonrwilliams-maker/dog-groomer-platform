@@ -5,8 +5,8 @@
 A system of record for a small grooming practice, with the business rules
 enforced **in the database** rather than in the application.
 
-Thirty-two numbered rules, each with a dedicated error code, each proven by a test
-that asserts the *refusal* — not the happy path. 440 assertions, all passing.
+Thirty-five numbered rules, each with a dedicated error code, each proven by a test
+that asserts the *refusal* — not the happy path. 465 assertions, all passing.
 How strictly each groom-time rule is enforced (block, warn, or off) is itself a
 row of data, changed by `UPDATE` and recorded in the audit log — not a migration.
 
@@ -80,7 +80,7 @@ for a better copy instead of recording a guess.
 | Component | State |
 |---|---|
 | Schema | Sections 0–14 stable, in one file; later sections appended as separate files (15–31) |
-| Business rules | 32, codes `GR001`–`GR032` |
+| Business rules | 35, codes `GR001`–`GR035` |
 | Test suite | 27 files, 440 pgTAP assertions, passing; 26 API tests |
 | Document vocabulary (§15) | 29 rulings seeded from the labelled corpus; `resolve_term()` fails closed |
 | Extraction line items (§16) | One row per printed line; review views; the shape the harness loads |
@@ -99,7 +99,8 @@ for a better copy instead of recording a guess.
 | Calendar (§29) | A **Calendar** tab for every groomer: a month of grooms that happened (who groomed, the note) and the day each dog's vaccines expire, the ones that stop a groom (rabies) in red (`v_calendar_event`). Show or hide grooms and expiries; focus it on one dog (a drop-down of every dog and owner, narrowed by typing) to list its dates and jump to any of them, starting at its last groom. A dog's card has **See on the calendar**. Bookings show too (see §30) |
 | Booking ahead (§30) | Anyone books a groom from a dog's card (**Book a groom**) or the calendar: service, length (each service has a usual length, a full groom 1 hr 30 min; tick "Set a different length" for anything up to the whole day), day, groomer and one of their free start times, within the shop's hours (`shop_opens`, `shop_closes`). The form shows the dog's breed, age, coat, owner and phone. The dog's **usual groomer** (whoever groomed it last) is offered first, then whoever is signed in; booking a regular client with someone else asks why, and the reason is kept (GR032). Nobody is booked twice at once, groomer or dog (GR031, backed by an exclusion constraint). Vaccines that will be out of date by the day are a warning, not a refusal; check-in still decides on the day. The calendar shows bookings, and the day's timeline is the signed-in groomer's day first, the team below; a booking can be changed or cancelled (reason kept). A green check beside a dog's name, on the dog list, card, calendar and booking form, means every vaccine is current and verified (`vaccines_all_current()`): stricter than cleared to groom |
 | Dog photos (§31) | Each dog can have one profile photo, added from its card (**Add photo**: take one with the tablet camera or webcam, or choose one), changed or removed. Turned upright, stripped of the camera's details and GPS, and kept in three sizes under `private/dogs/` (`set_dog_photo()`, `remove_dog_photo()`); a new photo replaces the old and its files are deleted. Shown on the card, the booking form, the dog list and the dog pickers; a drawn placeholder until one is added |
-| Groomer interface | `web/` (Next.js + Tailwind, shadcn-style components) on a thin FastAPI backend (`api/`), on its own demo database, `grooming_demo`. Three tabs. **Check-in**: pick who's grooming, find a dog by its name or its owner's (photo, green check when every vaccine is current), see whether today's groom can start and why not, allergies and handling notes; start the groom; book one; sign up a walk-in and photograph the paperwork they brought, then check it now (with **Have the AI read it**) or leave it for a manager; add the dog's photo; put right a typo. **Calendar** (everyone): grooms, bookings and vaccine expiries by month, a day's timeline by groomer, focus on one dog, book, change or cancel. **Admin** (managers): an overview of count cards, each opening its own screen: dogs on the books, cleared to groom, can't groom, expired, no paperwork, expiring soon; and the to-do list in the shop's amber: shots waiting to be verified, paperwork to check, shots checked by hand to look over, allergy changes to review. Also how the AI is doing, and the way into the records tool |
+| Record the haircut (§32) | A groom in progress has **Record the haircut** on its card: what was done (full groom, bath, nails…), the coat's condition and thickness, the style and length, then the cut zone by zone (`haircut_plan()`), starting from the dog's **usual style**. The groomer changes only what she did differently; each change is marked "today", and one that breaks the style's identity (a fluffy Poodle face) is flagged, never refused. A cut different from the usual says why in a line (GR034). A shave-down follows the coat: matted all over (level 4) is a #7F with a warning to tell the owner; pelted (level 5) is a #10, saved only once the groomer ticks that the owner was told what it can do to the skin (GR033). A shave-down the coat doesn't call for, or a puppy under the shop's grooming age, goes ahead with a reason and a manager's OK, and only a manager's (GR035). Ticking **Keep as the usual style** makes today's cut the start of the next groom; the change is in the audit log, before and after. Saving finishes the groom: services, coat, haircut and a note for next time, all or nothing (`finish_visit()`), and the card's Last visit shows the haircut |
+| Groomer interface | `web/` (Next.js + Tailwind, shadcn-style components) on a thin FastAPI backend (`api/`), on its own demo database, `grooming_demo`. Three tabs. **Check-in**: pick who's grooming, find a dog by its name or its owner's (photo, green check when every vaccine is current), see whether today's groom can start and why not, allergies and handling notes; start the groom and record the haircut when it is done; book one; sign up a walk-in and photograph the paperwork they brought, then check it now (with **Have the AI read it**) or leave it for a manager; add the dog's photo; put right a typo. **Calendar** (everyone): grooms, bookings and vaccine expiries by month, a day's timeline by groomer, focus on one dog, book, change or cancel. **Admin** (managers): an overview of count cards, each opening its own screen: dogs on the books, cleared to groom, can't groom, expired, no paperwork, expiring soon; and the to-do list in the shop's amber: shots waiting to be verified, paperwork to check, shots checked by hand to look over, allergy changes to review. Also how the AI is doing, and the way into the records tool |
 | Extraction harness | Built — scores a model run against the answer keys; self-check passing |
 | Photo preparation | Built — a photo is turned upright, stripped of EXIF and GPS, and downscaled before it is sent |
 | Labelling & review tool | Built — Streamlit; writes answer keys from a form, and reconciles a run against its key |
@@ -206,7 +207,7 @@ list of changes to review.
 Entity-relationship diagrams are in [`reference/`](reference/): three for the
 original schema (sections 0–14), and
 [`erd_later_sections.mermaid`](reference/erd_later_sections.mermaid) for what
-sections 15–31 added. The normative
+sections 15–32 added. The normative
 specification is [`reference/resolution_precedence.md`](reference/resolution_precedence.md).
 The extraction subsystem — its ingestion flow, the answer-key contract that
 governs its labelled evaluation set, the four keys, and the harness that scores a
@@ -288,6 +289,9 @@ Lamb ones.
 | `GR030` | Only a manager verifies a shot typed in with no photo, or fixes a shot's dates |
 | `GR031` | Nobody is booked twice at once: a groomer, or a dog |
 | `GR032` | A regular client is booked with their usual groomer, or the booking says why not |
+| `GR033` | A pelted coat is shaved only once the groomer says the owner was told what it means |
+| `GR034` | A haircut different from the dog's usual style says why |
+| `GR035` | A haircut the rules would stop (a shave-down the coat doesn't justify, a puppy under age) is OK'd by a manager |
 
 Each raises its own SQLSTATE so tests assert on a stable identifier rather than on
 error prose, and the API layer can map codes to user-facing messages without
@@ -342,6 +346,7 @@ stopped. Every rejection test is paired with the valid case — a rule that reje
 | `25` | The calendar: grooms on their day, each vaccine's current expiry only, rabies marked as stopping grooms, dogs off the books left out |
 | `26` | Booking: a full groom is 90 minutes; nobody in two places at once (GR031); shop hours and the past; a regular client's usual groomer, or a reason (GR032); free times; vaccines warn, never refuse; a dog in good standing only when every vaccine is current and verified; moving and cancelling |
 | `27` | Dog photos: kept in three sizes, replaced, removed, all or nothing |
+| `28` | Recording the haircut: what is planned is what is recorded; today's changes flagged, never refused; the usual style kept, audited, and the next plan starts from it; a different cut says why (GR034); a pelted shave needs the owner told (GR033); a manager's OK, and only a manager's (GR035); finishing once |
 
 ---
 
@@ -421,15 +426,13 @@ Done:
    a manager's fixes and the Admin view (28), the calendar (29), booking ahead
    (30) and dog photos (31).
 4. ~~Seed migration.~~ The template × tier × zone mapping, section 21.
+5. ~~Record the haircut.~~ Section 32: finishing a groom with its services,
+   coat, haircut zone by zone, and the dog's usual style. The Feet row in
+   [`reference/style_tier_mapping.md`](reference/style_tier_mapping.md) is
+   still a best guess, waiting for a groomer's review.
 
 Next:
 
-5. **Record the haircut** — the screen that uses the style templates. When it
-   allows editing a style it asks for a short reason (`groom.change_reason`);
-   the shave-down's level-4 warning and level-5 acknowledgment are screen
-   behaviour still to build. The Feet row in
-   [`reference/style_tier_mapping.md`](reference/style_tier_mapping.md) is a
-   best guess, waiting for a groomer's review.
 6. Groomers' working days and hours, so booking only offers real
    availability; and linking a booking to the groom when it starts.
 7. Reminder consent asked at walk-in sign-up, so a new client's missing
