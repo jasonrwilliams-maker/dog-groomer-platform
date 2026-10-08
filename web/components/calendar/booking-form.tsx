@@ -6,7 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { DogPicker } from "@/components/calendar/dog-picker";
 import {
-  api, Refusal, type Appointment, type BookingChoice, type BookingWarning, type Service, type ShopHours,
+  api, Refusal, type Appointment, type BookingChoice, type BookingWarning, type CheckInCard, type Service,
+  type ShopHours,
 } from "@/lib/api";
 import { cn, dayLabel, duration, formatDate, formatTime } from "@/lib/utils";
 
@@ -18,7 +19,7 @@ export type BookingStart = {
 };
 
 // The lengths most grooms take; anything else is typed in.
-const LENGTHS = [30, 60, 90, 120, 180, 240];
+const LENGTHS = [60, 90, 120, 180, 240, 360];
 
 /** The time of day a groom ends, as a shop time. */
 function plus(at: string, minutes: number): string {
@@ -41,7 +42,11 @@ export function BookingForm({ me, start, onDone, onClose }: {
   const [services, setServices] = useState<Service[]>([]);
   const [dog, setDog] = useState(appt ? { id: appt.dog_id, name: appt.dog } : start.dog ?? null);
   const [service, setService] = useState(appt?.service_code ?? "full_groom");
-  const [minutes, setMinutes] = useState(appt?.minutes ?? 60);
+  // Left at the service's usual length unless someone says otherwise.
+  const [minutes, setMinutes] = useState(appt?.minutes ?? 90);
+  const [customLength, setCustomLength] = useState(false);
+  // Who the dog is: breed, age, owner and phone, for the groomer on the phone to the owner.
+  const [about, setAbout] = useState<CheckInCard | null>(null);
   const [day, setDay] = useState(appt?.starts_at.slice(0, 10) ?? start.day ?? "");
   const [groomerId, setGroomerId] = useState<string | null>(appt?.groomer_id ?? null);
   const [time, setTime] = useState<string | null>(appt?.starts_at ?? null);
@@ -55,13 +60,25 @@ export function BookingForm({ me, start, onDone, onClose }: {
 
   useEffect(() => {
     api.shopHours().then((h) => { setHours(h); setDay((d) => d && d >= h.today ? d : h.today); }).catch(fail);
-    api.services().then(setServices).catch(fail);
+    api.services().then((list) => {
+      setServices(list);
+      const usual = list.find((x) => x.code === service)?.default_minutes;
+      if (usual && !appt) setMinutes(usual);
+      if (usual && appt && appt.minutes !== usual) setCustomLength(true);
+    }).catch(fail);
   }, []);
+
+  useEffect(() => {
+    if (!dog) { setAbout(null); return; }
+    api.card(dog.id).then(setAbout).catch(() => setAbout(null));
+  }, [dog?.id]);
 
   // Who can take it, and when, whenever the dog, the day or the length changes.
   useEffect(() => {
     if (!dog || !day || !hours) return;
-    api.bookingChoices(dog.id, `${day}T${hours.opens}`, minutes, appt?.id).then(({ choices: c, warnings: w }) => {
+    api.bookingChoices(dog.id, `${day}T${hours.opens}`, minutes, appt?.id).then(({ choices: found, warnings: w }) => {
+      const rank = (x: BookingChoice) => (x.is_regular ? 0 : x.groomer_id === me ? 1 : 2);
+      const c = [...found].sort((a, b) => rank(a) - rank(b));
       setChoices(c);
       setWarnings(w);
       const keep = c.find((x) => x.groomer_id === groomerId);
@@ -100,9 +117,25 @@ export function BookingForm({ me, start, onDone, onClose }: {
       <CardContent className="flex flex-col gap-5">
         {/* The dog */}
         {dog ? (
-          <div className="flex items-center justify-between gap-3">
-            <p><span className="font-semibold">{dog.name}</span>
-              {usual && <span className="text-muted-foreground"> · usually with {usual.groomer}</span>}</p>
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="text-lg font-semibold">{dog.name}</p>
+              {about && (
+                <p className="text-sm text-muted-foreground">
+                  {[about.dog.breed, about.dog.age, about.dog.coat && `${about.dog.coat} coat`].filter(Boolean).join(" · ")}
+                </p>
+              )}
+              {about && (
+                <p className="text-sm">
+                  {about.dog.owner}
+                  {about.dog.phone && <span className="text-muted-foreground"> · {about.dog.phone}</span>}
+                </p>
+              )}
+              <p className="text-sm text-muted-foreground">
+                {usual ? `Usually with ${usual.groomer}` : "New client: no usual groomer yet"}
+                {about?.last_visit && ` · last groomed ${formatDate(about.last_visit.visit_date)}`}
+              </p>
+            </div>
             {!appt && <Button variant="outline" size="sm" onClick={() => { setDog(null); setChoices([]); setGroomerId(null); }}>Change dog</Button>}
           </div>
         ) : (
@@ -116,11 +149,11 @@ export function BookingForm({ me, start, onDone, onClose }: {
             <select disabled={!!appt} value={service}
                     onChange={(e) => {
                       setService(e.target.value);
-                      const s = services.find((x) => x.code === e.target.value);
-                      if (s) setMinutes(s.default_minutes);
+                      const sv = services.find((x) => x.code === e.target.value);
+                      if (sv && !customLength) setMinutes(sv.default_minutes);
                     }}
                     className="h-11 rounded-[var(--radius)] border border-border bg-card px-3 text-base">
-              {services.map((s) => <option key={s.code} value={s.code}>{s.name} ({duration(s.default_minutes)})</option>)}
+              {services.map((sv) => <option key={sv.code} value={sv.code}>{sv.name}</option>)}
             </select>
           </label>
           <label className="flex flex-col gap-1 text-sm">
@@ -129,22 +162,37 @@ export function BookingForm({ me, start, onDone, onClose }: {
           </label>
         </div>
         <fieldset className="flex flex-col gap-2">
-          <legend className="mb-1 text-sm font-medium">How long · {duration(minutes)}</legend>
-          <div className="flex flex-wrap gap-2">
-            {[...LENGTHS, allDay].map((m) => (
-              <Button key={m} type="button" variant="outline" size="sm" aria-pressed={minutes === m}
-                      className={minutes === m ? "border-primary bg-primary/10 text-primary hover:bg-primary/10" : ""}
-                      onClick={() => setMinutes(m)}>
-                {m === allDay ? "All day" : duration(m)}
-              </Button>
-            ))}
-            <label className="flex items-center gap-2 text-sm text-muted-foreground">
-              or
-              <Input type="number" min={5} max={allDay} step={15} value={minutes} className="h-8 w-20 text-sm"
-                     onChange={(e) => setMinutes(Math.max(5, Number(e.target.value) || 0))} />
-              minutes
-            </label>
-          </div>
+          <legend className="sr-only">How long</legend>
+          <p className="text-sm">
+            Takes <span className="font-semibold">{duration(minutes)}</span>
+            {!customLength && <span className="text-muted-foreground"> · the usual for a {services.find((x) => x.code === service)?.name.toLowerCase() ?? "groom"}</span>}
+          </p>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" className="size-4 accent-[var(--primary)]" checked={customLength}
+                   onChange={(e) => {
+                     setCustomLength(e.target.checked);
+                     const usualMinutes = services.find((x) => x.code === service)?.default_minutes;
+                     if (!e.target.checked && usualMinutes) setMinutes(usualMinutes);
+                   }} />
+            Set a different length for this groom
+          </label>
+          {customLength && (
+            <div className="flex flex-wrap gap-2">
+              {[...LENGTHS, allDay].map((m) => (
+                <Button key={m} type="button" variant="outline" size="sm" aria-pressed={minutes === m}
+                        className={minutes === m ? "border-primary bg-primary/10 text-primary hover:bg-primary/10" : ""}
+                        onClick={() => setMinutes(m)}>
+                  {m === allDay ? "All day" : duration(m)}
+                </Button>
+              ))}
+              <label className="flex items-center gap-2 text-sm text-muted-foreground">
+                or
+                <Input type="number" min={5} max={allDay} step={15} value={minutes} className="h-8 w-20 text-sm"
+                       onChange={(e) => setMinutes(Math.max(5, Number(e.target.value) || 0))} />
+                minutes
+              </label>
+            </div>
+          )}
         </fieldset>
 
         {/* Who */}
@@ -157,7 +205,7 @@ export function BookingForm({ me, start, onDone, onClose }: {
                         onClick={() => { setGroomerId(c.groomer_id); setTime((t) => t && c.free_starts.includes(t) ? t : null); }}
                         className={cn("rounded-[var(--radius)] border p-3 text-left text-sm transition-colors hover:border-primary",
                                       c.groomer_id === groomerId ? "border-primary bg-primary/10" : "border-border bg-card")}>
-                  <span className="font-semibold">{c.groomer}</span>
+                  <span className="font-semibold">{c.groomer}{c.groomer_id === me && " (you)"}</span>
                   {c.is_regular && <span className="ml-2 rounded bg-accent/30 px-1.5 py-0.5 text-xs font-medium">Usual groomer</span>}
                   <span className="block text-muted-foreground">
                     {c.last_groomed_on ? `Last groomed ${dog.name} ${formatDate(c.last_groomed_on)}` : c.is_regular ? `${dog.name} is booked with them` : "Hasn't groomed this dog"}

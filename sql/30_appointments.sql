@@ -6,7 +6,7 @@
 -- how long it is expected to take, booked by anyone at the counter.
 --
 -- How long: each service has a usual length (service_type.default_minutes; a
--- full groom, bath and cut, is 60 minutes) and whoever books can change it. A
+-- full groom, bath and cut, is 90 minutes) and whoever books can change it. A
 -- big matted dog can take the whole day, so a booking may run from opening to
 -- closing. Bookings are in the shop's own time (shop_now(), section 20) and
 -- within its hours (shop_opens, shop_closes in shop_policy).
@@ -51,10 +51,10 @@ CREATE FUNCTION shop_closes() RETURNS time LANGUAGE sql STABLE AS $$ SELECT shop
 
 -- How long each service usually takes. A full groom is the shop's number; the
 -- rest are starting guesses, to be changed in this table.
-ALTER TABLE service_type ADD COLUMN default_minutes integer NOT NULL DEFAULT 60
+ALTER TABLE service_type ADD COLUMN default_minutes integer NOT NULL DEFAULT 90
     CHECK (default_minutes BETWEEN 5 AND 720);
 UPDATE service_type SET default_minutes = CASE code
-    WHEN 'full_groom' THEN 60 WHEN 'bath' THEN 45 WHEN 'deshed' THEN 60
+    WHEN 'full_groom' THEN 90 WHEN 'bath' THEN 45 WHEN 'deshed' THEN 60
     WHEN 'nail_trim' THEN 15 WHEN 'ear_clean' THEN 15 WHEN 'teeth' THEN 15 ELSE 60 END;
 
 CREATE TYPE appointment_status AS ENUM ('booked', 'cancelled');
@@ -334,7 +334,8 @@ $$;
 -- -----------------------------------------------------------------------------
 
 CREATE VIEW v_appointment AS
-SELECT a.id, a.dog_id, d.name AS dog, o.first_name || ' ' || o.last_name AS owner,
+SELECT a.id, a.dog_id, d.name AS dog, breed_label(d.breed_id, d.is_mixed, d.second_breed_id) AS breed,
+       o.first_name || ' ' || o.last_name AS owner,
        a.groomer_id, g.display_name AS groomer, st.code AS service_code, st.name AS service,
        a.starts_at, a.ends_at, a.minutes, a.note, a.other_groomer_reason,
        a.other_groomer_reason IS NOT NULL AS not_usual_groomer,
@@ -348,7 +349,8 @@ SELECT a.id, a.dog_id, d.name AS dog, o.first_name || ' ' || o.last_name AS owne
  WHERE d.is_active;
 
 -- The calendar (section 29) shows bookings too: on their day, with the time,
--- length and groomer. New columns go on the end.
+-- length and groomer; and every dog's breed, so a name the groomer hasn't seen
+-- in months still means something. New columns go on the end.
 CREATE OR REPLACE VIEW v_calendar_event AS
 SELECT v.visit_date                                   AS on_date,
        'groom'::text                                  AS kind,
@@ -363,7 +365,8 @@ SELECT v.visit_date                                   AS on_date,
        NULL::uuid                                     AS appointment_id,
        v.check_in                                     AS starts_at,
        NULL::integer                                  AS minutes,
-       NULL::text                                     AS service
+       NULL::text                                     AS service,
+       breed_label(d.breed_id, d.is_mixed, d.second_breed_id) AS breed
   FROM visit v
   JOIN dog d     ON d.id = v.dog_id
   JOIN owner o   ON o.id = d.owner_id
@@ -372,7 +375,7 @@ SELECT v.visit_date                                   AS on_date,
 UNION ALL
 SELECT c.expires_on, 'expiry', d.id, d.name, o.first_name || ' ' || o.last_name,
        vt.name, NULL, NULL, vt.blocks_service_if_expired, false,
-       NULL, NULL, NULL, NULL
+       NULL, NULL, NULL, NULL, breed_label(d.breed_id, d.is_mixed, d.second_breed_id)
   FROM dog_vaccine_compliance c
   JOIN vaccine_type vt ON vt.id = c.vaccine_type_id
   JOIN dog d           ON d.id = c.dog_id
@@ -380,6 +383,7 @@ SELECT c.expires_on, 'expiry', d.id, d.name, o.first_name || ' ' || o.last_name,
  WHERE c.expires_on IS NOT NULL AND d.is_active
 UNION ALL
 SELECT a.starts_at::date, 'booking', a.dog_id, a.dog, a.owner, NULL, a.groomer, a.note, false, false,
-       a.id, a.starts_at::time, a.minutes, a.service
+       a.id, a.starts_at::time, a.minutes, a.service, breed_label(d.breed_id, d.is_mixed, d.second_breed_id)
   FROM v_appointment a
+  JOIN dog d ON d.id = a.dog_id
  WHERE a.status = 'booked';

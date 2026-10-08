@@ -83,6 +83,7 @@ export type CalendarEvent = {
   in_progress: boolean;
   /** A booking: which one, its start (hh:mm:ss), length and service. A groom has its check-in time. */
   appointment_id: string | null; starts_at: string | null; minutes: number | null; service: string | null;
+  breed: string | null;
 };
 
 /** Something the shop offers, and how long it usually takes. */
@@ -97,7 +98,7 @@ export type BookingChoice = {
 /** What will be out of date about the dog's vaccines by the booking. A warning only. */
 export type BookingWarning = { vaccine: string; expires_on: string | null; warning: string };
 export type Appointment = {
-  id: string; dog_id: string; dog: string; owner: string; groomer_id: string; groomer: string;
+  id: string; dog_id: string; dog: string; breed: string | null; owner: string; groomer_id: string; groomer: string;
   service_code: string; service: string; starts_at: string; ends_at: string; minutes: number;
   note: string | null; other_groomer_reason: string | null; not_usual_groomer: boolean;
 };

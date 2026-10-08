@@ -237,6 +237,7 @@ export function CalendarView({ me, dog, onDog, onOpenDog, booking, onBooking }: 
                     <li key={i} className="py-2.5 text-sm">
                       <button className="font-medium hover:underline" onClick={() => onOpenDog(e.dog_id)}>{e.dog}</button>
                       <span className="text-muted-foreground"> · {e.owner}</span>
+                      {e.breed && <span className="block text-xs text-muted-foreground">{e.breed}</span>}
                       <span className="mt-1 flex flex-wrap items-center gap-2">
                         <span className={cn("rounded px-1.5 py-0.5 text-xs font-medium", l.tone)}>{l.long}</span>
                         {e.kind === "expiry" && e.stops_grooms && <span className="text-xs text-stop">stops grooms</span>}
@@ -257,7 +258,7 @@ export function CalendarView({ me, dog, onDog, onOpenDog, booking, onBooking }: 
       </div>
     </div>
     {!booking && day && hours && (canBook || dayBookings.length > 0) && (
-        <DaySchedule day={day} hours={hours} groomers={groomers} appointments={dayBookings} canBook={canBook}
+        <DaySchedule me={me} day={day} hours={hours} groomers={groomers} appointments={dayBookings} canBook={canBook}
                      onOpen={(a) => onBooking({ appointment: a })}
                      onBook={() => onBooking({ day, dog })} />
       )}

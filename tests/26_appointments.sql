@@ -1,7 +1,7 @@
 -- Booking grooms ahead.
 --
 -- Eight things are proven:
---   1. A full groom is booked for 60 minutes unless the length is changed, and
+--   1. A full groom is booked for 90 minutes unless the length is changed, and
 --      shows on the calendar with its time.
 --   2. Nobody is in two places at once: the groomer (GR031) or the dog.
 --   3. A groom has to fit the shop's hours and the future; a long one can take
@@ -39,11 +39,11 @@ SELECT book_appointment((SELECT id FROM t_rex), '00000000-0000-0000-0000-0000000
                         '00000000-0000-0000-0000-00000000b001') AS id;
 SELECT results_eq(
   $$ SELECT minutes, ends_at FROM appointment WHERE id = (SELECT id FROM t_rex_appt) $$,
-  $$ VALUES (60, pg_temp.at('10:00')) $$,
-  'A full groom is 60 minutes');
+  $$ VALUES (90, pg_temp.at('10:30')) $$,
+  'A full groom is 90 minutes');
 SELECT results_eq(
   $$ SELECT kind, starts_at, minutes, groomer FROM v_calendar_event WHERE appointment_id = (SELECT id FROM t_rex_appt) $$,
-  $$ VALUES ('booking'::text, '09:00'::time, 60, 'Tanya'::text) $$,
+  $$ VALUES ('booking'::text, '09:00'::time, 90, 'Tanya'::text) $$,
   'It shows on the calendar with its time, length and groomer');
 
 -- --- 2. Two places at once ----------------------------------------------------------------------------
@@ -56,7 +56,7 @@ SELECT throws_ok(
                              'full_groom', NULL, 'owner asked', '00000000-0000-0000-0000-00000000b001') $$,
   'GR031', NULL, 'Nor can Rex be in two places');
 SELECT lives_ok(
-  $$ SELECT book_appointment((SELECT id FROM t_bo), '00000000-0000-0000-0000-00000000b002', pg_temp.at('10:00'), 60,
+  $$ SELECT book_appointment((SELECT id FROM t_bo), '00000000-0000-0000-0000-00000000b002', pg_temp.at('10:30'), 60,
                              'full_groom', NULL, NULL, '00000000-0000-0000-0000-00000000b001') $$,
   'Starting as the last one ends is fine');
 SELECT throws_ok(
@@ -126,11 +126,11 @@ SELECT is_empty(
   'Nothing to warn about for tomorrow');
 
 -- --- 8. Moving and cancelling ---------------------------------------------------------------------------
-SELECT change_appointment((SELECT id FROM t_rex_appt), '00000000-0000-0000-0000-00000000b002', pg_temp.at('11:00'), 90,
+SELECT change_appointment((SELECT id FROM t_rex_appt), '00000000-0000-0000-0000-00000000b002', pg_temp.at('11:30'), 120,
                           'Owner running late', NULL, '00000000-0000-0000-0000-00000000b001');
 SELECT results_eq(
   $$ SELECT starts_at, minutes, note FROM appointment WHERE id = (SELECT id FROM t_rex_appt) $$,
-  $$ VALUES (pg_temp.at('11:00'), 90, 'Owner running late'::text) $$,
+  $$ VALUES (pg_temp.at('11:30'), 120, 'Owner running late'::text) $$,
   'A booking is moved and made longer');
 SELECT cancel_appointment((SELECT id FROM t_rex_appt), 'Owner sick', '00000000-0000-0000-0000-00000000b002');
 SELECT results_eq(
@@ -138,7 +138,7 @@ SELECT results_eq(
   $$ VALUES ('cancelled'::text, 'Owner sick'::text) $$,
   'Cancelled, with the reason kept');
 SELECT ok(
-  pg_temp.at('11:00') IN (SELECT free_starts('00000000-0000-0000-0000-00000000b002', (SELECT d FROM t_day), 60)),
+  pg_temp.at('11:30') IN (SELECT free_starts('00000000-0000-0000-0000-00000000b002', (SELECT d FROM t_day), 60)),
   'And its time is free again');
 
 SELECT * FROM finish();

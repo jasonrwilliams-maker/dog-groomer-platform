@@ -784,7 +784,7 @@ def calendar(start: date | None = None, end: date | None = None, dog_id: UUID | 
         raise HTTPException(422, "Ask for a year or less at a time.")
     return db.rows("""
         SELECT on_date, kind, dog_id, dog, owner, vaccine, groomer, note, stops_grooms, in_progress,
-               appointment_id, starts_at, minutes, service
+               appointment_id, starts_at, minutes, service, breed
           FROM v_calendar_event
          WHERE (%(start)s::date IS NULL OR on_date >= %(start)s)
            AND (%(end)s::date   IS NULL OR on_date <= %(end)s)
