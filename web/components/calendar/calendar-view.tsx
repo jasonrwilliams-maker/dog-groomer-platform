@@ -8,6 +8,7 @@ import { DaySchedule } from "@/components/calendar/day-schedule";
 import { DogPicker } from "@/components/calendar/dog-picker";
 import { api, type Appointment, type CalendarEvent, type Groomer, type ShopHours } from "@/lib/api";
 import { cn, duration, formatDate, formatTime } from "@/lib/utils";
+import { GoodStanding } from "@/components/ui/good-standing";
 
 /** One dog the calendar is showing on its own. */
 export type CalendarDog = { id: string; name: string };
@@ -164,6 +165,7 @@ export function CalendarView({ me, dog, onDog, onOpenDog, booking, onBooking }: 
             <Key tone="bg-primary text-primary-foreground" label="Groomed" />
             <Key tone="bg-stop-soft text-stop" label="Expires and stops grooms (rabies)" />
             <Key tone="bg-warn-soft text-warn" label="Expires, groom can go ahead" />
+            <span className="inline-flex items-center gap-1.5"><GoodStanding show /> All vaccines current</span>
           </p>
         </CardHeader>
         <CardContent>
@@ -191,8 +193,9 @@ export function CalendarView({ me, dog, onDog, onOpenDog, booking, onBooking }: 
                   {/* Names from a tablet up; on a phone, a dot each, and the day's list says who. */}
                   <span className="hidden flex-col gap-0.5 sm:flex">
                     {list.slice(0, 3).map((e, i) => (
-                      <span key={i} className={cn("truncate rounded px-1 text-[11px] leading-4", look(e, today).tone)}>
-                        {look(e, today).short}
+                      <span key={i} className={cn("flex items-center gap-0.5 truncate rounded px-1 text-[11px] leading-4", look(e, today).tone)}>
+                        {e.kind === "booking" && <GoodStanding show={e.in_good_standing} className="size-3 text-[8px]" />}
+                        <span className="truncate">{look(e, today).short}</span>
                       </span>
                     ))}
                     {list.length > 3 && <span className="px-1 text-[11px] text-muted-foreground">+{list.length - 3} more</span>}
@@ -235,7 +238,8 @@ export function CalendarView({ me, dog, onDog, onOpenDog, booking, onBooking }: 
                   const l = look(e, today);
                   return (
                     <li key={i} className="py-2.5 text-sm">
-                      <button className="font-medium hover:underline" onClick={() => onOpenDog(e.dog_id)}>{e.dog}</button>
+                      <button className="font-medium hover:underline" onClick={() => onOpenDog(e.dog_id)}>{e.dog}</button>{" "}
+                      <GoodStanding show={e.in_good_standing} />
                       <span className="text-muted-foreground"> · {e.owner}</span>
                       {e.breed && <span className="block text-xs text-muted-foreground">{e.breed}</span>}
                       <span className="mt-1 flex flex-wrap items-center gap-2">
@@ -305,7 +309,9 @@ function DogDates({ dog, events, today, day, onJump, onOpenDog, onBook }: {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">{dog.name}&apos;s dates</CardTitle>
+        <CardTitle className="flex items-center gap-1.5 text-base">
+          {dog.name}&apos;s dates <GoodStanding show={events[0]?.in_good_standing} />
+        </CardTitle>
         <p className="text-sm text-muted-foreground">
           {lastGroom ? <>Last groomed {formatDate(lastGroom.on_date)}, by {lastGroom.groomer}.</> : "No grooms recorded yet."}
         </p>

@@ -11,6 +11,7 @@ import {
   type WaitingCopy, type WaitingShot,
 } from "@/lib/api";
 import { cn, formatDate } from "@/lib/utils";
+import { GoodStanding } from "@/components/ui/good-standing";
 
 // The labelling and review tool (extraction/review/). Managers only.
 const RECORDS_URL = process.env.NEXT_PUBLIC_RECORDS_URL ?? "http://localhost:8501";
@@ -487,7 +488,7 @@ function DogRows({ title, dogs: rows, onOpenDog }: {
             <button onClick={() => onOpenDog(d.id)}
                     className="flex w-full flex-wrap items-center justify-between gap-x-3 gap-y-1 py-2.5 text-left hover:bg-muted/50">
               <span className="min-w-0">
-                <span className="font-medium">{d.name}</span>
+                <span className="font-medium">{d.name}</span> <GoodStanding show={d.in_good_standing} />
                 <span className="text-muted-foreground"> · {d.owner}</span>
                 {(d.breed || d.attention) && (
                   <span className="block text-sm text-muted-foreground">

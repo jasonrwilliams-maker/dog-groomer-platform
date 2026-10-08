@@ -10,13 +10,14 @@
 --      (GR032), which is kept. A new client goes to whoever is free.
 --   5. The choices put the usual groomer first, then whoever is free then.
 --   6. Free start times leave out what is booked.
---   7. Vaccines that will be out of date by the day are a warning, not a refusal.
+--   7. Vaccines that will be out of date by the day are a warning, not a refusal;
+--      a dog is in good standing only when every vaccine is current.
 --   8. A booking can be moved, or cancelled with the reason kept, and a
 --      cancelled one frees the time.
 
 BEGIN;
 SET search_path = groom, public;
-SELECT plan(22);
+SELECT plan(25);
 
 -- Tomorrow at the shop, whatever today is.
 CREATE TEMP TABLE t_day AS SELECT (shop_now()::date + 1) AS d;
@@ -124,6 +125,18 @@ SELECT lives_ok(
 SELECT is_empty(
   $$ SELECT 1 FROM appointment_warnings((SELECT id FROM t_rex), (SELECT d FROM t_day)) $$,
   'Nothing to warn about for tomorrow');
+SELECT is(vaccines_all_current((SELECT id FROM t_rex)), false,
+  'Rabies current but Bordetella and DHPP missing: not in good standing');
+-- A fresh rabies shot, Bordetella and DHPP, all checked by a manager.
+SELECT record_counter_shot((SELECT id FROM t_rex), 'rabies', CURRENT_DATE - 1, CURRENT_DATE + 1094, '00000000-0000-0000-0000-00000000b001');
+SELECT record_counter_shot((SELECT id FROM t_rex), v, CURRENT_DATE - 30, CURRENT_DATE + 335, '00000000-0000-0000-0000-00000000b001')
+  FROM unnest(ARRAY['bordetella', 'dhpp']) v;
+SELECT is(vaccines_all_current((SELECT id FROM t_rex)), false,
+  'Typed in but not yet verified: not in good standing yet');
+SELECT verify_counter_shot(vr.id, 'Called the vet''s office', '00000000-0000-0000-0000-00000000b001')
+  FROM vaccination_record vr WHERE vr.dog_id = (SELECT id FROM t_rex) AND vr.verification_status = 'unverified';
+SELECT is(vaccines_all_current((SELECT id FROM t_rex)), true,
+  'Every vaccine current and verified: in good standing');
 
 -- --- 8. Moving and cancelling ---------------------------------------------------------------------------
 SELECT change_appointment((SELECT id FROM t_rex_appt), '00000000-0000-0000-0000-00000000b002', pg_temp.at('11:30'), 120,

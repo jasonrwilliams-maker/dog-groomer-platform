@@ -9,6 +9,8 @@ export type DogSummary = {
   label: string;
   blocks_service: boolean;
   attention: string | null;
+  /** Every vaccine current: the green check. */
+  in_good_standing: boolean;
 };
 
 export type VaccineLine = {
@@ -54,6 +56,8 @@ export type CheckInCard = {
   appointments: { id: string; groomer: string; starts_at: string; ends_at: string; minutes: number; service: string; note: string | null }[];
   /** Whoever groomed the dog last (or first booked it); null for a new client. */
   usual_groomer: { id: string; name: string } | null;
+  /** Every vaccine current: the green check. */
+  in_good_standing: boolean;
 };
 
 /** What the counter's upload saved. */
@@ -84,6 +88,8 @@ export type CalendarEvent = {
   /** A booking: which one, its start (hh:mm:ss), length and service. A groom has its check-in time. */
   appointment_id: string | null; starts_at: string | null; minutes: number | null; service: string | null;
   breed: string | null;
+  /** The dog's every vaccine is current: the green check. */
+  in_good_standing: boolean;
 };
 
 /** Something the shop offers, and how long it usually takes. */
@@ -101,6 +107,7 @@ export type Appointment = {
   id: string; dog_id: string; dog: string; breed: string | null; owner: string; groomer_id: string; groomer: string;
   service_code: string; service: string; starts_at: string; ends_at: string; minutes: number;
   note: string | null; other_groomer_reason: string | null; not_usual_groomer: boolean;
+  in_good_standing?: boolean;
 };
 export type NewBooking = {
   dog_id: string; groomer_id: string; starts_at: string; minutes: number; service: string;

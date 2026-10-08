@@ -10,6 +10,7 @@ import {
   type ShopHours,
 } from "@/lib/api";
 import { cn, dayLabel, duration, formatDate, formatTime } from "@/lib/utils";
+import { GoodStanding } from "@/components/ui/good-standing";
 
 export type BookingStart = {
   dog?: { id: string; name: string } | null;
@@ -119,7 +120,7 @@ export function BookingForm({ me, start, onDone, onClose }: {
         {dog ? (
           <div className="flex items-start justify-between gap-3">
             <div>
-              <p className="text-lg font-semibold">{dog.name}</p>
+              <p className="flex items-center gap-1.5 text-lg font-semibold">{dog.name}<GoodStanding show={about?.in_good_standing} /></p>
               {about && (
                 <p className="text-sm text-muted-foreground">
                   {[about.dog.breed, about.dog.age, about.dog.coat && `${about.dog.coat} coat`].filter(Boolean).join(" · ")}

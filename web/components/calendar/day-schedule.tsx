@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { Appointment, Groomer, ShopHours } from "@/lib/api";
 import { cn, dayLabel, formatTime } from "@/lib/utils";
+import { GoodStanding } from "@/components/ui/good-standing";
 
 const toMinutes = (hms: string) => { const [h, m] = hms.slice(hms.indexOf("T") + 1).split(":").map(Number); return h * 60 + m; };
 
@@ -62,7 +63,7 @@ export function DaySchedule({ me, day, hours, groomers, appointments, canBook, o
                                 className={cn("absolute inset-y-0.5 overflow-hidden rounded border border-primary bg-card px-1.5 text-left text-[11px] leading-tight text-primary hover:bg-primary/10",
                                               a.not_usual_groomer && "border-dashed")}
                                 style={{ left: pct(s), width: `calc(${pct(e)} - ${pct(s)})` }}>
-                          <span className="block truncate font-semibold">{a.dog}</span>
+                          <span className="flex items-center gap-1 truncate font-semibold">{a.dog}<GoodStanding show={a.in_good_standing} className="size-3 text-[8px]" /></span>
                           <span className="block truncate">{formatTime(a.starts_at)}–{formatTime(a.ends_at)}</span>
                         </button>
                       );

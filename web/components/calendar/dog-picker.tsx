@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { api, type DogSummary } from "@/lib/api";
 import { cn } from "@/lib/utils";
+import { GoodStanding } from "@/components/ui/good-standing";
 
 /**
  * Pick a dog: a drop-down of every dog and its owner, which typing narrows by
@@ -59,7 +60,7 @@ export function DogPicker({ id, label, onPick }: { id: string; label: string; on
                   onMouseDown={(e) => { e.preventDefault(); pick(d); }}
                   onMouseEnter={() => setActive(i)}
                   className={cn("cursor-pointer px-3 py-2 text-sm", i === active && "bg-muted")}>
-                <span className="font-medium">{d.name}</span>
+                <span className="font-medium">{d.name}</span> <GoodStanding show={d.in_good_standing} />
                 <span className="text-muted-foreground"> · {d.owner}</span>
               </li>
             ))}

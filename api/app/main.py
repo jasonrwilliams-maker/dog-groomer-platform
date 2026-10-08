@@ -98,6 +98,7 @@ def find_dogs(q: str = "", by: str = "any"):
                o.first_name || ' ' || o.last_name AS owner,
                c.state::text AS state, c.plain_language_label AS label,
                COALESCE(c.blocks_service, false) AS blocks_service,
+               vaccines_all_current(d.id) AS in_good_standing,
                -- The one line a groomer should know about first, named:
                -- 'Bordetella: expired' says more than the dog's worst state.
                (SELECT l.vaccine || ': ' || lower(l.label) FROM v_check_in_vaccine l
@@ -225,6 +226,7 @@ def check_in_card(dog_id: UUID):
         "paperwork_waiting": waiting,
         "appointments": upcoming,
         "usual_groomer": usual,
+        "in_good_standing": db.row("SELECT vaccines_all_current(%s) AS ok", (dog_id,))["ok"],
     }
 
 
@@ -784,7 +786,8 @@ def calendar(start: date | None = None, end: date | None = None, dog_id: UUID | 
         raise HTTPException(422, "Ask for a year or less at a time.")
     return db.rows("""
         SELECT on_date, kind, dog_id, dog, owner, vaccine, groomer, note, stops_grooms, in_progress,
-               appointment_id, starts_at, minutes, service, breed
+               appointment_id, starts_at, minutes, service, breed,
+               vaccines_all_current(dog_id) AS in_good_standing
           FROM v_calendar_event
          WHERE (%(start)s::date IS NULL OR on_date >= %(start)s)
            AND (%(end)s::date   IS NULL OR on_date <= %(end)s)
@@ -824,7 +827,8 @@ def booking_choices(dog_id: UUID, starts_at: datetime, minutes: int, ignore: UUI
 @app.get("/appointments")
 def appointments(day: date):
     """Everything booked on a day, by start time."""
-    return db.rows("""SELECT * FROM v_appointment WHERE status = 'booked' AND starts_at::date = %s
+    return db.rows("""SELECT *, vaccines_all_current(dog_id) AS in_good_standing
+                         FROM v_appointment WHERE status = 'booked' AND starts_at::date = %s
                        ORDER BY starts_at, groomer""", (day,))
 
 

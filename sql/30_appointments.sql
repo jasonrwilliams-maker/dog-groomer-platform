@@ -330,6 +330,21 @@ LANGUAGE sql STABLE AS $$
 $$;
 
 -- -----------------------------------------------------------------------------
+-- In good standing
+--
+-- Every vaccine the shop tracks is current: nothing expired, expiring soon,
+-- missing, waiting on paperwork or in question. Stricter than "cleared to
+-- groom", which only asks about the vaccines that stop a groom; this is the
+-- green check beside a dog's name on the calendar and the booking screen.
+-- -----------------------------------------------------------------------------
+
+CREATE FUNCTION vaccines_all_current(p_dog_id uuid) RETURNS boolean
+LANGUAGE sql STABLE AS $$
+    SELECT NOT EXISTS (SELECT 1 FROM v_check_in_vaccine c
+                        WHERE c.dog_id = p_dog_id AND c.state NOT IN ('current', 'not_yet_due'))
+$$;
+
+-- -----------------------------------------------------------------------------
 -- Reading bookings
 -- -----------------------------------------------------------------------------
 

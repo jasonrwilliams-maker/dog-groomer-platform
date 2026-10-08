@@ -10,6 +10,7 @@ import { PaperworkIntake } from "@/components/check-in/paperwork-intake";
 import { ProfileEditForm } from "@/components/check-in/profile-edit-form";
 import { api, paperworkUrl, Refusal, type CheckInCard } from "@/lib/api";
 import { cn, dayLabel, formatDate, formatTime } from "@/lib/utils";
+import { GoodStanding } from "@/components/ui/good-standing";
 
 const SEX = { male: "Male", female: "Female", unknown: "" } as Record<string, string>;
 const CHANNEL = { email: "by email", sms: "by text", verbal_at_counter: "at the counter" } as Record<string, string>;
@@ -68,7 +69,7 @@ export function DogCard({
       {/* Who */}
       <div>
         <div className="flex items-start justify-between gap-3">
-          <h2 className="text-3xl font-semibold tracking-tight">{dog.name}</h2>
+          <h2 className="flex items-center gap-2 text-3xl font-semibold tracking-tight">{dog.name}<GoodStanding show={card.in_good_standing} className="size-6 text-sm" /></h2>
           <Button variant="outline" size="sm" onClick={() => setEditing(true)}>Edit profile</Button>
         </div>
         <p className="text-muted-foreground">{details}</p>
