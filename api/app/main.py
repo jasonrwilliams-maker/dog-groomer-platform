@@ -190,15 +190,17 @@ def check_in_card(dog_id: UUID):
     # Which lines rest on a record someone checked by hand against a photo.
     hand_checked = {r["code"]: r for r in db.rows("""
         SELECT vt.code, g.display_name AS checked_by, vr.verified_at::date AS checked_on,
-               vr.second_look_at IS NOT NULL AS second_look, vr.document_id
+               vr.second_look_at IS NOT NULL AS second_look, vr.document_id, fg.display_name AS fixed_by
           FROM dog_vaccine_compliance s
           JOIN vaccination_record vr ON vr.id = s.latest_record_id
           JOIN vaccine_type vt       ON vt.id = s.vaccine_type_id
           JOIN groomer g             ON g.id = vr.verified_by
+          LEFT JOIN groomer fg       ON fg.id = vr.fixed_by
          WHERE s.dog_id = %s AND vr.checked_by_hand""", (dog_id,))}
     for v in vaccines:
         h = hand_checked.get(v["code"])
-        v["hand_checked"] = {k: h[k] for k in ("checked_by", "checked_on", "second_look", "document_id")} if h else None
+        v["hand_checked"] = ({k: h[k] for k in ("checked_by", "checked_on", "second_look", "document_id", "fixed_by")}
+                             if h else None)
     waiting = db.rows("""SELECT document_id, mime_type, received_by, received_at FROM v_paperwork_waiting
                           WHERE dog_id = %s ORDER BY received_at""", (dog_id,))
 
@@ -713,6 +715,54 @@ def hand_checked():
 def second_look(record_id: UUID, body: Reviewer):
     _write("SELECT give_second_look(%s, %s) AS ok", (record_id, body.groomer_id))
     return {"looked": True}
+
+
+# --------------------------------------------------------------- a manager's fixes
+
+@app.get("/admin/waiting-verification")
+def waiting_verification():
+    """Shots typed in with no copy of the paperwork, waiting for a manager."""
+    return db.rows("SELECT * FROM v_waiting_verification")
+
+
+class FixedDates(Reviewer):
+    administered_on: date | None
+    expires_on: date | None
+
+
+class Verification(FixedDates):
+    how: str
+
+
+def _manager_write(statements: list[tuple[str, tuple]]):
+    """A manager's fix, all or nothing; a refusal in its own words."""
+    try:
+        with db.connect() as conn:
+            for sql, params in statements:
+                conn.execute(sql, params)
+    except psycopg.Error as e:
+        if (r := refusal_from(e, form=True)) is not None:
+            raise r from None
+        raise
+
+
+@app.post("/admin/records/{record_id}/fix")
+def fix_record(record_id: UUID, body: FixedDates):
+    """A manager puts a shot's dates right. On a hand-checked shot, that is
+    its second look."""
+    _manager_write([("SELECT correct_counter_shot(%s, %s, %s, %s)",
+                     (record_id, body.administered_on, body.expires_on, body.groomer_id))])
+    return {"fixed": True}
+
+
+@app.post("/admin/records/{record_id}/verify")
+def verify_record(record_id: UUID, body: Verification):
+    """A manager verifies a shot typed in with no photo, saying how they
+    checked it, and puts its dates right first if they were wrong."""
+    _manager_write([("SELECT correct_counter_shot(%s, %s, %s, %s)",
+                     (record_id, body.administered_on, body.expires_on, body.groomer_id)),
+                    ("SELECT verify_counter_shot(%s, %s, %s)", (record_id, body.how, body.groomer_id))])
+    return {"verified": True}
 
 
 # --------------------------------------------------------------- the AI's suggestions

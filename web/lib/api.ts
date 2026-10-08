@@ -21,7 +21,11 @@ export type VaccineLine = {
   blocks_service: boolean;
   regulatory_required: boolean;
   /** Set when the record was typed in by someone reading a photo of the paperwork. */
-  hand_checked: { checked_by: string; checked_on: string; second_look: boolean; document_id: string } | null;
+  hand_checked: {
+    checked_by: string; checked_on: string; second_look: boolean; document_id: string;
+    /** The manager who put its dates right, if they were misread. */
+    fixed_by: string | null;
+  } | null;
 };
 
 export type CheckInCard = {
@@ -64,6 +68,11 @@ export type WaitingCopy = {
 export type HandChecked = {
   id: string; dog_id: string; dog: string; owner: string; vaccine: string; administered_on: string;
   expires_on: string; document_id: string; mime_type: string; checked_by: string; checked_at: string;
+};
+/** A shot typed in with no copy of the paperwork, waiting for a manager to verify it. */
+export type WaitingShot = {
+  id: string; dog_id: string; dog: string; owner: string; vaccine: string; administered_on: string;
+  expires_on: string; entered_by: string | null; entered_at: string;
 };
 
 /** What the AI read for one vaccine, to fill the form in from. */
@@ -252,4 +261,13 @@ export const api = {
   handChecked: () => get<HandChecked[]>("/admin/hand-checked"),
   secondLook: (recordId: string, groomerId: string) =>
     post<{ looked: boolean }>(`/admin/hand-checked/${recordId}/looked`, { groomer_id: groomerId }),
+  waitingVerification: () => get<WaitingShot[]>("/admin/waiting-verification"),
+  /** A manager puts a shot's dates right. */
+  fixRecord: (recordId: string, groomerId: string, administeredOn: string, expiresOn: string) =>
+    post<{ fixed: boolean }>(`/admin/records/${recordId}/fix`, {
+      groomer_id: groomerId, administered_on: administeredOn || null, expires_on: expiresOn || null }),
+  /** A manager verifies a shot typed in with no photo, with any fix to its dates. */
+  verifyRecord: (recordId: string, groomerId: string, how: string, administeredOn: string, expiresOn: string) =>
+    post<{ verified: boolean }>(`/admin/records/${recordId}/verify`, {
+      groomer_id: groomerId, how, administered_on: administeredOn || null, expires_on: expiresOn || null }),
 };
