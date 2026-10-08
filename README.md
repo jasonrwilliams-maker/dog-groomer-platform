@@ -5,7 +5,7 @@
 A system of record for a small grooming practice, with the business rules
 enforced **in the database** rather than in the application.
 
-Twenty-nine numbered rules, each with a dedicated error code, each proven by a test
+Thirty-two numbered rules, each with a dedicated error code, each proven by a test
 that asserts the *refusal* — not the happy path. 440 assertions, all passing.
 How strictly each groom-time rule is enforced (block, warn, or off) is itself a
 row of data, changed by `UPDATE` and recorded in the audit log — not a migration.
@@ -99,12 +99,11 @@ for a better copy instead of recording a guess.
 | Calendar (§29) | A **Calendar** tab for every groomer: a month of grooms that happened (who groomed, the note) and the day each dog's vaccines expire, the ones that stop a groom (rabies) in red (`v_calendar_event`). Show or hide grooms and expiries; focus it on one dog (a drop-down of every dog and owner, narrowed by typing) to list its dates and jump to any of them, starting at its last groom. A dog's card has **See on the calendar**. Bookings show too (see §30) |
 | Booking ahead (§30) | Anyone books a groom from a dog's card (**Book a groom**) or the calendar: service, length (each service has a usual length, a full groom 1 hr 30 min; tick "Set a different length" for anything up to the whole day), day, groomer and one of their free start times, within the shop's hours (`shop_opens`, `shop_closes`). The form shows the dog's breed, age, coat, owner and phone. The dog's **usual groomer** (whoever groomed it last) is offered first, then whoever is signed in; booking a regular client with someone else asks why, and the reason is kept (GR032). Nobody is booked twice at once, groomer or dog (GR031, backed by an exclusion constraint). Vaccines that will be out of date by the day are a warning, not a refusal; check-in still decides on the day. The calendar shows bookings, and the day's timeline is the signed-in groomer's day first, the team below; a booking can be changed or cancelled (reason kept). A green check beside a dog's name, on the dog list, card, calendar and booking form, means every vaccine is current and verified (`vaccines_all_current()`): stricter than cleared to groom |
 | Dog photos (§31) | Each dog can have one profile photo, added from its card (**Add photo**: take one with the tablet camera or webcam, or choose one), changed or removed. Turned upright, stripped of the camera's details and GPS, and kept in three sizes under `private/dogs/` (`set_dog_photo()`, `remove_dog_photo()`); a new photo replaces the old and its files are deleted. Shown on the card, the booking form, the dog list and the dog pickers; a drawn placeholder until one is added |
-| Groomer interface | **Check-in screen** (`web/`, Next.js + Tailwind, shadcn-style components) on a thin FastAPI backend (`api/`): pick who's grooming, find a dog by its name or its owner's, see whether today's groom can start and why not, allergies, handling notes; start the groom; sign up a walk-in and photograph the paperwork they brought, then check it now or leave it for a manager; put right a typo in a dog's or an owner's details; keep its allergies and handling notes. Managers see allergy changes to review, paperwork waiting to be checked, and shots checked by hand waiting for a second look. Managers also get an Admin view: the whole book's compliance at a glance and the way into the records tool. Runs on its own demo database, `grooming_demo` |
+| Groomer interface | `web/` (Next.js + Tailwind, shadcn-style components) on a thin FastAPI backend (`api/`), on its own demo database, `grooming_demo`. Three tabs. **Check-in**: pick who's grooming, find a dog by its name or its owner's (photo, green check when every vaccine is current), see whether today's groom can start and why not, allergies and handling notes; start the groom; book one; sign up a walk-in and photograph the paperwork they brought, then check it now (with **Have the AI read it**) or leave it for a manager; add the dog's photo; put right a typo. **Calendar** (everyone): grooms, bookings and vaccine expiries by month, a day's timeline by groomer, focus on one dog, book, change or cancel. **Admin** (managers): an overview of count cards, each opening its own screen: dogs on the books, cleared to groom, can't groom, expired, no paperwork, expiring soon; and the to-do list in the shop's amber: shots waiting to be verified, paperwork to check, shots checked by hand to look over, allergy changes to review. Also how the AI is doing, and the way into the records tool |
 | Extraction harness | Built — scores a model run against the answer keys; self-check passing |
 | Photo preparation | Built — a photo is turned upright, stripped of EXIF and GPS, and downscaled before it is sent |
 | Labelling & review tool | Built — Streamlit; writes answer keys from a form, and reconciles a run against its key |
 | Model runs | Six: two of the four-document corpus (2026-09-22) and four of the held-out phone photo (2026-09-24 to 25). Results under *What the model actually did*, above |
-| API / frontend | Not started |
 
 ---
 
@@ -147,19 +146,12 @@ first. The tool listens on this machine only, because it shows the real pages.
 ### The same thing from a terminal
 
 ```bash
-docker compose exec db psql -U postgres -d grooming_test -v ON_ERROR_STOP=1 -f sql/grooming_platform_schema.sql
-docker compose exec db psql -U postgres -d grooming_test -v ON_ERROR_STOP=1 -f sql/15_document_term.sql
-docker compose exec db psql -U postgres -d grooming_test -v ON_ERROR_STOP=1 -f sql/16_extraction_line_item.sql
-docker compose exec db psql -U postgres -d grooming_test -v ON_ERROR_STOP=1 -f sql/17_extraction_evaluation.sql
-docker compose exec db psql -U postgres -d grooming_test -v ON_ERROR_STOP=1 -f sql/18_confirmation.sql
-docker compose exec db psql -U postgres -d grooming_test -v ON_ERROR_STOP=1 -f sql/19_outreach.sql
-docker compose exec db psql -U postgres -d grooming_test -v ON_ERROR_STOP=1 -f sql/20_check_in.sql
-docker compose exec db psql -U postgres -d grooming_test -v ON_ERROR_STOP=1 -f sql/21_style_template_seed.sql
+docker compose exec db sh -c 'for f in sql/grooming_platform_schema.sql $(ls sql/[0-9][0-9]_*.sql | sort); do psql -U postgres -d grooming_test -v ON_ERROR_STOP=1 -q -f "$f" || exit 1; done'
 docker compose exec db psql -U postgres -d grooming_test -f sql/seed/fixture.sql
 docker compose exec db pg_prove -U postgres -d grooming_test tests/*.sql
 ```
 
-Expected: `Files=21, Tests=330, Result: PASS`. The backend's tests build their own copy of the demo database:
+Expected: `Files=27, Tests=440, Result: PASS`. The backend's tests build their own copy of the demo database:
 
 ```bash
 docker compose exec -w /repo/api api python -m pytest -q
@@ -188,10 +180,11 @@ volume, which is what lets the pgTAP init script run on the next start.
 
 ## What the schema models
 
-Four subsystems, loosely coupled on purpose — a haircut record should not depend
+Five subsystems, loosely coupled on purpose — a haircut record should not depend
 on whether someone answered an email.
 
-**Core** — owners, dogs, groomers, visits, services, coat assessments.
+**Core** — owners, dogs (and their profile photos), groomers, visits, services,
+coat assessments, allergies and handling notes.
 
 **Styling** — how a haircut is described and recorded. A style is stored in *short
 form* (a shop-wide template, a length tier, and a sparse set of dog-specific
@@ -201,11 +194,19 @@ precedence ladder.
 
 **Compliance** — documents, LLM extractions and their line items, the document
 vocabulary that resolves a printed term to a vaccine, vaccination records, record
-requests, and a per-dog-per-vaccine projection of compliance state.
+requests, paperwork taken at the counter, owner consent and outreach, and a
+per-dog-per-vaccine projection of compliance state.
 
-**Governance** — an append-only audit log and retention rules.
+**Scheduling** — appointments: a dog, a groomer, a start time and a length,
+within the shop's hours, with the dog's usual groomer offered first.
 
-Entity-relationship diagrams are in [`reference/`](reference/); the normative
+**Governance** — an append-only audit log, retention rules, and the manager's
+list of changes to review.
+
+Entity-relationship diagrams are in [`reference/`](reference/): three for the
+original schema (sections 0–14), and
+[`erd_later_sections.mermaid`](reference/erd_later_sections.mermaid) for what
+sections 15–31 added. The normative
 specification is [`reference/resolution_precedence.md`](reference/resolution_precedence.md).
 The extraction subsystem — its ingestion flow, the answer-key contract that
 governs its labelled evaluation set, the four keys, and the harness that scores a
@@ -332,6 +333,15 @@ stopped. Every rejection test is paired with the valid case — a rule that reje
 | `16` | Layer 3: four refusals that write nothing; a shot printed twice is one record; a struck invented expiry asks the owner instead; an expired certificate does not close a request; a re-read that disagrees with the record on file — including a day misread by a few days — is flagged, not written; an unreadable date asks for a better copy and is not counted as a hallucination; an unreadable vaccine name asks for every tracked vaccine the dog is short of, and only those; confirmed evidence cannot be deleted |
 | `17` | Outreach: no answer is a no and an email opt-out beats a yes; nothing queued without consent; one message per dog; sending schedules a reminder and the dashboard reads "requested"; reminders wait, are capped, then go to a person; a failed send changes nothing; a STOP after queueing stops the send |
 | `18` | Check-in: no rabies record, or an expired one, refuses the groom by name and writes nothing; a non-blocking lapse does not, and making it block is a setting; a puppy too young for rabies is fine; one visit per dog per day, dated in the shop's time zone; history is still recordable |
+| `19` | The style seed keeps each style's identity: a Teddy Bear head stays longer than the body, a Poodle face stays shaved, Kennel is one length; every length covers the same zones and can be recorded |
+| `20` | Walk-ins: a new client and dog; no expiry, no record (GR021); a shot that disagrees with one on file is left for a manager (GR022); a misspelt breed gets the nearest names (GR023); a typo put right, before and after |
+| `21` | Allergies and handling: "did you mean" for allergens (GR024); taking one off or lowering it needs a reason (GR025) and waits for a manager, who alone clears it (GR026); handling notes keep their history and their side |
+| `22` | Paperwork at the counter: a copy and its pages; a hand check needs the photo on file (GR027) and waits for a manager's second look (GR028); asking the owner at the counter; a copy a record rests on stays (GR029) |
+| `23` | AI suggestions: a counter reading stored like a corpus run, one suggestion per vaccine, unfamiliar names ruled once, and what is saved grades the AI field by field |
+| `24` | A manager's fixes: verifying a typed-in shot says how (GR030); fixing a misread date keeps who checked it, regrades the AI, and re-opens a shot verified some other way; the counter's date rules still hold |
+| `25` | The calendar: grooms on their day, each vaccine's current expiry only, rabies marked as stopping grooms, dogs off the books left out |
+| `26` | Booking: a full groom is 90 minutes; nobody in two places at once (GR031); shop hours and the past; a regular client's usual groomer, or a reason (GR032); free times; vaccines warn, never refuse; a dog in good standing only when every vaccine is current and verified; moving and cancelling |
+| `27` | Dog photos: kept in three sizes, replaced, removed, all or nothing |
 
 ---
 
@@ -398,22 +408,39 @@ never signed on a date nobody read.
 
 ## Roadmap
 
+Done:
+
 1. ~~The held-out photo.~~ Labelled 2026-09-24 before any model run on it,
    then run and reconciled. It is no longer unseen: the next new document is
    the one to hold out.
-2. ~~Layer 3 — the confirmation step.~~ Built in section 18, with a
-   **Confirm** screen in the review tool.
-3. ~~Groomer interface, first slice.~~ The check-in screen, its backend, and
-   demo data (section 20, `api/`, `web/`, `sql/seed/demo.sql`).
-4. ~~Seed migration.~~ The template × tier × zone mapping, section 21. Next:
-   the **Record the haircut** screen that uses it.
-5. Compliance dashboard and paperwork screens in the groomer interface, on the
-   same backend.
-6. Duplicate-upload warning — a near-duplicate image check before the model is
+2. ~~Layer 3 — the confirmation step.~~ Section 18, with a **Confirm** screen
+   in the review tool.
+3. ~~Groomer interface.~~ The check-in screen and its backend (section 20,
+   `api/`, `web/`, `sql/seed/demo.sql`), then walk-ins, breeds, allergies and
+   handling (22–25), paperwork at the counter and the AI's suggestions (26–27),
+   a manager's fixes and the Admin view (28), the calendar (29), booking ahead
+   (30) and dog photos (31).
+4. ~~Seed migration.~~ The template × tier × zone mapping, section 21.
+
+Next:
+
+5. **Record the haircut** — the screen that uses the style templates. When it
+   allows editing a style it asks for a short reason (`groom.change_reason`);
+   the shave-down's level-4 warning and level-5 acknowledgment are screen
+   behaviour still to build. The Feet row in
+   [`reference/style_tier_mapping.md`](reference/style_tier_mapping.md) is a
+   best guess, waiting for a groomer's review.
+6. Groomers' working days and hours, so booking only offers real
+   availability; and linking a booking to the groom when it starts.
+7. Reminder consent asked at walk-in sign-up, so a new client's missing
+   paperwork is chased by the reminders and not only at the counter.
+8. Graded counter readings exported as answer keys, so the harness's test
+   bench grows from the shop's own paperwork.
+9. Duplicate-upload warning — a near-duplicate image check before the model is
    called (a resized or re-saved copy of a page already on file). Exact copies
    are already refused per owner; a re-read of a shot already on file is
    already caught at confirmation (`already_on_file`).
-7. Polish: README wording, a second held-out photo, visual design.
+10. Polish: a second held-out photo.
 
 **Possible extension, not planned:** real delivery for owner outreach. The
 rules, consent, outbox and sender are built and tested in test mode; going live
@@ -460,4 +487,4 @@ and visits in the test fixture are invented.
 
 ## Built with
 
-PostgreSQL 16 · pgTAP · Docker
+PostgreSQL 16 · pgTAP · FastAPI · Next.js · Tailwind · Claude (vision) · Docker
