@@ -348,4 +348,5 @@ at `COMMIT`. Since every test file rolls back, a test file must issue
 `SET CONSTRAINTS ALL IMMEDIATE` or those rules will pass by never running — which
 is worse than failing.
 
-Current coverage: 11 files, 76 assertions, all passing.
+The invariants above are covered by `tests/01`–`tests/11`; the README gives the
+whole suite's current count.

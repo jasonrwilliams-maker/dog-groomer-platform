@@ -102,7 +102,7 @@ for a better copy instead of recording a guess.
 |---|---|
 | Schema | Sections 0–14 stable, in one file; later sections appended as separate files (15–31) |
 | Business rules | 37, codes `GR001`–`GR037` |
-| Test suite | 27 files, 440 pgTAP assertions, passing; 26 API tests |
+| Test suite | 29 files, 483 pgTAP assertions, passing; 31 API tests |
 | Document vocabulary (§15) | 29 rulings seeded from the labelled corpus; `resolve_term()` fails closed |
 | Extraction line items (§16) | One row per printed line; review views; the shape the harness loads |
 | Confirmation — Layer 3 (§18) | `confirm_extraction()` turns a fully reviewed page into verified records, records every line's outcome, and asks the owner for what the page is missing |
@@ -174,7 +174,7 @@ docker compose exec db psql -U postgres -d grooming_test -f sql/seed/fixture.sql
 docker compose exec db pg_prove -U postgres -d grooming_test tests/*.sql
 ```
 
-Expected: `Files=27, Tests=440, Result: PASS`. The backend's tests build their own copy of the demo database:
+Expected: `Files=29, Tests=483, Result: PASS`. The backend's tests build their own copy of the demo database:
 
 ```bash
 docker compose exec -w /repo/api api python -m pytest -q
