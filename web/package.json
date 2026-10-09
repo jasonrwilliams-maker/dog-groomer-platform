@@ -6,9 +6,12 @@
     "dev": "next dev --hostname 0.0.0.0 --port 3000",
     "build": "next build",
     "start": "next start --hostname 0.0.0.0 --port 3000",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "demo:files": "node scripts/demo-sql.mjs ../sql public/demo/grooming.sql && node scripts/demo-files.mjs && node scripts/demo-check.mjs public/demo/grooming.sql",
+    "build:demo": "NEXT_PUBLIC_DEMO=1 next build"
   },
   "dependencies": {
+    "@electric-sql/pglite": "^0.5.8",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "next": "^15.5.0",

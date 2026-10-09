@@ -20,3 +20,9 @@ web/node_modules/
 web/.next/
 web/next-env.d.ts
 web/tsconfig.tsbuildinfo
+
+# The browser demo's build: generated from sql/ and the PGlite package
+# (web/scripts/demo-sql.mjs, demo-files.mjs), and its static output.
+web/public/demo/
+web/public/pglite/
+web/out/

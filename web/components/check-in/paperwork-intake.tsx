@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { AiPanel } from "@/components/check-in/ai-panel";
 import { Camera, wantsLiveCamera } from "@/components/check-in/camera";
 import { PaperworkForm } from "@/components/check-in/paperwork-form";
+import { DEMO } from "@/lib/demo-flag";
 import { api, pageUrl, paperworkUrl, Refusal, type AiState, type ReceivedCopy } from "@/lib/api";
 import { useIsManager } from "@/lib/viewer";
 
@@ -45,7 +46,8 @@ export function PaperworkIntake({
   closeLabel?: string;
 }) {
   const manager = useIsManager();
-  const [step, setStep] = useState<Step>(resume ? { at: "check", ...resume } : { at: "pick" });
+  // The browser demo has no server to keep photos on: the dates are typed in.
+  const [step, setStep] = useState<Step>(resume ? { at: "check", ...resume } : DEMO ? { at: "typed" } : { at: "pick" });
   // Bumped when a page is taken out, so the pages are fetched again.
   const [pagesVersion, setPagesVersion] = useState(0);
   // What the AI has read off the copy being checked, if anyone asked it to.

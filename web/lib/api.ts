@@ -1,5 +1,7 @@
 // What the backend returns (api/app/main.py), and the calls the screen makes.
 
+import { DEMO } from "@/lib/demo-flag";
+
 export type DogSummary = {
   id: string;
   name: string;
@@ -307,8 +309,17 @@ function checkLocked(r: Response) {
   }
 }
 
+/** The backend, or in the browser demo, the database in this tab answering the same requests. */
+async function call(path: string, init: RequestInit & { json?: unknown } = {}): Promise<Response> {
+  if (DEMO) {
+    const { demoFetch } = await import("@/lib/demo/backend");
+    return demoFetch(init.method ?? "GET", path, init.json);
+  }
+  return fetch(`/api${path}`, init);
+}
+
 async function get<T>(path: string): Promise<T> {
-  const r = await fetch(`/api${path}`, { cache: "no-store", headers: adminHeaders() });
+  const r = await call(path, { cache: "no-store", headers: adminHeaders() });
   checkLocked(r);
   if (!r.ok) throw new Error(`The backend answered ${r.status} for ${path}.`);
   return r.json();
@@ -317,10 +328,11 @@ async function get<T>(path: string): Promise<T> {
 /** POST or PUT, and a 409 becomes a Refusal carrying the database's own words. */
 async function send<T>(method: "POST" | "PUT", path: string, body: unknown): Promise<T> {
   // A form (a file upload) goes as it is; anything else as JSON.
-  const r = await fetch(`/api${path}`, body instanceof FormData ? { method, body, headers: adminHeaders() } : {
+  const r = await call(path, body instanceof FormData ? { method, body, headers: adminHeaders() } : {
     method,
     headers: { "Content-Type": "application/json", ...adminHeaders() },
     body: JSON.stringify(body),
+    json: body,
   });
   checkLocked(r);
   const json = await r.json().catch(() => ({}));
