@@ -174,7 +174,7 @@ docker compose exec db psql -U postgres -d grooming_test -f sql/seed/fixture.sql
 docker compose exec db pg_prove -U postgres -d grooming_test tests/*.sql
 ```
 
-Expected: `Files=27, Tests=440, Result: PASS`. The backend's tests build their own copy of the demo database:
+Expected: `Files=29, Tests=483, Result: PASS`. The backend's tests build their own copy of the demo database:
 
 ```bash
 docker compose exec -w /repo/api api python -m pytest -q
