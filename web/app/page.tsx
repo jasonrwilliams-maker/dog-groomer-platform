@@ -11,6 +11,8 @@ import { DogList } from "@/components/check-in/dog-list";
 import { WalkInForm, type WalkInFor } from "@/components/check-in/walk-in-form";
 import { ViewerProvider } from "@/lib/viewer";
 import { Welcome } from "@/components/check-in/welcome";
+import { DemoBanner } from "@/components/demo-banner";
+import { DEMO } from "@/lib/demo-flag";
 import { Button } from "@/components/ui/button";
 import { api, setAdminSession, type CheckInCard, type DogSummary, type Groomer, type SearchBy } from "@/lib/api";
 import { cn } from "@/lib/utils";
@@ -93,18 +95,21 @@ export default function CheckInPage() {
     api.findDogs("", by).then(setDogs);
   }
 
-  const manager = me?.role === "manager";
+  // The browser demo has no Admin: the shop runs as if everyone is a groomer.
+  const manager = me?.role === "manager" && !DEMO;
   const trouble = problem && (
     <p role="alert" className="mx-auto max-w-md rounded-[var(--radius)] border border-stop/30 bg-stop-soft p-3 text-sm text-stop">
       Can&apos;t reach the shop&apos;s records right now: {problem}
     </p>
   );
 
-  if (!ready) return null;
-  if (!me) return <>{trouble}<Welcome groomers={groomers} onPick={signIn} /></>;
+  const banner = DEMO && <DemoBanner />;
+  if (!ready) return banner || null;
+  if (!me) return <>{banner}{trouble}<Welcome groomers={groomers} onPick={signIn} /></>;
 
   return (
     <div className="min-h-screen">
+      {banner}
       <header className="bg-primary text-primary-foreground shadow-md">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-3 md:px-8">
           <Logo onBrand />

@@ -10,6 +10,27 @@ that asserts the *refusal* — not the happy path. 483 assertions, all passing.
 How strictly each groom-time rule is enforced (block, warn, or off) is itself a
 row of data, changed by `UPDATE` and recorded in the audit log — not a migration.
 
+### Try it in your browser
+
+**[Open the live demo →](https://jasonrwilliams-maker.github.io/dog-groomer-platform/)**
+
+The groomer interface, with the shop's real database running in your own
+browser tab: Postgres compiled to WebAssembly ([PGlite](https://pglite.dev)),
+loaded with this repository's schema and its invented demo dogs. Nothing is
+mocked; every refusal you meet is the database's own, and the banner lists
+each function a change called and whether the database said yes. Nothing
+leaves the tab, and a reload starts over.
+
+Try Jaddi (rabies expired: no groom), a new client whose paper has no expiry
+date (no expiry, no record), booking a regular client with someone else (it
+asks why), and recording a shave-down of a pelted coat.
+
+Left out, because they need a server: Admin, photos of dogs and paperwork, and
+the AI reading a copy. Built and published by
+[`.github/workflows/demo.yml`](.github/workflows/demo.yml) on every push to
+`master`; the browser's backend is [`web/lib/demo/backend.ts`](web/lib/demo/backend.ts),
+the same SQL as `api/app/main.py`.
+
 ---
 
 ## Why this is not a reporting project

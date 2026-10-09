@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { DogPhoto } from "@/components/ui/dog-photo";
 import { Camera, wantsLiveCamera } from "@/components/check-in/camera";
+import { DEMO } from "@/lib/demo-flag";
 import { api, dogPhotoUrl } from "@/lib/api";
 
 /**
@@ -55,7 +56,7 @@ export function DogPhotoEditor({ dogId, name, photo, groomerId, onChanged }: {
       <input ref={picker} type="file" accept="image/*,.heic" className="hidden"
              onChange={(e) => { upload(e.target.files?.[0]); e.target.value = ""; }} />
 
-      {!open ? (
+      {DEMO ? null : !open ? (
         <Button variant="outline" size="sm" disabled={busy} onClick={() => setOpen(true)}>
           {photo ? "Change photo" : "Add photo"}
         </Button>

@@ -1,0 +1,59 @@
+# The browser demo: the groomer interface with the shop's real database
+# running in the visitor's tab (PGlite, Postgres compiled to WebAssembly),
+# published to GitHub Pages at /dog-groomer-platform/.
+#
+# Built from the repository only: the schema in sql/ and the invented demo
+# dogs in sql/seed/demo.sql. Nothing from private/ or a running database.
+#
+# One-time setup: Settings → Pages → Build and deployment → Source:
+# "GitHub Actions".
+name: browser demo
+
+on:
+  push:
+    branches: [master]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci --no-audit --no-fund
+      - name: Gather the schema and demo dogs, copy PGlite, and check the schema loads in it
+        run: npm run demo:files
+      - name: Build the static pages
+        env:
+          NEXT_PUBLIC_DEMO: "1"
+          NEXT_PUBLIC_BASE_PATH: /dog-groomer-platform
+        run: npx next build
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: web/out
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
