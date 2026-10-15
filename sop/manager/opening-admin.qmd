@@ -1,0 +1,27 @@
+---
+title: "Opening Admin"
+---
+
+Admin holds the shop's to-do list: paperwork waiting to be verified, hand
+checks waiting for a second look, and changes to review. Only managers can
+open it, and it asks for proof each time.
+
+## Before you start
+
+- You've [picked your name](signing-in.qmd).
+- You have a passkey set up on your phone, or an Admin PIN.
+
+## Steps
+
+1. Tap **Admin**.
+2. Tap **Use my passkey** and follow your phone, or type your PIN and tap
+   **Open with PIN**.
+
+   ![Admin asking for a passkey or PIN](/screenshots/manager/admin-door.png)
+
+3. *(Steps to come.)*
+
+::: {.callout-note}
+## When you're done
+Tap **Lock Admin**. It also locks by itself after 30 minutes.
+:::

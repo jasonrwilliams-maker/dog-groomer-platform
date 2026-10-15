@@ -1,0 +1,58 @@
+# The shop's SOP: three manuals, one for each kind of reader, built from
+# modules. Build it from this folder with `quarto render` (or
+# `quarto preview` to watch it while you write). The finished site lands in
+# _site/, which is not kept in git.
+#
+# Where things go:
+#   groomer/, manager/, systems/   one module per page, per manual
+#   _shared/                       modules more than one manual uses; a page
+#                                  pulls one in with {{< include >}}
+#   screenshots/                   every picture, one folder per manual;
+#                                  replace a file and rebuild, every page
+#                                  that shows it updates. To retake them
+#                                  all from the app in one go, see
+#                                  screenshots/README.md
+#   _template.qmd                  copy this to start a new module
+#
+# Files and folders starting with _ are never pages on their own.
+project:
+  type: website
+  output-dir: _site
+  # Pages are the .qmd files; notes like screenshots/README.md stay notes.
+  render:
+    - "**/*.qmd"
+  # Reads the shop's rules out of sql/ before every build, so the systems
+  # manual's list of rules is never out of date.
+  pre-render: python _scripts/shop_rules.py
+
+website:
+  title: "Grooming shop SOP"
+  page-navigation: true
+  search: true
+  sidebar:
+    style: docked
+    contents:
+      - href: index.qmd
+        text: Which manual is yours?
+      - section: "Groomer manual"
+        href: groomer/index.qmd
+        contents:
+          - groomer/signing-in.qmd
+          - groomer/checking-in-a-dog.qmd
+      - section: "Manager manual"
+        href: manager/index.qmd
+        contents:
+          - manager/signing-in.qmd
+          - manager/opening-admin.qmd
+      - section: "Systems manual"
+        href: systems/index.qmd
+        contents:
+          - systems/shop-rules.qmd
+
+format:
+  html:
+    theme: [cosmo, brand.scss]
+    css: styles.css
+    toc: true
+    # Pictures open larger when tapped.
+    lightbox: true

@@ -1,0 +1,32 @@
+---
+title: "Which manual is yours?"
+toc: false
+---
+
+The shop's standard procedures, written for the three kinds of people who use
+the system. Start with your own manual; each one is complete on its own.
+
+::: {.manual-cards}
+
+::: {.manual-card}
+### [Groomer manual](groomer/index.qmd){.stretched-link}
+
+For everyone on the floor. Signing in, finding a dog, checking it in, and
+recording the haircut.
+:::
+
+::: {.manual-card}
+### [Manager manual](manager/index.qmd){.stretched-link}
+
+Everything in the groomer manual, plus Admin: verifying paperwork, second
+looks, and the to-do list.
+:::
+
+::: {.manual-card}
+### [Systems manual](systems/index.qmd){.stretched-link}
+
+For whoever looks after the database and the AI that reads paperwork. The
+shop's rules, backups, and keeping the AI honest.
+:::
+
+:::

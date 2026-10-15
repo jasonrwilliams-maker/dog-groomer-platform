@@ -1,0 +1,24 @@
+---
+title: "What the reader is doing, in their words"
+# Copy this file into groomer/, manager/ or systems/, rename it, and add it to
+# the sidebar in _quarto.yml. Delete these comment lines.
+---
+
+One or two sentences: when you'd do this, and what it's for.
+
+## Before you start
+
+- What has to be true first (signed in, dog checked in, …)
+
+## Steps
+
+1. The first thing to tap or type.
+
+   ![What the screen looks like at this step](/screenshots/groomer/file-name.png)
+
+2. The next thing.
+
+::: {.callout-note}
+## If something stops you
+What the screen says, what it means, and what to do about it.
+:::

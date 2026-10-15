@@ -1,0 +1,12 @@
+---
+title: "Manager manual"
+---
+
+For managers. You use the same main screen as the groomers, so the groomer
+manual applies to you too. This manual adds Admin: the shop's to-do list,
+verifying paperwork, and second looks.
+
+## In this manual
+
+- [Signing in](signing-in.qmd)
+- [Opening Admin](opening-admin.qmd)

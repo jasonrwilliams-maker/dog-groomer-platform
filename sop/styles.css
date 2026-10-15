@@ -1,0 +1,121 @@
+/* The landing page's three manuals: one under the other, each a whole card
+   you can tap anywhere on. */
+.manual-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-top: 1.5rem;
+  max-width: 40rem;
+}
+
+.manual-card {
+  position: relative;
+  border: 1px solid #d9d0d4;
+  border-left: 0.4rem solid #6f4f5c;
+  border-radius: 0.5rem;
+  padding: 1rem 3rem 1rem 1.25rem;
+  background: #fff;
+  transition: background 0.15s;
+}
+
+.manual-card:hover {
+  background: #fff5e3;
+}
+
+.manual-card::after {
+  content: "→";
+  position: absolute;
+  right: 1.25rem;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 1.5rem;
+  color: #6f4f5c;
+}
+
+.manual-card h3 {
+  margin: 0 0 0.25rem;
+}
+
+.manual-card h3 a {
+  text-decoration: none;
+  font-weight: 700;
+}
+
+.manual-card p {
+  margin: 0;
+}
+
+/* Screenshots: a thin frame so a white screen doesn't melt into the page, and
+   no wider than the text, so the words aren't dwarfed. Tap one to see it full
+   size. */
+.quarto-figure img {
+  border: 1px solid #d9d0d4;
+  border-radius: 0.375rem;
+  max-width: min(100%, 40rem);
+}
+
+/* Previous and next page: real buttons, not faint links. Next is the step
+   forward, so it's the solid one. */
+.page-navigation {
+  gap: 1rem;
+}
+
+.page-navigation .nav-page a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 1.1rem;
+  border: 2px solid #6f4f5c;
+  border-radius: 0.5rem;
+  color: #6f4f5c;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.page-navigation .nav-page a:hover {
+  background: #fff5e3;
+}
+
+.page-navigation .nav-page-next a {
+  background: #6f4f5c;
+  color: #fbfafa;
+}
+
+.page-navigation .nav-page-next a:hover {
+  background: #624651;
+}
+
+.page-navigation .nav-page a .nav-page-text,
+.page-navigation .nav-page a i {
+  color: inherit;
+  font-size: 1rem;
+}
+
+/* The menu on the left: manual names stand out as headings, pages are easy
+   to hit, and the page you're on is marked. */
+.sidebar-item-section > .sidebar-item-container .sidebar-item-text {
+  font-weight: 700;
+  color: #231d2c;
+}
+
+.sidebar-navigation .sidebar-item-text {
+  font-size: 1rem;
+}
+
+.sidebar-navigation .sidebar-item a {
+  padding: 0.3rem 0.5rem;
+  border-radius: 0.375rem;
+}
+
+.sidebar-navigation .sidebar-item a:hover {
+  background: #fff5e3;
+}
+
+.sidebar-navigation .sidebar-link.active {
+  background: #6f4f5c;
+  color: #fbfafa;
+}
+
+.sidebar-navigation .sidebar-link.active .menu-text {
+  color: #fbfafa;
+}

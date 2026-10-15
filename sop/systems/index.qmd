@@ -1,0 +1,10 @@
+---
+title: "Systems manual"
+---
+
+For whoever looks after the shop's database and the AI that reads vaccine
+paperwork. Groomers and managers never need these pages.
+
+## In this manual
+
+- [The shop's rules](shop-rules.qmd)

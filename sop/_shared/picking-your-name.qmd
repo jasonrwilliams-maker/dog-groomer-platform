@@ -1,0 +1,8 @@
+The shop's screen opens on **Who's grooming?**, with a button for everyone
+who works here. Tap your own name.
+
+![The welcome screen](/screenshots/shared/welcome.png)
+
+Picking a name is not a password. It tells the system who did the work, so
+every check-in, haircut and note carries the right name. Always pick your own,
+and pick again when someone else takes over the tablet.
