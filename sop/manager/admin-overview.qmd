@@ -43,6 +43,13 @@ attention.
    | **Checked by hand, to look over** | Shots a groomer checked against a photo, for your second look | [MGR-06](second-look.qmd) |
    | **Allergy changes to review** | Allergies taken off or made less severe | [MGR-07](allergy-reviews.qmd) |
 
+   **Under the to-do list**
+
+   | Box | What it is for |
+   |---|---|
+   | **Vaccination records** | Click **Open records tool ↗** to open the records tool in a new tab: the test bench for sample paperwork, AI prompts and models, and owner reminders. It is run by the person responsible for the database |
+   | **How the AI is doing** | How often the AI read dates right, wrong, missed them or made them up, graded by whoever checked each copy it read. Shown separately for **Emailed PDFs** and **Photos** |
+
 2. To open the list behind a card, click the card. Cards with a list show
    **Open the list →**. A card showing 0 has no list.
 3. In a list, click a dog's name to open its card on the Check-in screen.

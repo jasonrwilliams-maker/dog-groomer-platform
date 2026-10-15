@@ -19,8 +19,16 @@ To retake only some of them, add part of the file name:
 Most pictures come from the browser demo on the web, so nothing has to be
 running. The demo has no Admin, so `manager/admin-door.png` comes from the
 shop's own app on this computer. Start it with `docker compose up -d` in the
-repo first; if it isn't running, that picture is skipped and the old one
-stays.
+repo first; if it isn't running, those pictures are skipped and the old ones
+stay.
+
+The pictures inside Admin need a manager. When the command reaches them, an
+Edge window opens at the Admin lock: unlock it with your own passkey or PIN
+within 5 minutes. The command takes the pictures in that window and locks
+Admin again.
+
+Pictures from the shop's own app use the demo dog Bear, who has no photo:
+that app also holds real photos, which stay off the published manual.
 
 ## Adding a picture
 

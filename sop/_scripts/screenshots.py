@@ -14,6 +14,10 @@ demo has no Admin, so the Admin pictures come from the shop's own app on this
 computer (`docker compose up -d` in the repo, then http://localhost:3000). If
 that isn't running, those pictures are skipped and the old ones stay.
 
+The pictures inside Admin need a manager: the script opens a window at the
+Admin lock and waits for you to unlock it with your own passkey or PIN. It
+never types a PIN itself, and locks Admin again when it's done.
+
 One-time setup, from sop/ (screenshots/README.md has the rest):
     python -m venv .venv
     .venv\Scripts\python -m pip install playwright
@@ -45,6 +49,8 @@ class Shot:
     site: str = "demo"              # "demo" or "local" (see SITES)
     size: tuple = (1280, 800)       # the window, width x height
     whole_page: bool = False        # True: the full length of the page, not just the window
+    unlocked: bool = False          # True: inside Admin. Its steps start from the Admin
+                                    # overview, after a manager has unlocked it (see below)
 
 
 # Every picture in the manuals. To add one: copy a line, give it the file name
@@ -67,7 +73,9 @@ SHOTS = [
                                             ("tap", "Edit profile")], ready="Save changes"),
     # The demo keeps no copies, so its Add paperwork goes straight to typing the
     # dates in; the photo-or-file choice only shows in the shop's own app.
-    Shot("groomer/paperwork-start.png", site="local", steps=[("tap", "Tanya"), ("search", "Jaddi"), ("tap", "Jaddi"),
+    # Local pictures use Bear: a demo dog with no photo of its own, since the
+    # shop's own app also holds real photos that stay off the published site.
+    Shot("groomer/paperwork-start.png", site="local", steps=[("tap", "Tanya"), ("search", "Bear"), ("tap", "Bear"),
                                                ("tap", "Add paperwork")], ready="Type the dates in"),
     Shot("groomer/paperwork-typed.png", steps=[("tap", "Tanya"), ("search", "Jaddi"), ("tap", "Jaddi"),
                                                ("tap", "Add paperwork")],
@@ -85,16 +93,16 @@ SHOTS = [
                                        ("tap", "Start groom"), ("tap", "Record the haircut")],
          ready="Save and finish the groom", whole_page=True),
     # The demo keeps no photos, so the photo buttons only show in the shop's own app.
-    Shot("groomer/dog-photo.png", site="local", steps=[("tap", "Tanya"), ("search", "Jaddi"), ("tap", "Jaddi"),
-                                                       ("tap", "photo")], ready="Choose a photo"),
+    Shot("groomer/dog-photo.png", site="local", steps=[("tap", "Tanya"), ("search", "Bear"), ("tap", "Bear"),
+                                                       ("tap_exact", "Add photo")], ready="Choose a photo"),
     Shot("manager/admin-door.png", site="local", steps=[("tap", "Nadia"), ("tap", "Admin")],
          ready="Admin is locked"),
-    # Past the lock: these need Admin open, so they wait for a way to sign in
-    # from the script. Until then they are placeholders.
-    Shot("manager/admin-overview.png", site="local", steps=[("tap", "Nadia"), ("tap", "Admin")],
-         ready="Your to-do list"),
-    Shot("manager/passkeys-and-pin.png", site="local", steps=[("tap", "Nadia"), ("tap", "Admin"),
-                                                              ("tap", "Passkeys and PIN")], ready="Your passkeys"),
+    # Inside Admin. The script never types a PIN: it opens a window at the
+    # Admin lock and waits for a manager to unlock it with their own passkey
+    # or PIN, then takes these in that window.
+    Shot("manager/admin-overview.png", site="local", unlocked=True, ready="Your to-do list"),
+    Shot("manager/passkeys-and-pin.png", site="local", unlocked=True, steps=[("tap", "Passkeys and PIN")],
+         ready="Your passkeys"),
 ]
 
 
@@ -134,9 +142,10 @@ def wait(page: Page, words: str):
 
 STEPS = {"tap": tap, "tap_exact": tap_exact, "search": search, "wait": wait, "week_ahead": week_ahead}
 
-# The demo's yellow "Live demo" band across the top isn't part of the shop's
-# own screens, so it's left out of the pictures.
+# The demo's yellow "Live demo" band across the top, and the shop's own app's
+# developer badge, aren't part of the shop's screens, so they're left out.
 HIDE_DEMO_BANNER = """
+document.querySelectorAll('nextjs-portal').forEach((e) => e.remove());   // the dev server's "N" badge
 for (const s of document.querySelectorAll('span.font-semibold'))
   if (s.textContent.trim() === 'Live demo.') s.closest('div.border-b')?.remove();
 """
@@ -144,10 +153,44 @@ for (const s of document.querySelectorAll('span.font-semibold'))
 
 def site_is_up(url: str) -> bool:
     try:
-        urllib.request.urlopen(url, timeout=3)
+        urllib.request.urlopen(url, timeout=30)    # the dev server can take a while on its first page
         return True
     except OSError:
         return False
+
+
+def save(page: Page, shot: Shot):
+    if shot.ready:
+        wait(page, shot.ready)
+    page.evaluate(HIDE_DEMO_BANNER)
+    page.mouse.move(0, 0)               # no hover highlight on whatever was tapped last
+    page.wait_for_load_state("networkidle")
+    page.wait_for_timeout(500)          # let pictures and fades finish
+    out = PICTURES / shot.file
+    out.parent.mkdir(parents=True, exist_ok=True)
+    page.screenshot(path=str(out), full_page=shot.whole_page)
+
+
+def unlock_admin(p, url: str):
+    """A window, shown on screen, at the Admin lock, once a manager has opened it."""
+    browser = launch(p, headless=False)
+    context = browser.new_context(viewport={"width": 1280, "height": 800}, device_scale_factor=2)
+    page = context.new_page()
+    page.goto(url)
+    page.get_by_text("Who's grooming?").wait_for()
+    tap(page, "Nadia")
+    tap(page, "Admin")
+    print("\n  Admin needs a manager. In the window that just opened, unlock Admin with")
+    print("  your own passkey or PIN. The pictures are taken once it's open (5 minutes).")
+    page.get_by_text("Admin open for").wait_for(timeout=300_000)
+    return browser, page
+
+
+def launch(p, headless=True):
+    try:
+        return p.chromium.launch(channel="msedge", headless=headless)
+    except Exception:
+        return p.chromium.launch(headless=headless)   # no Edge: Playwright's own (python -m playwright install chromium)
 
 
 def take(browser, shot: Shot, url: str):
@@ -163,15 +206,7 @@ def take(browser, shot: Shot, url: str):
     page.get_by_role("button").filter(has=page.locator("span[aria-hidden]")).first.wait_for()
     for step, words in shot.steps:
         STEPS[step](page, words)
-    if shot.ready:
-        wait(page, shot.ready)
-    page.evaluate(HIDE_DEMO_BANNER)
-    page.mouse.move(0, 0)               # no hover highlight on whatever was tapped last
-    page.wait_for_load_state("networkidle")
-    page.wait_for_timeout(500)          # let pictures and fades finish
-    out = PICTURES / shot.file
-    out.parent.mkdir(parents=True, exist_ok=True)
-    page.screenshot(path=str(out), full_page=shot.whole_page)
+    save(page, shot)
     context.close()
 
 
@@ -182,13 +217,26 @@ def main(only: list[str]):
     up = {name: site_is_up(url) for name, url in SITES.items() if any(s.site == name for s in shots)}
     taken, skipped, failed = [], [], []
     with sync_playwright() as p:
-        try:
-            browser = p.chromium.launch(channel="msedge")
-        except Exception:
-            browser = p.chromium.launch()   # no Edge: Playwright's own (python -m playwright install chromium)
+        browser = launch(p)
+        admin = None                        # (browser, page) once a manager has unlocked Admin
         for shot in shots:
             if not up[shot.site]:
                 skipped.append(shot)
+                continue
+            if shot.unlocked:
+                print(f"  {shot.file} ...", end=" ", flush=True)
+                try:
+                    admin = admin or unlock_admin(p, SITES[shot.site])
+                    page = admin[1]
+                    tap(page, "Admin")          # back to the overview
+                    for step, words in shot.steps:
+                        STEPS[step](page, words)
+                    save(page, shot)
+                    print("done")
+                    taken.append(shot)
+                except Exception as e:
+                    print(f"didn't work: {str(e).splitlines()[0]}")
+                    failed.append(shot)
                 continue
             print(f"  {shot.file} ...", end=" ", flush=True)
             try:
@@ -199,6 +247,9 @@ def main(only: list[str]):
                 print(f"didn't work: {str(e).splitlines()[0]}")
                 failed.append(shot)
         browser.close()
+        if admin:
+            admin[1].get_by_role("button", name="Lock Admin").click()
+            admin[0].close()
 
     print(f"\n{len(taken)} picture(s) taken.")
     if skipped:

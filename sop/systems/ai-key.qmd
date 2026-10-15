@@ -1,0 +1,147 @@
+---
+title: "Set up the AI's API key"
+subtitle: "SOP SYS-02 · Systems manual"
+---
+
+## Purpose
+
+Create the API key that lets the shop's app send paperwork to the AI
+(Anthropic's Claude), and put it where the app reads it, so that **Have the
+AI read it** works on the check screen and the records tool can run the AI.
+
+## Applies to
+
+The person responsible for the shop's database and AI. Repeat this procedure
+whenever a key expires, is lost, or may have been seen by someone it should
+not have been.
+
+## Before you begin
+
+- The shop's app runs on this computer with Docker, from the
+  `dog-groomer-platform` folder.
+- You can sign in to the Claude Console at
+  [platform.claude.com](https://platform.claude.com), or create an account
+  there. The account pays for what the AI reads, so the shop must add a
+  payment method or buy credits on the Console's
+  [Billing](https://platform.claude.com/settings/billing) page.
+
+::: {.callout-warning}
+## The key is a password
+Anyone with the key can use the AI and the shop pays for it. Never email it,
+paste it in a chat, or put it in any file other than `.env`. The `.env` file
+is never saved to GitHub.
+:::
+
+::: {.callout-note}
+## What the AI is sent
+When someone clicks **Have the AI read it**, the pages of that copy are sent
+to Anthropic's API. The check screen says so beside the button.
+:::
+
+## Procedure
+
+### Create the key
+
+1. Open a browser and go to
+   [platform.claude.com](https://platform.claude.com). Sign in.
+2. Go to the **API keys** page:
+   [platform.claude.com/settings/keys](https://platform.claude.com/settings/keys).
+3. Click **Create key**.
+4. Type a name that says what the key is for, for example
+   "Grooming shop app".
+5. Choose an expiration. When the key expires, the AI stops working until you
+   repeat this procedure, so note the date.
+6. Set **Linked account**. Choose yourself, or a service account if the shop
+   has one. A key linked to a person stops working if that person leaves the
+   organization.
+7. Click the button to create the key. The Console shows the full key, which
+   starts with `sk-ant-`. **It is shown only once.** Click the copy button
+   beside it. Do not close the window until step 13.
+
+### Put the key in the app
+
+8. Open the `dog-groomer-platform` folder in File Explorer.
+9. Find the file named `.env`. If there is no `.env`, copy `.env.example`
+   and rename the copy to `.env`.
+
+   If File Explorer does not show `.env`, click **View** at the top of File
+   Explorer, then **Show**, then tick **File name extensions** and
+   **Hidden items**.
+
+10. Right-click `.env`, click **Open with**, and click **Notepad**.
+11. Find the line that starts with `ANTHROPIC_API_KEY=`. Click at the end of
+    the line, after the `=`, and paste the key. If an old key is already
+    there, delete it first. Nothing else goes on the line: no spaces and no
+    quotation marks.
+
+    ```
+    ANTHROPIC_API_KEY=sk-ant-…your key…
+    ```
+
+12. Find the line that starts with `EXTRACTION_MODEL=`. Make sure it names a
+    current model, for example `EXTRACTION_MODEL=claude-sonnet-5`. The list
+    of current models is at
+    [platform.claude.com/docs/en/about-claude/models](https://platform.claude.com/docs/en/about-claude/models/overview).
+13. Click **File**, then **Save**. Close Notepad. You can now close the
+    Console window.
+
+### Restart the app so it reads the key
+
+14. Open a terminal in the `dog-groomer-platform` folder.
+15. Type this command and press Enter:
+
+    ```bash
+    docker compose up -d --force-recreate api review
+    ```
+
+    Docker restarts the shop's app and the records tool. Wait until the
+    terminal shows each one as **Started**.
+
+### Check that it works
+
+16. Open the shop's app, sign in, open any dog's card, and click **Add
+    paperwork**. Take a photo or choose a file of any vaccine paperwork,
+    click **Save it**, then click **I'll check it now**.
+17. Look for the **Have the AI read it** button above the date form. Click it.
+    After a short wait, the form shows **The AI filled in** a number of
+    vaccines.
+
+    If you do not want to keep this test copy, click **Remove this copy and
+    start again** before step 17, or remove it afterwards from Admin. See
+    [MGR-05](../manager/paperwork-to-check.qmd).
+
+## Result
+
+**Have the AI read it** reads the pages and fills in the dates. The key
+appears on the Console's API keys page, with the date it was last used.
+
+## If something goes wrong
+
+### The AI isn't set up on this computer. Add ANTHROPIC_API_KEY and EXTRACTION_MODEL to .env.
+
+One of the two lines in `.env` is empty, or the app was not restarted. Check
+steps 11 and 12, save the file, and repeat step 15.
+
+### The AI isn't set up on this computer: the API key in .env was not accepted.
+
+The key is wrong, has expired, or was deleted in the Console. Check that the
+line in `.env` has the whole key with no spaces. If it still fails, create a
+new key (steps 1 to 7) and replace the old one.
+
+### The AI model … named in .env doesn't exist. Check EXTRACTION_MODEL.
+
+The model name in `.env` is misspelled or no longer offered. Copy a current
+model name from the models page in step 12, save, and repeat step 15.
+
+### The key may have been seen by someone else
+
+1. On the Console's [API keys](https://platform.claude.com/settings/keys)
+   page, find the key and delete it. It stops working at once.
+2. Create a new key and put it in the app (steps 1 to 15).
+
+### The AI works, but the shop is spending more than expected
+
+The Console's [Billing](https://platform.claude.com/settings/billing) page
+shows what has been spent. Use
+[workspaces](https://platform.claude.com/settings/workspaces) in the Console
+to set a spend limit for the key's workspace.

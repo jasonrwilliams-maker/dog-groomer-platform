@@ -16,3 +16,4 @@ pages, such as SYS-01, explain how to use them instead.
 | Number | Procedure |
 |---|---|
 | SYS-01 | [Shop rules reference](shop-rules.qmd) |
+| SYS-02 | [Set up the AI's API key](ai-key.qmd) |
