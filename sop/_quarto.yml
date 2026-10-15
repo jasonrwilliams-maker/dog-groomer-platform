@@ -51,7 +51,7 @@ website:
 
 format:
   html:
-    theme: cosmo
+    theme: [cosmo, brand.scss]
     css: styles.css
     toc: true
     # Pictures open larger when tapped.
