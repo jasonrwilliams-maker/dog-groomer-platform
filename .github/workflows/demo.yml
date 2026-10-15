@@ -1,6 +1,7 @@
 # The browser demo: the groomer interface with the shop's real database
 # running in the visitor's tab (PGlite, Postgres compiled to WebAssembly),
-# published to GitHub Pages at /dog-groomer-platform/.
+# published to GitHub Pages at /dog-groomer-platform/. The shop's SOP
+# (sop/, built with Quarto) goes up beside it at /dog-groomer-platform/sop/.
 #
 # Built from the repository only: the schema in sql/ and the invented demo
 # dogs in sql/seed/demo.sql. Nothing from private/ or a running database.
@@ -44,6 +45,17 @@ jobs:
           NEXT_PUBLIC_DEMO: "1"
           NEXT_PUBLIC_BASE_PATH: /dog-groomer-platform
         run: npx next build
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: quarto-dev/quarto-actions/setup@v2
+        with:
+          version: 1.10.19
+      - name: Build the SOP and put it beside the demo
+        working-directory: sop
+        run: |
+          quarto render
+          cp -r _site ../web/out/sop
       - uses: actions/upload-pages-artifact@v3
         with:
           path: web/out

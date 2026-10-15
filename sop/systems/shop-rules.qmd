@@ -1,0 +1,11 @@
+---
+title: "The shop's rules"
+---
+
+Every rule the database enforces has its own code, from GR001 up. When the
+screen refuses something, the code tells you which rule did it.
+
+This list is read straight out of the database files in `sql/` every time the
+manual is built, so it always matches the system as it is.
+
+{{< include _shop-rules-list.md >}}

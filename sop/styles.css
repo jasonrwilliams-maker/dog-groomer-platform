@@ -1,0 +1,24 @@
+/* The landing page's three manual cards: side by side on a wide screen,
+   stacked on a phone. */
+.manual-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr));
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.manual-card {
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.5rem;
+  padding: 1rem 1.25rem;
+}
+
+.manual-card h3 {
+  margin-top: 0;
+}
+
+/* Screenshots get a thin frame so a white screen doesn't melt into the page. */
+.quarto-figure img {
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.375rem;
+}

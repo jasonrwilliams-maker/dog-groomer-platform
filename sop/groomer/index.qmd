@@ -1,0 +1,11 @@
+---
+title: "Groomer manual"
+---
+
+For everyone who grooms. You'll only ever use the shop's main screen: the
+dog list, each dog's card, and the calendar.
+
+## In this manual
+
+- [Signing in](signing-in.qmd)
+- [Checking in a dog](checking-in-a-dog.qmd)

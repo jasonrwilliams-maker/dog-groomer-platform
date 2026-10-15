@@ -26,3 +26,7 @@ web/tsconfig.tsbuildinfo
 web/public/demo/
 web/public/pglite/
 web/out/
+
+# The SOP's build: the finished site and Quarto's working files.
+sop/_site/
+sop/.quarto/

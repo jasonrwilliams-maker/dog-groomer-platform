@@ -199,6 +199,14 @@ container startup.
 To reset: `docker compose down -v` and start again. The `-v` removes the data
 volume, which is what lets the pgTAP init script run on the next start.
 
+### The shop's SOP
+
+Three manuals (groomer, manager, systems), built from modules in [`sop/`](sop/)
+with [Quarto](https://quarto.org). From that folder, `quarto preview` shows it
+as you write and `quarto render` builds it. [`sop/_quarto.yml`](sop/_quarto.yml)
+says where modules and screenshots go. It is published beside the demo at
+`/dog-groomer-platform/sop/`.
+
 ---
 
 ## What the schema models
