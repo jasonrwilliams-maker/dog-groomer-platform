@@ -1,5 +1,6 @@
 ---
 title: "Systems manual"
+number-sections: false
 ---
 
 This manual covers the shop's database and the AI that reads vaccine

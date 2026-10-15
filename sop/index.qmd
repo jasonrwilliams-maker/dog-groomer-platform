@@ -1,6 +1,7 @@
 ---
 title: "Which manual is yours?"
 toc: false
+number-sections: false
 ---
 
 These are the shop's standard operating procedures for the grooming shop app.

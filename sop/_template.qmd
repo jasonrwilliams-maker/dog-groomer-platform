@@ -33,5 +33,6 @@ What the screen shows when the procedure is done correctly.
 
 ## If something goes wrong
 
-**The message, exactly as the screen shows it**
-: What it means, and what to do.
+### The message, exactly as the screen shows it
+
+What it means, and what to do.

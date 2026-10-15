@@ -1,5 +1,6 @@
 ---
 title: "Manager manual"
+number-sections: false
 ---
 
 This manual covers Admin, the part of the shop app that only managers can

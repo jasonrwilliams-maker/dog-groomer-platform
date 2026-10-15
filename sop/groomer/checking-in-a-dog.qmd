@@ -54,11 +54,13 @@ your name, and a **Record the haircut** button.
 
 ## If something goes wrong
 
-**Can't groom today**
-: The dog's rabies vaccine has expired, or the shop has no proof of it. The
-  **Start groom** button cannot be clicked. Ask the owner for a current
-  rabies certificate, then click **Add paperwork** on the dog's card.
+### Can't groom today
 
-**No dog or owner by that name.**
-: The dog is not on file. Check the spelling, or click **Both** to search by
-  either name. If the dog is new to the shop, click **Add as a new client**.
+The dog's rabies vaccine has expired, or the shop has no proof of it. The
+**Start groom** button cannot be clicked. Ask the owner for a current
+rabies certificate, then click **Add paperwork** on the dog's card.
+
+### No dog or owner by that name.
+
+The dog is not on file. Check the spelling, or click **Both** to search by
+either name. If the dog is new to the shop, click **Add as a new client**.

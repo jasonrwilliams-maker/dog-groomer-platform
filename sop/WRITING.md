@@ -40,11 +40,19 @@ Every module follows [_template.qmd](_template.qmd), in this order:
 4. **Procedure.** The numbered steps, with a screenshot where the screen
    changes.
 5. **Result.** What the screen shows when the procedure is done correctly.
-6. **If something goes wrong.** Each message the reader may see, what it
-   means, and what to do.
+6. **If something goes wrong.** Each message the reader may see gets its own
+   subsection (`###`), titled with the message exactly as the screen shows
+   it, saying what it means and what to do. Each one then has its own number
+   and link, so you can send someone straight to the fix.
 
 Leave out any section with nothing in it, except Purpose, Procedure and
 Result.
+
+## Headings
+
+Sections are numbered automatically (4 Procedure, 6.1 …) and appear in **On
+this page**. Use `##` for the six sections above and `###` for anything
+inside them. Do not number headings by hand.
 
 ## Module numbers
 

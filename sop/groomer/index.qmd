@@ -1,5 +1,6 @@
 ---
 title: "Groomer manual"
+number-sections: false
 ---
 
 This manual covers the shop app's everyday screens: the Welcome screen, the

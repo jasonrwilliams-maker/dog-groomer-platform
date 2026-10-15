@@ -47,11 +47,13 @@ after 30 minutes.
 
 ## If something goes wrong
 
-**Set up how you open Admin**
-: This is the first time this profile has opened Admin. Click **Set up a
-  passkey**, or type a PIN of 4 to 8 digits in **Set a PIN** and again in
-  **Again**, then click **Set PIN**. After this, only you can change them.
+### Set up how you open Admin
 
-**The two PINs don't match.**
-: The PIN typed in **Again** is different from the first one. Type both
-  again.
+This is the first time this profile has opened Admin. Click **Set up a
+passkey**, or type a PIN of 4 to 8 digits in **Set a PIN** and again in
+**Again**, then click **Set PIN**. After this, only you can change them.
+
+### The two PINs don't match.
+
+The PIN typed in **Again** is different from the first one. Type both
+again.

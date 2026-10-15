@@ -54,6 +54,17 @@ format:
   html:
     theme: [cosmo, brand.scss]
     css: styles.css
+    # "On this page", on the right of every page: each section and its
+    # subsections, always expanded.
     toc: true
+    toc-title: "On this page"
+    toc-depth: 3
+    toc-expand: true
+    # Sections are numbered (4 Procedure, 6.1 …), so "GRM-02 §6.1" points to
+    # one exact place. Every heading also has a link icon on hover, to copy
+    # or bookmark a link straight to it.
+    number-sections: true
+    number-depth: 3
+    anchor-sections: true
     # Pictures open larger when tapped.
     lightbox: true
