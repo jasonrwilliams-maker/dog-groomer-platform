@@ -50,16 +50,51 @@ class Shot:
 # Every picture in the manuals. To add one: copy a line, give it the file name
 # the module uses, and list the taps that get to that screen. The steps are:
 #   ("tap", "Words on the button")
+#   ("tap_exact", "+ Add")   the button whose words are exactly these, when
+#                            "tap" would find a longer one first
 #   ("search", "what to type in the dog search")
 #   ("wait", "words that appear on the next screen")
+#   ("week_ahead", "Day")    put the date a week from today in the box with
+#                            this label, so a booking shows free times
 SHOTS = [
     Shot("shared/welcome.png", ready="Who's grooming?", size=(900, 640)),
     Shot("groomer/dog-list.png", steps=[("tap", "Tanya")], ready="+ New client"),
     # Jaddi: his rabies has run out, so the vaccine line shows the stop.
     Shot("groomer/dog-card.png", steps=[("tap", "Tanya"), ("search", "Jaddi"), ("tap", "Jaddi")],
          ready="Rabies"),
+    Shot("groomer/new-client.png", steps=[("tap", "Tanya"), ("tap", "New client")], ready="Save and add paperwork"),
+    Shot("groomer/edit-profile.png", steps=[("tap", "Tanya"), ("search", "Jaddi"), ("tap", "Jaddi"),
+                                            ("tap", "Edit profile")], ready="Save changes"),
+    # The demo keeps no copies, so its Add paperwork goes straight to typing the
+    # dates in; the photo-or-file choice only shows in the shop's own app.
+    Shot("groomer/paperwork-start.png", site="local", steps=[("tap", "Tanya"), ("search", "Jaddi"), ("tap", "Jaddi"),
+                                               ("tap", "Add paperwork")], ready="Type the dates in"),
+    Shot("groomer/paperwork-typed.png", steps=[("tap", "Tanya"), ("search", "Jaddi"), ("tap", "Jaddi"),
+                                               ("tap", "Add paperwork")],
+         ready="Not on their paperwork"),
+    Shot("groomer/allergy-add.png", steps=[("tap", "Tanya"), ("search", "Jaddi"), ("tap", "Jaddi"), ("tap_exact", "+ Add")],
+         ready="Add allergy"),
+    Shot("groomer/handling-add.png", steps=[("tap", "Tanya"), ("search", "Jaddi"), ("tap", "Jaddi"),
+                                            ("tap", "Add note")], ready="How hard to handle"),
+    Shot("groomer/booking.png", steps=[("tap", "Tanya"), ("search", "Daisy"), ("tap", "Daisy"),
+                                       ("tap", "Book a groom"), ("week_ahead", "Day")],
+         ready="Free from", whole_page=True),
+    Shot("groomer/calendar.png", steps=[("tap", "Tanya"), ("tap", "Calendar")], ready="Vaccine expiries"),
+    # Daisy is cleared, so her groom can be started and then recorded.
+    Shot("groomer/haircut.png", steps=[("tap", "Tanya"), ("search", "Daisy"), ("tap", "Daisy"),
+                                       ("tap", "Start groom"), ("tap", "Record the haircut")],
+         ready="Save and finish the groom", whole_page=True),
+    # The demo keeps no photos, so the photo buttons only show in the shop's own app.
+    Shot("groomer/dog-photo.png", site="local", steps=[("tap", "Tanya"), ("search", "Jaddi"), ("tap", "Jaddi"),
+                                                       ("tap", "photo")], ready="Choose a photo"),
     Shot("manager/admin-door.png", site="local", steps=[("tap", "Nadia"), ("tap", "Admin")],
          ready="Admin is locked"),
+    # Past the lock: these need Admin open, so they wait for a way to sign in
+    # from the script. Until then they are placeholders.
+    Shot("manager/admin-overview.png", site="local", steps=[("tap", "Nadia"), ("tap", "Admin")],
+         ready="Your to-do list"),
+    Shot("manager/passkeys-and-pin.png", site="local", steps=[("tap", "Nadia"), ("tap", "Admin"),
+                                                              ("tap", "Passkeys and PIN")], ready="Your passkeys"),
 ]
 
 
@@ -74,17 +109,30 @@ def tap(page: Page, words: str):
     page.get_by_role("button", name=words_on(words)).first.click()
 
 
+def tap_exact(page: Page, words: str):
+    page.get_by_role("button", name=words, exact=True).first.click()
+
+
 def search(page: Page, words: str):
     page.locator('input[aria-label^="Search by"]').fill(words)
     # The list follows a beat after typing; wait for the one it found.
     page.get_by_role("button", name=words_on(words)).first.wait_for()
 
 
+def week_ahead(page: Page, label: str):
+    import datetime
+    day = datetime.date.today() + datetime.timedelta(days=7)
+    while day.weekday() == 6:           # not a Sunday
+        day += datetime.timedelta(days=1)
+    page.get_by_label(label, exact=True).fill(day.isoformat())
+    page.wait_for_timeout(1000)         # the groomers' free times follow
+
+
 def wait(page: Page, words: str):
     page.get_by_text(words, exact=False).first.wait_for()
 
 
-STEPS = {"tap": tap, "search": search, "wait": wait}
+STEPS = {"tap": tap, "tap_exact": tap_exact, "search": search, "wait": wait, "week_ahead": week_ahead}
 
 # The demo's yellow "Live demo" band across the top isn't part of the shop's
 # own screens, so it's left out of the pictures.

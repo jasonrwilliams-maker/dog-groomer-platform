@@ -1,0 +1,62 @@
+---
+title: "Read the Admin overview"
+subtitle: "SOP MGR-03 · Manager manual"
+---
+
+## Purpose
+
+See, at a glance, the state of every dog's vaccinations and the manager's
+to-do list, and open any list behind a count.
+
+## Applies to
+
+Managers, at the start of each shift and whenever the to-do list needs
+attention.
+
+## Before you begin
+
+- Admin is open. See [MGR-02 Open Admin](opening-admin.qmd).
+
+## Procedure
+
+1. Read the cards. Each card shows a number and what it counts.
+
+   ![The Admin overview](/screenshots/manager/admin-overview.png)
+
+   **Vaccinations**
+
+   | Card | What it counts |
+   |---|---|
+   | **Dogs on the books** | Every active dog |
+   | **Cleared to groom** | Dogs that may be groomed today |
+   | **Can't groom** | Dogs whose rabies stops the groom until paperwork is confirmed |
+   | **Expired** | Dogs with a vaccine past its date that does not stop a groom. Ask for updated paperwork at the next visit |
+   | **No paperwork on file** | Dogs with a vaccine never received, or asked for and not in yet |
+   | **Expiring soon** | Dogs with a vaccine about to expire. Ask for updated paperwork at the next visit |
+
+   **Your to-do list** (the pale amber cards)
+
+   | Card | What to do | Procedure |
+   |---|---|---|
+   | **Waiting to be verified** | Shots typed in with no copy, to check with the paper or the vet | [MGR-04](verify-shots.qmd) |
+   | **Paperwork to check** | Copies saved for later, not yet read | [MGR-05](paperwork-to-check.qmd) |
+   | **Checked by hand, to look over** | Shots a groomer checked against a photo, for your second look | [MGR-06](second-look.qmd) |
+   | **Allergy changes to review** | Allergies taken off or made less severe | [MGR-07](allergy-reviews.qmd) |
+
+2. To open the list behind a card, click the card. Cards with a list show
+   **Open the list →**. A card showing 0 has no list.
+3. In a list, click a dog's name to open its card on the Check-in screen.
+4. To return to the cards, click **← Back to the overview**, or click
+   **Admin** at the top of the screen again.
+
+## Result
+
+The overview shows every count. When the to-do list is clear, each to-do card
+shows 0.
+
+## If something goes wrong
+
+### Disputed
+
+Two records for the same vaccine disagree. Compare them in the records tool,
+which the person responsible for the database runs.

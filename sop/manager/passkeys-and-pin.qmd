@@ -1,0 +1,52 @@
+---
+title: "Manage your passkeys and PIN"
+subtitle: "SOP MGR-08 · Manager manual"
+---
+
+## Purpose
+
+Add or remove the passkeys that open Admin for you, and set or change your
+Admin PIN.
+
+## Applies to
+
+Every manager, for their own profile only. Nobody can change another
+manager's passkeys or PIN.
+
+## Before you begin
+
+- Admin is open. See [MGR-02 Open Admin](opening-admin.qmd).
+
+## Procedure
+
+1. Click **Passkeys and PIN** in the green bar at the top of Admin. Two
+   boxes open: **Your passkeys** and **Change your PIN** (or **Set a PIN**).
+
+   ![Passkeys and PIN](/screenshots/manager/passkeys-and-pin.png)
+
+### Add a passkey
+
+2. Click **Name it** and type a name for the device, for example "Nadia's
+   phone".
+3. Click **Add a passkey** and follow the prompt on your device.
+
+### Remove a passkey
+
+2. Under **Your passkeys**, click **Remove** beside the passkey. You cannot
+   remove your last way in.
+
+### Set or change your PIN
+
+A PIN is for when your phone is dead or not with you.
+
+2. Click **New PIN (4 to 8 digits)** and type the new PIN.
+3. Click **Save PIN**.
+
+### Finish
+
+4. Click **Done** in the green bar.
+
+## Result
+
+The green bar shows **Passkey added.** or **PIN saved.** The next time you
+open Admin, the new passkey or PIN works.

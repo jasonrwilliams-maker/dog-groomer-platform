@@ -22,3 +22,14 @@ This manual says **click**. On a tablet, tap wherever it says click.
 |---|---|
 | GRM-01 | [Sign in to your profile](signing-in.qmd) |
 | GRM-02 | [Check in a dog](checking-in-a-dog.qmd) |
+| GRM-03 | [Add a new client](new-client.qmd) |
+| GRM-04 | [Add another dog for an owner](another-dog.qmd) |
+| GRM-05 | [Edit a dog's or owner's details](edit-profile.qmd) |
+| GRM-06 | [Add vaccine paperwork](paperwork.qmd) |
+| GRM-07 | [Record a dog's allergies](allergies.qmd) |
+| GRM-08 | [Record how to handle a dog](handling.qmd) |
+| GRM-09 | [Add or change a dog's photo](dog-photo.qmd) |
+| GRM-10 | [Book a groom](book-a-groom.qmd) |
+| GRM-11 | [Change or cancel a booking](change-booking.qmd) |
+| GRM-12 | [Use the Calendar screen](calendar.qmd) |
+| GRM-13 | [Record the haircut and finish the groom](record-the-haircut.qmd) |

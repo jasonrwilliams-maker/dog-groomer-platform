@@ -25,3 +25,9 @@ This manual says **click**. On a tablet, tap wherever it says click.
 |---|---|
 | MGR-01 | [Sign in to your profile](signing-in.qmd) |
 | MGR-02 | [Open Admin](opening-admin.qmd) |
+| MGR-03 | [Read the Admin overview](admin-overview.qmd) |
+| MGR-04 | [Verify shots typed in without a copy](verify-shots.qmd) |
+| MGR-05 | [Check paperwork saved for later](paperwork-to-check.qmd) |
+| MGR-06 | [Give a second look to hand checks](second-look.qmd) |
+| MGR-07 | [Review allergy changes](allergy-reviews.qmd) |
+| MGR-08 | [Manage your passkeys and PIN](passkeys-and-pin.qmd) |

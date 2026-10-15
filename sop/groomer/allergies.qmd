@@ -1,0 +1,68 @@
+---
+title: "Record a dog's allergies"
+subtitle: "SOP GRM-07 · Groomer manual"
+---
+
+## Purpose
+
+Record what a dog is allergic to, so every groomer sees it before anything
+goes on the dog.
+
+## Applies to
+
+Every groomer, whenever an owner, a vet or the shop learns of an allergy.
+Anyone may add an allergy or change one. No manager needs to be on duty.
+
+## Before you begin
+
+- You are signed in to your profile.
+- The dog's card is open. See [GRM-02 Check in a
+  dog](checking-in-a-dog.qmd), steps 2 to 4.
+
+## Procedure
+
+### Add an allergy
+
+1. Find the **Allergies** box on the dog's card. Click **+ Add** at its top
+   right. The allergy form opens.
+
+   ![Adding an allergy](/screenshots/groomer/allergy-add.png)
+
+2. Click **Allergic to** and choose the allergy from the list, or type it,
+   for example oatmeal, chicken or fleas.
+
+   If what you typed is not on the list, the form says it **isn't on the
+   allergy list**. Click one of the names after **Did you mean**, or click
+   **No, it's one the list doesn't have**. For a new allergy, the form asks
+   **What kind of allergy is** it: click **Contact**, **Flea**,
+   **Environmental** or **Food**.
+
+3. Under **How bad**, click **Mild**, **Moderate**, **Severe** or
+   **Dangerous**.
+4. Under **Who says so**, click **Owner says**, **We saw it** or **Vet's
+   records**.
+5. If useful, click **Note** and type what happens or what to use instead.
+6. Click **Add allergy**. The allergy appears in the **Allergies** box, and
+   the box's title turns red.
+
+### Change an allergy
+
+1. In the **Allergies** box, click **Change** beside the allergy.
+2. Change **How bad**, **Who says so** or **Note**.
+3. If you made it less severe, click **Why?** and type the reason, for
+   example "vet says it was a one-off". The reason is required, and a
+   manager reviews the change.
+4. Click **Save**.
+
+### Take an allergy off
+
+1. In the **Allergies** box, click **Change** beside the allergy.
+2. Click **Take this allergy off**.
+3. Click **Why?** and type the reason, for example "entered on the wrong
+   dog". The reason is required, and a manager reviews the change.
+4. Click **Take it off**. The allergy is removed from the **Allergies** box.
+
+## Result
+
+The **Allergies** box on the dog's card lists every current allergy, how bad
+it is, and who says so.
