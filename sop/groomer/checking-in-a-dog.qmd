@@ -1,28 +1,64 @@
 ---
-title: "Checking in a dog"
+title: "Check in a dog"
+subtitle: "SOP GRM-02 · Groomer manual"
 ---
 
-When a dog arrives, find it on the dog list and open its card. The card tells
-you whether the dog is cleared to groom today.
+## Purpose
 
-## Before you start
+Find a dog when it arrives and confirm that it is cleared for today's groom.
 
-- You've [picked your name](signing-in.qmd).
+## Applies to
 
-## Steps
+Every groomer, each time a dog arrives at the shop.
 
-1. Search for the dog by its name or the owner's name.
+## Before you begin
 
-   ![The dog list](/screenshots/groomer/dog-list.png)
+- You are signed in to your profile. See [GRM-01 Sign in to your
+  profile](signing-in.qmd).
 
-2. Open the dog's card and check the vaccine line at the top.
+## Procedure
+
+1. After you select your profile, the Check-in screen opens. The left side of
+   the screen lists every dog on file. Each dog shows its owner's name and a
+   label: **Cleared** in green or **Can't groom** in red.
+
+   ![The Check-in screen](/screenshots/groomer/dog-list.png)
+
+2. Click the **Dog or owner name** search box on the left side of the screen.
+
+3. Type the name of the dog or the owner you are looking for. The list below
+   the search box shows only the dogs that match.
+
+   To search by the dog's name only, click **Dog** above the search box. To
+   search by the owner's name only, click **Owner**. Click **Both** to search
+   by either name again.
+
+4. Click the dog in the list. The dog's card opens on the right side of the
+   screen.
 
    ![A dog's card](/screenshots/groomer/dog-card.png)
 
-3. *(Steps to come.)*
+5. Read the box at the top of the dog's card:
+   - **Cleared for today's groom**, in green: the dog may be groomed.
+   - **Can't groom today**, in red: the dog may not be groomed today. The
+     line below names the vaccine that stops the groom, for example
+     **Rabies: expired**.
 
-::: {.callout-warning}
-## If the card says the dog can't be groomed
-Rabies that has run out stops the groom. Ask the owner for current paperwork;
-the system won't let the groom start until it's on file.
-:::
+6. If the dog is cleared, click **Start groom**. The box at the top of the
+   card changes to **Being groomed**, with the time and your name.
+
+## Result
+
+The dog's card shows **Being groomed — checked in at** the current time **by**
+your name, and a **Record the haircut** button.
+
+## If something goes wrong
+
+**Can't groom today**
+: The dog's rabies vaccine has expired, or the shop has no proof of it. The
+  **Start groom** button cannot be clicked. Ask the owner for a current
+  rabies certificate, then click **Add paperwork** on the dog's card.
+
+**No dog or owner by that name.**
+: The dog is not on file. Check the spelling, or click **Both** to search by
+  either name. If the dog is new to the shop, click **Add as a new client**.

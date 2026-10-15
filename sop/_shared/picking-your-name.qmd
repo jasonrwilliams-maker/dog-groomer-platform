@@ -1,8 +1,34 @@
-The shop's screen opens on **Who's grooming?**, with a button for everyone
-who works here. Tap your own name.
+## Before you begin
 
-![The welcome screen](/screenshots/shared/welcome.png)
+- The shop app is open on the shop tablet or computer.
 
-Picking a name is not a password. It tells the system who did the work, so
-every check-in, haircut and note carries the right name. Always pick your own,
-and pick again when someone else takes over the tablet.
+## Procedure
+
+1. Find the Welcome screen. It shows the shop's logo, the heading **Who's
+   grooming?**, and one button for each staff member.
+
+   ![The Welcome screen](/screenshots/shared/welcome.png)
+
+2. Click the button with your name on it. The Check-in screen opens.
+
+## Result
+
+The Check-in screen is open. At the top right of the screen, your name
+appears after **Grooming:**.
+
+![The Check-in screen, signed in as Tanya](/screenshots/groomer/dog-list.png)
+
+::: {.callout-important}
+## Always sign in as yourself
+The Welcome screen does not ask for a password. Click only your own name. The
+name after **Grooming:** is recorded on everything done on the screen until
+someone switches profiles.
+:::
+
+## Switching to another profile
+
+When another staff member takes over the tablet or computer:
+
+1. Click **Switch** at the top right of the screen. The Welcome screen opens.
+2. The next staff member clicks the button with their own name on it. The
+   Check-in screen opens under their name.

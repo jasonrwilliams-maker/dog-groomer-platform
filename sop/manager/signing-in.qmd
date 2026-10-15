@@ -1,11 +1,23 @@
 ---
-title: "Signing in"
+title: "Sign in to your profile"
+subtitle: "SOP MGR-01 · Manager manual"
 ---
+
+## Purpose
+
+Sign in to your profile so that the system records your name on every
+check-in, haircut, note and booking you make.
+
+## Applies to
+
+Every manager, at the start of each shift and whenever they take over the
+shop tablet or computer.
 
 {{< include /_shared/picking-your-name.qmd >}}
 
-## What's different for managers
+## What is different for managers
 
-Your name opens the same everyday screens as everyone else's. Admin is the
-one place that asks you to prove it's really you; see
-[Opening Admin](opening-admin.qmd).
+A manager's profile shows one more button at the top of the screen:
+**Admin**, next to **Check-in** and **Calendar**. Signing in to your profile
+does not open Admin. Admin asks for your passkey or PIN each time. See
+[MGR-02 Open Admin](opening-admin.qmd).

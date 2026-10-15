@@ -1,5 +1,16 @@
 ---
-title: "Signing in"
+title: "Sign in to your profile"
+subtitle: "SOP GRM-01 · Groomer manual"
 ---
+
+## Purpose
+
+Sign in to your profile so that the system records your name on every
+check-in, haircut, note and booking you make.
+
+## Applies to
+
+Every groomer, at the start of each shift and whenever they take over the
+shop tablet or computer.
 
 {{< include /_shared/picking-your-name.qmd >}}

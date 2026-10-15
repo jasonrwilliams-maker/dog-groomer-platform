@@ -2,11 +2,25 @@
 title: "Manager manual"
 ---
 
-For managers. You use the same main screen as the groomers, so the groomer
-manual applies to you too. This manual adds Admin: the shop's to-do list,
-verifying paperwork, and second looks.
+This manual covers Admin, the part of the shop app that only managers can
+open: verifying paperwork, second looks at hand checks, and reviewing
+changes. It is written for every manager.
 
-## In this manual
+Managers use the same everyday screens as groomers. The [Groomer
+manual](../groomer/index.qmd) applies to managers as well.
 
-- [Signing in](signing-in.qmd)
-- [Opening Admin](opening-admin.qmd)
+Each procedure is numbered and follows the same order: Purpose, Applies to,
+Before you begin, Procedure, Result, and If something goes wrong. Carry out
+the steps in order.
+
+::: {.callout-note}
+## Click or tap
+This manual says **click**. On a tablet, tap wherever it says click.
+:::
+
+## Procedures in this manual
+
+| Number | Procedure |
+|---|---|
+| MGR-01 | [Sign in to your profile](signing-in.qmd) |
+| MGR-02 | [Open Admin](opening-admin.qmd) |

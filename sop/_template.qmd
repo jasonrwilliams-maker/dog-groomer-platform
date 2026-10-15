@@ -1,24 +1,37 @@
 ---
-title: "What the reader is doing, in their words"
-# Copy this file into groomer/, manager/ or systems/, rename it, and add it to
-# the sidebar in _quarto.yml. Delete these comment lines.
+title: "Verb the task, in the reader's words"
+subtitle: "SOP GRM-00 · Groomer manual"
+# Copy this file into groomer/, manager/ or systems/, rename it, give it the
+# next free number, and add it to the sidebar in _quarto.yml. WRITING.md has
+# the rules for wording. Delete these comment lines.
 ---
 
-One or two sentences: when you'd do this, and what it's for.
+## Purpose
 
-## Before you start
+One sentence: what this procedure does, and why it matters to the shop.
 
-- What has to be true first (signed in, dog checked in, …)
+## Applies to
 
-## Steps
+Who carries out this procedure.
 
-1. The first thing to tap or type.
+## Before you begin
 
-   ![What the screen looks like at this step](/screenshots/groomer/file-name.png)
+- What must already be true (for example: you are signed in to your profile).
 
-2. The next thing.
+## Procedure
 
-::: {.callout-note}
-## If something stops you
-What the screen says, what it means, and what to do about it.
-:::
+1. Click **Exact button name** at the top right of the screen.
+   The screen that opens, or what changes.
+
+   ![What the screen looks like after this step](/screenshots/groomer/file-name.png)
+
+2. One action per step.
+
+## Result
+
+What the screen shows when the procedure is done correctly.
+
+## If something goes wrong
+
+**The message, exactly as the screen shows it**
+: What it means, and what to do.

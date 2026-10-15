@@ -2,9 +2,16 @@
 title: "Systems manual"
 ---
 
-For whoever looks after the shop's database and the AI that reads vaccine
-paperwork. Groomers and managers never need these pages.
+This manual covers the shop's database and the AI that reads vaccine
+paperwork. It is written for the person responsible for keeping them
+running. Groomers and managers do not need these procedures.
 
-## In this manual
+Each procedure is numbered and follows the same order: Purpose, Applies to,
+Before you begin, Procedure, Result, and If something goes wrong. Reference
+pages, such as SYS-01, explain how to use them instead.
 
-- [The shop's rules](shop-rules.qmd)
+## Procedures in this manual
+
+| Number | Procedure |
+|---|---|
+| SYS-01 | [Shop rules reference](shop-rules.qmd) |

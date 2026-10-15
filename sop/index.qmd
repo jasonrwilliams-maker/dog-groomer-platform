@@ -3,30 +3,30 @@ title: "Which manual is yours?"
 toc: false
 ---
 
-The shop's standard procedures, written for the three kinds of people who use
-the system. Start with your own manual; each one is complete on its own.
+These are the shop's standard operating procedures for the grooming shop app.
+There is one manual for each role. Open the manual for your role.
 
 ::: {.manual-cards}
 
 ::: {.manual-card}
 ### [Groomer manual](groomer/index.qmd){.stretched-link}
 
-For everyone on the floor. Signing in, finding a dog, checking it in, and
-recording the haircut.
+For groomers. Signing in, finding a dog, checking it in, and recording the
+haircut.
 :::
 
 ::: {.manual-card}
 ### [Manager manual](manager/index.qmd){.stretched-link}
 
-Everything in the groomer manual, plus Admin: verifying paperwork, second
-looks, and the to-do list.
+For managers. Opening Admin, verifying paperwork, second looks, and reviewing
+changes.
 :::
 
 ::: {.manual-card}
 ### [Systems manual](systems/index.qmd){.stretched-link}
 
-For whoever looks after the database and the AI that reads paperwork. The
-shop's rules, backups, and keeping the AI honest.
+For the person responsible for the database and the AI that reads paperwork.
+The shop's rules, backups, and checking the AI's accuracy.
 :::
 
 :::

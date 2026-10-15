@@ -13,6 +13,7 @@
 #                                  all from the app in one go, see
 #                                  screenshots/README.md
 #   _template.qmd                  copy this to start a new module
+#   WRITING.md                     how every module is worded and laid out
 #
 # Files and folders starting with _ are never pages on their own.
 project:

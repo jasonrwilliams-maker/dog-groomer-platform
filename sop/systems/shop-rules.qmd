@@ -1,11 +1,24 @@
 ---
-title: "The shop's rules"
+title: "Shop rules reference"
+subtitle: "SOP SYS-01 · Systems manual"
 ---
 
-Every rule the database enforces has its own code, from GR001 up. When the
-screen refuses something, the code tells you which rule did it.
+## Purpose
 
-This list is read straight out of the database files in `sql/` every time the
-manual is built, so it always matches the system as it is.
+Identify which rule stopped an action, from the rule code the system reports.
+
+## Applies to
+
+The person responsible for the shop's database.
+
+## How to use this reference
+
+Every rule the database enforces has its own code, from GR001 up. When the
+system refuses an action, it reports the code of the rule that refused it.
+Find the code in the table below. The **Added in** column names the database
+file where the rule is defined.
+
+This table is read from the database files in `sql/` each time the manual is
+built. It always matches the system as it is.
 
 {{< include _shop-rules-list.md >}}

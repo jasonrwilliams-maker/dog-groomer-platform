@@ -2,10 +2,22 @@
 title: "Groomer manual"
 ---
 
-For everyone who grooms. You'll only ever use the shop's main screen: the
-dog list, each dog's card, and the calendar.
+This manual covers the shop app's everyday screens: the Welcome screen, the
+Check-in screen, each dog's card, and the Calendar screen. It is written for
+every groomer.
 
-## In this manual
+Each procedure is numbered and follows the same order: Purpose, Applies to,
+Before you begin, Procedure, Result, and If something goes wrong. Carry out
+the steps in order.
 
-- [Signing in](signing-in.qmd)
-- [Checking in a dog](checking-in-a-dog.qmd)
+::: {.callout-note}
+## Click or tap
+This manual says **click**. On a tablet, tap wherever it says click.
+:::
+
+## Procedures in this manual
+
+| Number | Procedure |
+|---|---|
+| GRM-01 | [Sign in to your profile](signing-in.qmd) |
+| GRM-02 | [Check in a dog](checking-in-a-dog.qmd) |
