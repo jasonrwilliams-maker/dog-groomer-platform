@@ -9,13 +9,18 @@
 #                                  pulls one in with {{< include >}}
 #   screenshots/                   every picture, one folder per manual;
 #                                  replace a file and rebuild, every page
-#                                  that shows it updates
+#                                  that shows it updates. To retake them
+#                                  all from the app in one go, see
+#                                  screenshots/README.md
 #   _template.qmd                  copy this to start a new module
 #
 # Files and folders starting with _ are never pages on their own.
 project:
   type: website
   output-dir: _site
+  # Pages are the .qmd files; notes like screenshots/README.md stay notes.
+  render:
+    - "**/*.qmd"
   # Reads the shop's rules out of sql/ before every build, so the systems
   # manual's list of rules is never out of date.
   pre-render: python _scripts/shop_rules.py
