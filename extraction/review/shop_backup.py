@@ -9,7 +9,7 @@ A backup holds everything the shop's records need to come back whole:
                        the dog photos the records point to
   manifest.json        when it was made and what is in it
 
-Run it inside the records tool's container, which has the Postgres client
+Run it inside the Technical workbench's container, which has the Postgres client
 and sees the repo at /repo (see docker-compose.yml). From the
 dog-groomer-platform folder:
 
@@ -285,7 +285,7 @@ def main() -> None:
     sub.add_parser("list", help="List the backups, newest first.")
     r = sub.add_parser("restore", help="Put a backup back. Asks first.")
     r.add_argument("backup", nargs="?", help="The backup's file name. Leave out for the newest.")
-    r.add_argument("--yes", action="store_true", help="Do not ask (the records tool asks on its own screen).")
+    r.add_argument("--yes", action="store_true", help="Do not ask (the Technical workbench asks on its own screen).")
     a = ap.parse_args()
     if a.command == "save":
         save(a.label)

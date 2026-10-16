@@ -15,9 +15,6 @@ import {
 import { cn, formatDate } from "@/lib/utils";
 import { GoodStanding } from "@/components/ui/good-standing";
 
-// The labelling and review tool (extraction/review/). Managers only.
-const RECORDS_URL = process.env.NEXT_PUBLIC_RECORDS_URL ?? "http://localhost:8501";
-
 const REQUEST = {
   queued: "Request queued", sent: "Requested from owner", responded: "Owner replied",
   insufficient: "Paperwork received wasn't enough",
@@ -43,7 +40,7 @@ const GROUPS: { id: string; title: string; note: string; match: (l: ComplianceLi
   // Listed with its own buttons (WaitingCard), not as a plain group.
   { id: "waiting", title: "Waiting to be verified", note: "",
     match: (l) => !l.blocks_service && l.state === "received_unverified" },
-  { id: "disputed", title: "Disputed", note: "Two records disagree. Compare them in the records tool.",
+  { id: "disputed", title: "Disputed", note: "Two records disagree. Tell the person responsible for the database; they compare the two records.",
     match: (l) => !l.blocks_service && l.state === "disputed_record" },
 ];
 // Nothing should land here; if something does, it is shown rather than lost.
@@ -421,24 +418,6 @@ function AdminScreens({ groomerId, onOpenDog, list, onList }: {
       )}
 
       <div className="grid gap-4 md:grid-cols-2">
-        <Card>
-          <CardContent className="flex h-full flex-col justify-between gap-4 pt-5">
-            <div>
-              <p className="font-semibold">Vaccination records</p>
-              <p className="text-sm text-muted-foreground">
-                The test bench: label sample paperwork, compare AI prompts and models, and manage owner reminders.
-              </p>
-            </div>
-            <a
-              href={RECORDS_URL}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex h-10 items-center self-start rounded-[var(--radius)] border border-border bg-card px-4 text-sm font-medium hover:bg-muted"
-            >
-              Open records tool ↗
-            </a>
-          </CardContent>
-        </Card>
         <AiScoreboard rows={aiScore} />
       </div>
 

@@ -14,7 +14,7 @@
 --   5. "Not on their paperwork" marks what the model read as made up.
 --   6. A shot the model missed is added as a miss, counted with the rest.
 --   7. The scoreboard counts each outcome, by kind of copy; a counter reading
---      is not offered for confirming in the records tool.
+--      is not offered for confirming in the Technical workbench.
 
 BEGIN;
 SET search_path = groom, public;

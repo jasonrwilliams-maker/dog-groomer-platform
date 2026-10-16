@@ -30,11 +30,21 @@ computer only.
 |---|---|---|
 | **web** | <http://localhost:3000> | The shop's screens: Welcome, Check-in, Calendar and Admin |
 | **api** | <http://localhost:8000/docs> | The shop screens' connection to the database |
-| **review** | <http://localhost:8501> | The records tool: labelling, AI runs, and the database tests |
+| **review** | <http://localhost:8501> | The Technical workbench: labelling, AI runs, the database tests, resets, and backup and restore |
 | **db** | (none) | The database itself |
 
 The manual is not one of them. It is published on the web; see [SYS-06
 Publish the demo and the manual](publishing.qmd).
+
+### What the Technical workbench is
+
+The Technical workbench is the person responsible for the database's own
+screen. Managers and groomers do not use it, and Admin has no button for it.
+Open it at <http://localhost:8501>. Its **Run & test** screen holds the
+database tests, the resets and backup and restore; its other screens label
+sample paperwork, check the AI's readings, and send owner reminders (still in
+test mode). Its part is still named **review** in Docker and in commands such
+as `docker compose exec review`, so do not rename it.
 
 ## Procedure
 
@@ -77,8 +87,8 @@ Publish the demo and the manual](publishing.qmd).
 
 ## Result
 
-The shop's screens open at <http://localhost:3000>, and the records tool at
-<http://localhost:8501>.
+The shop's screens open at <http://localhost:3000>, and the Technical
+workbench at <http://localhost:8501>.
 
 ## If something goes wrong
 

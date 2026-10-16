@@ -7,7 +7,7 @@ subtitle: "SOP SYS-02 · Technical systems manual"
 
 Create the API key that lets the shop's app send paperwork to the AI
 (Anthropic's Claude), and put it where the app reads it, so that **Have the
-AI read it** works on the check screen and the records tool can run the AI.
+AI read it** works on the check screen and the Technical workbench can run the AI.
 
 ## Applies to
 
@@ -94,7 +94,7 @@ to Anthropic's API. The check screen says so beside the button.
     docker compose up -d --force-recreate api review
     ```
 
-    Docker restarts the shop's app and the records tool. Wait until the
+    Docker restarts the shop's app and the Technical workbench. Wait until the
     terminal shows each one as **Started**.
 
 ### Check that it works

@@ -1,6 +1,7 @@
-# How to use this tool
+# How to use the Technical workbench
 
-The tool has one job: make an **answer key** for each document — a record of
+The Technical workbench is for the person responsible for the database, not
+for everyday use in the shop. Its first job: make an **answer key** for each document — a record of
 exactly what the page prints — so a model run can be scored against it. Then it
 shows you where the model and the key disagree.
 
