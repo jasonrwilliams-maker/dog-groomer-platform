@@ -1,0 +1,47 @@
+---
+title: "Check paperwork saved for later"
+subtitle: "SOP MGR-05 · Manager manual"
+---
+
+## Purpose
+
+Read the copies of paperwork that groomers saved with **Check it later**, and
+record the dates of each shot.
+
+## Applies to
+
+Managers only.
+
+## Before you begin
+
+- Admin is open. See [MGR-02 Open Admin](opening-admin.qmd).
+
+## Procedure
+
+1. On the Admin overview, click **Paperwork to check**. The list opens, one
+   line per copy, with the dog, the owner, and **AI has read it** if the AI
+   has already read the copy.
+2. Click **Check it** beside the copy. The dog's **paperwork** box opens at
+   the top of the list.
+
+### Read the copy and enter the dates
+
+{{< include /_shared/checking-a-copy.qmd >}}
+
+6. Click **Done checking**. The box closes.
+
+   To stop part-way and come back to it, click **Save for later** instead.
+   The copy stays on the list.
+
+### Remove a copy
+
+If a copy is not paperwork for this dog, or cannot be read at all:
+
+1. Click **Remove** beside it.
+2. When asked **Remove this copy** of the dog's **paperwork?**, click **OK**.
+   Its pages are deleted.
+
+## Result
+
+The copy leaves the **Paperwork to check** list, and the dog's card shows the
+shots you saved. Shots you save need no second look.

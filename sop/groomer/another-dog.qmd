@@ -1,0 +1,40 @@
+---
+title: "Add another dog for an owner"
+subtitle: "SOP GRM-04 · Groomer manual"
+---
+
+## Purpose
+
+Add a second (or third) dog to an owner who is already on file, so the
+owner's contact details are entered only once.
+
+## Applies to
+
+Every groomer, when an existing client brings a dog the shop has not seen
+before.
+
+## Before you begin
+
+- You are signed in to your profile.
+- One of the owner's dogs is already on file.
+
+## Procedure
+
+1. Find one of the owner's dogs on the Check-in screen and click it. See
+   [GRM-02 Check in a dog](checking-in-a-dog.qmd), steps 2 to 4. The dog's
+   card opens.
+2. Click **▸ More details: vaccinations, last visit, contact** near the
+   bottom of the dog's card. The details open.
+3. In the **Last visit** box, click **+ Add another dog for** the owner's
+   first name. The **Another dog for** form opens, with the owner's name. The
+   owner's details are already filled in and are not shown.
+4. Fill in the **Dog** box. See [GRM-03 Add a new client](new-client.qmd),
+   steps 5 to 9.
+5. Click **Save and add paperwork**. The **Paperwork for** form opens.
+6. Add the dog's paperwork, or click **No paperwork today**. See [GRM-03 Add
+   a new client](new-client.qmd), steps 11 and 12.
+
+## Result
+
+The new dog appears in the list on the Check-in screen under the same owner.
+The other dog's card shows **Also brings** with the new dog's name.

@@ -1,0 +1,61 @@
+---
+title: "Edit a dog's or owner's details"
+subtitle: "SOP GRM-05 · Groomer manual"
+---
+
+## Purpose
+
+Correct or update the details on file: the owner's name, phone number or
+email, and the dog's name, breed, coat, sex or birthday.
+
+## Applies to
+
+Every groomer, whenever a detail on file is wrong or has changed, for
+example when an owner gives a new phone number.
+
+## Before you begin
+
+- You are signed in to your profile.
+- The dog's card is open. See [GRM-02 Check in a
+  dog](checking-in-a-dog.qmd), steps 2 to 4.
+
+## Procedure
+
+1. Click **Edit profile** at the top right of the dog's card. The **Edit**
+   form opens with the dog's name, showing everything on file.
+
+   ![The Edit profile form](/screenshots/groomer/edit-profile.png)
+
+2. To change the owner's contact details, go to the **Owner** box:
+   - Click **Phone**, delete the old number, and type the new one.
+   - Click **Email**, delete the old address, and type the new one.
+   - To correct the owner's name, click **First name** or **Last name** and
+     type the correction.
+
+3. To change the dog's details, go to the **Dog** box and change the field
+   that is wrong. The fields work the same way as when the client was added.
+   See [GRM-03 Add a new client](new-client.qmd), steps 5 to 9.
+
+4. Click **Save changes**. The form closes and the dog's card shows the new
+   details.
+
+   To leave without changing anything, click **Cancel**.
+
+::: {.callout-important}
+## The owner's details are shared
+If the owner has more than one dog, the form says **The owner's details are
+shared with** the other dogs' names. A change to the owner's name, phone or
+email shows on every one of their dogs' cards.
+:::
+
+## Result
+
+The dog's card shows the corrected details. The system records each change,
+what it was before and after, and who made it.
+
+## If something goes wrong
+
+### Save changes cannot be clicked
+
+Nothing on the form has changed yet, or no coat is chosen. Change the detail
+you meant to change, and make sure a button under **Coat** is selected.

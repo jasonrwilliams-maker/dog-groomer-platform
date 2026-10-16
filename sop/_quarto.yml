@@ -13,6 +13,7 @@
 #                                  all from the app in one go, see
 #                                  screenshots/README.md
 #   _template.qmd                  copy this to start a new module
+#   WRITING.md                     how every module is worded and laid out
 #
 # Files and folders starting with _ are never pages on their own.
 project:
@@ -39,20 +40,49 @@ website:
         contents:
           - groomer/signing-in.qmd
           - groomer/checking-in-a-dog.qmd
+          - groomer/new-client.qmd
+          - groomer/another-dog.qmd
+          - groomer/edit-profile.qmd
+          - groomer/paperwork.qmd
+          - groomer/allergies.qmd
+          - groomer/handling.qmd
+          - groomer/dog-photo.qmd
+          - groomer/book-a-groom.qmd
+          - groomer/change-booking.qmd
+          - groomer/calendar.qmd
+          - groomer/record-the-haircut.qmd
       - section: "Manager manual"
         href: manager/index.qmd
         contents:
           - manager/signing-in.qmd
           - manager/opening-admin.qmd
+          - manager/admin-overview.qmd
+          - manager/verify-shots.qmd
+          - manager/paperwork-to-check.qmd
+          - manager/second-look.qmd
+          - manager/allergy-reviews.qmd
+          - manager/passkeys-and-pin.qmd
       - section: "Systems manual"
         href: systems/index.qmd
         contents:
           - systems/shop-rules.qmd
+          - systems/ai-key.qmd
 
 format:
   html:
     theme: [cosmo, brand.scss]
     css: styles.css
+    # "On this page", on the right of every page: each section and its
+    # subsections, always expanded.
     toc: true
+    toc-title: "On this page"
+    toc-depth: 3
+    toc-expand: true
+    # Sections are numbered (4 Procedure, 6.1 …), so "GRM-02 §6.1" points to
+    # one exact place. Every heading also has a link icon on hover, to copy
+    # or bookmark a link straight to it.
+    number-sections: true
+    number-depth: 3
+    anchor-sections: true
     # Pictures open larger when tapped.
     lightbox: true

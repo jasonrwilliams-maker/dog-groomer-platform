@@ -1,0 +1,53 @@
+---
+title: "Add or change a dog's photo"
+subtitle: "SOP GRM-09 · Groomer manual"
+---
+
+## Purpose
+
+Put a photo of the dog on its profile, so staff can tell dogs apart at a
+glance in the list, on the card and on bookings.
+
+## Applies to
+
+Every groomer.
+
+## Before you begin
+
+- You are signed in to your profile.
+- The dog's card is open. See [GRM-02 Check in a
+  dog](checking-in-a-dog.qmd), steps 2 to 4.
+
+## Procedure
+
+1. Click **Add photo** under the picture at the top left of the dog's card.
+   If the dog already has a photo, the button says **Change photo**.
+
+   ![The photo buttons](/screenshots/groomer/dog-photo.png)
+
+2. Click one:
+   - **Take a photo:** on a tablet, the tablet's camera opens. On a computer,
+     the webcam opens: click **Take the picture**, then **Use this photo**.
+   - **Choose a photo:** choose a picture file saved on the tablet or
+     computer.
+
+   The photo is saved and appears on the dog's card.
+
+### Remove a photo
+
+1. Click **Change photo**.
+2. Click **Remove photo**.
+3. When asked **Take** the dog's **photo off their profile?**, click **OK**.
+
+To close the photo buttons without changing anything, click **Cancel**.
+
+## Result
+
+The dog's photo appears on its card, in the dog list, and on the booking
+form. Click the photo on the card to see it full size.
+
+::: {.callout-note}
+## Not in the online demo
+The online demo of the app does not keep photos, so these buttons only
+appear in the shop's own app.
+:::

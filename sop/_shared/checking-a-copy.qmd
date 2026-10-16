@@ -1,0 +1,23 @@
+The pages of the copy appear at the top, large, with the date form under
+them. Click a page to open it full size.
+
+1. If the **Have the AI read it** button is shown, you may click it. The AI
+   reads the pages and fills in the dates it finds, usually in under a
+   minute. Each date it fills in says **AI filled this in · check it
+   against the page**. The AI can be wrong: check every date it fills in
+   against the page.
+
+2. For each vaccine the paperwork shows, click **Given** and enter the date
+   the shot was given, exactly as the paper prints it.
+3. Click **Expires** and enter the expiry date, exactly as the paper prints
+   it.
+
+   A shot with no expiry date on the paper cannot be recorded. The system
+   never guesses one. Leave that vaccine's dates empty.
+
+4. For each vaccine that is **not** on the paperwork, click **Not on their
+   paperwork** beside its name. The line changes to **Asked the owner ·
+   reminder in a week**, and the shop asks the owner for it.
+
+5. Click **Save shot** (or **Save** followed by the number of shots). Each
+   saved vaccine shows **Saved · checked by hand** in green.

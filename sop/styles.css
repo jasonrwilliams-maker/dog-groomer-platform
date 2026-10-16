@@ -119,3 +119,20 @@
 .sidebar-navigation .sidebar-link.active .menu-text {
   color: #fbfafa;
 }
+
+/* "On this page": as easy to read as the side menu, with the title as a
+   heading and subsections indented under their section. */
+#TOC h2,
+#toc-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #231d2c;
+}
+
+#TOC .nav-link {
+  font-size: 0.95rem;
+}
+
+#TOC ul ul .nav-link {
+  font-size: 0.9rem;
+}

@@ -1,0 +1,101 @@
+---
+title: "Record the haircut and finish the groom"
+subtitle: "SOP GRM-13 · Groomer manual"
+---
+
+## Purpose
+
+Record what was done on the visit (services, coat, style and any changes from
+the dog's usual) and finish the groom, so the next groomer starts from it.
+
+## Applies to
+
+Every groomer, at the end of every groom.
+
+## Before you begin
+
+- The groom was started with **Start groom**. See [GRM-02 Check in a
+  dog](checking-in-a-dog.qmd).
+- The dog's card shows **Being groomed**.
+
+## Procedure
+
+1. Click **Record the haircut** on the dog's card. The **Record the haircut**
+   form opens. At the top, it shows the dog's **Usual style** and what was
+   done **Last time**.
+
+   To go back to the dog's card without saving, click **Back to** the dog's
+   name at the top right. The groom stays open.
+
+   ![The Record the haircut form](/screenshots/groomer/haircut.png)
+
+### What was done
+
+2. Under **What was done**, click each service done on this visit, for
+   example **Bath**, **Nail trim** and **Full groom**. A ticked service shows
+   **✓**. Only **Full groom** records a haircut.
+
+### The coat
+
+3. Under **Condition**, click the number that matches the coat, from **1**
+   to **5**.
+4. Under **Thickness**, click the coat's thickness.
+
+### The haircut
+
+This part appears only when **Full groom** is ticked. It starts from the
+dog's usual style.
+
+5. Under **Style**, click the style done today. Under **Length**, click the
+   length.
+6. Under **Zone by zone**, change only the parts of the dog you did
+   differently from the style, by choosing a different cut for that zone. To
+   put a zone back, click **Undo** beside it.
+7. If the haircut is different from the dog's usual, the form asks **Why is
+   it different from** the dog's **usual today?** Click a reason, for example
+   **Owner asked** or **Coat condition**, or type one.
+8. To make today's haircut the dog's usual style from now on, tick **Make
+   this** the dog's **usual style from now on**. The next groom starts from
+   it.
+
+### Finish
+
+9. Click **Notes for next time** and type how it went and anything the next
+   groomer should know.
+10. Click **Save and finish the groom**.
+
+## Result
+
+The groom is finished. The dog's card no longer shows **Being groomed**, and
+**Last visit** shows today's haircut.
+
+## If something goes wrong
+
+### To finish: …
+
+**Save and finish the groom** cannot be clicked. The words after **To
+finish:** list what is still missing. Fill in each one.
+
+### Matted all over: a #7F shave-down.
+
+You chose **Shave-down** for a matted coat. Tell the owner it will be short,
+and why.
+
+### Pelted: shaved close with a #10.
+
+The coat is at the worst condition. Tell the owner the shave can leave the
+skin red, itchy or nicked, and that the coat takes months to grow back. Then
+tick the box to confirm you have told them. The groom cannot be finished
+without it.
+
+### A coat at level … doesn't call for a shave-down.
+
+A shave-down on a coat in this condition needs a manager's OK. Ask a manager.
+Click **Reason** and type why, then under **OK'd by** click the manager who
+agreed.
+
+### … is under the shop's grooming age.
+
+The dog is a puppy under the shop's minimum age for a haircut. A haircut needs
+a manager's OK. Click **Reason** and type why, then under **OK'd by** click
+the manager who agreed.

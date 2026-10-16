@@ -1,0 +1,78 @@
+---
+title: "Book a groom"
+subtitle: "SOP GRM-10 · Groomer manual"
+---
+
+## Purpose
+
+Book a dog in for a future groom with a groomer, on a day and time that
+groomer is free.
+
+## Applies to
+
+Every groomer. Anyone may book for any groomer.
+
+## Before you begin
+
+- You are signed in to your profile.
+
+## Procedure
+
+### Open the booking form
+
+1. Open the booking form in one of two ways:
+   - **From the dog's card:** open the dog's card (see [GRM-02 Check in a
+     dog](checking-in-a-dog.qmd), steps 2 to 4) and click **Book a groom**.
+     The Calendar screen opens with the **Book a groom** form, and the dog
+     already chosen.
+   - **From the Calendar screen:** click **Calendar** at the top of the
+     screen, click a day, then click **Book a groom on this day**. Click
+     **Which dog?** and type the dog's or owner's name, then click the dog.
+
+   ![The Book a groom form](/screenshots/groomer/booking.png)
+
+### Choose the groom
+
+2. Click **Service** and choose the service, for example **Full groom** or
+   **Bath**. The form shows how long it **Takes**, using the usual length for
+   that service.
+3. If this groom needs a different length (for example, a big matted dog),
+   tick **Set a different length for this groom** and click the length, or
+   click **All day**.
+4. Click **Day** and choose the day.
+
+### Choose the groomer and time
+
+5. Under **Groomer**, click a groomer. Each one shows whether they have
+   groomed the dog before and when they are **Free from**. The dog's regular
+   groomer is marked **Usual groomer** and is listed first.
+
+   If you choose someone other than the usual groomer, the form asks why. Type
+   the reason, for example "Tanya is off, or the owner asked".
+
+6. Under **Start time with** the groomer, click a start time.
+7. If useful, click **Note** and type anything the groomer should know, for
+   example "owner drops off at 9".
+
+### Save the booking
+
+8. Read the **Book** button. It names the dog, the day, the start and end
+   times, and the groomer. If they are right, click it.
+
+## Result
+
+The booking appears on the Calendar screen on the chosen day, and on the
+dog's card under the box at the top.
+
+## If something goes wrong
+
+### Paperwork to ask for before the day
+
+The dog's vaccines will have expired by the day of the groom. The booking can
+still go ahead. Ask the owner to bring current paperwork. On the day, the
+groom cannot start without current rabies paperwork.
+
+### No room that day for this length
+
+The groomer has no free time that day for a groom this long. Choose a shorter
+length, another groomer or another day.

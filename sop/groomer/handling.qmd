@@ -1,0 +1,51 @@
+---
+title: "Record how to handle a dog"
+subtitle: "SOP GRM-08 · Groomer manual"
+---
+
+## Purpose
+
+Record how hard a dog is to handle, what sets it off and what helps, so the
+next groomer knows before they start.
+
+## Applies to
+
+Every groomer, after any groom where the dog's handling is worth knowing.
+
+## Before you begin
+
+- You are signed in to your profile.
+- The dog's card is open. See [GRM-02 Check in a
+  dog](checking-in-a-dog.qmd), steps 2 to 4.
+
+## Procedure
+
+### Add a handling note
+
+1. Find the **Handling** box on the dog's card. Click **+ Add note** at its
+   top right. The handling form opens.
+
+   ![Adding a handling note](/screenshots/groomer/handling-add.png)
+
+2. Under **How hard to handle**, click one: **Easy**, **Some care**,
+   **Needs care**, **Two people** or **Specialist only**. This is required.
+3. Under **What sets it off**, click everything that applies, for example
+   **Dryer**, **Clippers** or **Being held**. This is optional.
+4. Under **Where on the dog**, click the part of the dog, if the problem is
+   in one place. This is optional.
+5. Click **What happens, and what helps** and type a short note, for example
+   "Fine with the stand dryer on low".
+6. Click **Add note**. The note appears in the **Handling** box.
+
+### Correct a handling note
+
+Use this only to correct a note that was typed wrong. If the dog's behaviour
+has changed, add a new note instead, so the history shows the change.
+
+1. In the **Handling** box, click **Change** beside the note.
+2. Correct the note.
+3. Click **Save change**.
+
+## Result
+
+The **Handling** box on the dog's card shows each handling note.

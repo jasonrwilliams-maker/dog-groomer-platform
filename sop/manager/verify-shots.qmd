@@ -1,0 +1,36 @@
+---
+title: "Verify shots typed in without a copy"
+subtitle: "SOP MGR-04 · Manager manual"
+---
+
+## Purpose
+
+Confirm the dates of shots a groomer typed in with no copy of the paperwork,
+by checking them against the paper or with the vet.
+
+## Applies to
+
+Managers only.
+
+## Before you begin
+
+- Admin is open. See [MGR-02 Open Admin](opening-admin.qmd).
+- You have the paper in hand, or can call the vet's office.
+
+## Procedure
+
+1. On the Admin overview, click **Waiting to be verified**. The list opens,
+   one line per shot, with the dog, the owner and the dates typed in.
+2. Click **Verify** beside the shot. The check form opens under it.
+3. Compare the **Given** and **Expires** dates with the paper or with the
+   vet. If a date is wrong, click it and enter the right date.
+4. Under **How did you check it?**, click **Saw the owner's paper** or
+   **Called the vet's office**. If you checked another way, click
+   **Something else** and type how.
+5. Click **Verify**. If you changed a date, the button says **Save the dates
+   and verify**.
+
+## Result
+
+The shot leaves the **Waiting to be verified** list, and the dog's card shows
+it as verified.

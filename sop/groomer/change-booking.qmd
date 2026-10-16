@@ -1,0 +1,51 @@
+---
+title: "Change or cancel a booking"
+subtitle: "SOP GRM-11 · Groomer manual"
+---
+
+## Purpose
+
+Move a booking to another day, time, length or groomer, or cancel it.
+
+## Applies to
+
+Every groomer, when an owner calls to change or cancel.
+
+## Before you begin
+
+- You are signed in to your profile.
+
+## Procedure
+
+1. Click **Calendar** at the top of the screen. The Calendar screen opens.
+2. Click the day of the booking. The day's list opens on the right.
+
+   If you are not sure of the day, open the dog's card and look under the box
+   at the top: it shows **Booked** with the day and time. Click **See on the
+   calendar** there.
+
+3. Find the booking in the day's list and click **Change or cancel**. The
+   **Change** the dog's **booking** form opens.
+
+### Change the booking
+
+4. Change the **Day**, the length, the **Groomer** or the start time, the
+   same way as when booking. See [GRM-10 Book a groom](book-a-groom.qmd),
+   steps 3 to 7. The service cannot be changed; to change it, cancel this
+   booking and book again.
+5. Click the **Save** button. It names the new day, time and groomer.
+
+   To leave the booking as it was, click **Keep it as it was**.
+
+### Cancel the booking
+
+4. Click **Cancel this booking** at the bottom right of the form.
+5. If useful, click **Why is it cancelled?** and type the reason, for
+   example "owner called, dog unwell".
+6. Click **Yes, cancel** the dog's **booking**. To keep the booking after
+   all, click **Keep it**.
+
+## Result
+
+The Calendar screen shows the booking on its new day and time, or no longer
+shows it if it was cancelled.

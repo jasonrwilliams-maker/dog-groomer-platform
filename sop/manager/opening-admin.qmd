@@ -1,27 +1,59 @@
 ---
-title: "Opening Admin"
+title: "Open Admin"
+subtitle: "SOP MGR-02 · Manager manual"
 ---
 
-Admin holds the shop's to-do list: paperwork waiting to be verified, hand
-checks waiting for a second look, and changes to review. Only managers can
-open it, and it asks for proof each time.
+## Purpose
 
-## Before you start
+Open Admin, the shop's to-do list for managers: paperwork waiting to be
+verified, hand checks waiting for a second look, and changes to review.
 
-- You've [picked your name](signing-in.qmd).
-- You have a passkey set up on your phone, or an Admin PIN.
+## Applies to
 
-## Steps
+Managers only. Admin does not open for a groomer's profile.
 
-1. Tap **Admin**.
-2. Tap **Use my passkey** and follow your phone, or type your PIN and tap
-   **Open with PIN**.
+## Before you begin
 
-   ![Admin asking for a passkey or PIN](/screenshots/manager/admin-door.png)
+- You are signed in to your own profile. See [MGR-01 Sign in to your
+  profile](signing-in.qmd).
+- You have a passkey (your fingerprint, face or phone) or an Admin PIN set up.
 
-3. *(Steps to come.)*
+## Procedure
 
-::: {.callout-note}
-## When you're done
-Tap **Lock Admin**. It also locks by itself after 30 minutes.
-:::
+1. Click **Admin** at the top of the screen, next to **Check-in** and
+   **Calendar**. The screen shows **🔒 Admin is locked** and
+   **Prove it's you**, followed by your name.
+
+   ![Admin, locked](/screenshots/manager/admin-door.png)
+
+2. Open Admin in one of two ways:
+   - **With a passkey:** click **Use my passkey**, then follow the prompt on
+     your device. On a shop tablet, choose **use a phone** and scan the code
+     with your own phone.
+   - **With a PIN:** click the **Your PIN** box, type your PIN, then click
+     **Open with PIN**.
+
+   Admin opens.
+
+## Result
+
+A green bar at the top of Admin shows **🔓 Admin open for** your name, and the
+time at which Admin locks again.
+
+## When you are finished
+
+Click **Lock Admin** in the green bar. If you do not, Admin locks by itself
+after 30 minutes.
+
+## If something goes wrong
+
+### Set up how you open Admin
+
+This is the first time this profile has opened Admin. Click **Set up a
+passkey**, or type a PIN of 4 to 8 digits in **Set a PIN** and again in
+**Again**, then click **Set PIN**. After this, only you can change them.
+
+### The two PINs don't match.
+
+The PIN typed in **Again** is different from the first one. Type both
+again.

@@ -1,0 +1,38 @@
+---
+title: "Give a second look to hand checks"
+subtitle: "SOP MGR-06 · Manager manual"
+---
+
+## Purpose
+
+Look over shots that a groomer checked by hand against a photo of the
+paperwork, so the shop has a manager's second look on record.
+
+## Applies to
+
+Managers only.
+
+## Before you begin
+
+- Admin is open. See [MGR-02 Open Admin](opening-admin.qmd).
+
+## Procedure
+
+1. On the Admin overview, click **Checked by hand, to look over**. The list
+   opens, one line per shot, with the dog, the dates the groomer typed and
+   the groomer's name.
+2. Click **see the photo ↗** under the shot. The photo of the paperwork
+   opens in a new tab. Compare its dates with the dates listed, then return to
+   the Admin tab.
+3. Click one:
+   - **Matches the photo:** the dates are right. The shot leaves the list.
+   - **Doesn't match: fix it:** the dates are wrong. Go to step 4.
+4. Enter the dates as the photo shows them in **Given** and **Expires**.
+   Your dates replace the groomer's. The groomer's name stays on the record,
+   and what they typed is kept in the history.
+5. Click **Save the right dates**.
+
+## Result
+
+The shot leaves the **Checked by hand, to look over** list. On the dog's
+card, the shot shows **manager agreed**, or **dates fixed by** your name.
