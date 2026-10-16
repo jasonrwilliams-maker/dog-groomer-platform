@@ -30,3 +30,7 @@ web/out/
 # The SOP's build: the finished site and Quarto's working files.
 sop/_site/
 sop/.quarto/
+
+# Backups of the shop's data (extraction/review/shop_backup.py): real clients,
+# paperwork and photos, same reasoning as private/.
+backups/

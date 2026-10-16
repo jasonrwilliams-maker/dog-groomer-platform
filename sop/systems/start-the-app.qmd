@@ -101,5 +101,7 @@ Docker Desktop is not running. Open it from the Start menu, wait for
 ## Never add -v to docker compose down
 `docker compose down -v` deletes the database's storage: every dog, booking,
 haircut and copy of paperwork recorded in the shop's app. Use it only when
-starting over on purpose.
+starting over on purpose, and only after making a backup. To put the data
+back afterwards, see [SYS-08 Back up and restore the shop's
+data](backup-and-restore.qmd).
 :::

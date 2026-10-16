@@ -28,7 +28,8 @@ The person responsible for the shop's database, after pulling changes to
 ## Rebuilding the demo database deletes what was recorded
 Every client, booking, haircut, allergy and copy of paperwork entered in the
 shop's screens since the last rebuild is deleted. Rebuild it only to start
-over on purpose.
+over on purpose. Make a backup first; see [SYS-08 Back up and restore the
+shop's data](backup-and-restore.qmd).
 :::
 
 ## Procedure
