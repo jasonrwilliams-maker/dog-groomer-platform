@@ -120,6 +120,21 @@ def screen_ops(items: list[dict]):
             if st.button("Yes, rebuild the demo", type="primary"):
                 run_steps(ops.setup_demo_database(), "Demo database")
 
+        st.divider()
+        st.markdown("**Backups.** One zip file in `backups/` holds both databases and every file in `private/` "
+                    "(the copies of paperwork and the dog photos). Times in the name are UTC.")
+        if st.button("Back up now", help="Nothing is changed or replaced."):
+            run_steps(ops.save_backup(), "Backup")
+        saved = ops.backup_files()
+        chosen = st.selectbox("Backup to restore", saved, index=0 if saved else None,
+                              placeholder="No backups yet")
+        with st.popover("Restore this backup…", disabled=not chosen):
+            st.write(f"Replaces `{ops.DEMO_DB}` and `grooming_test` with the copies in `{chosen}`, and puts its "
+                     "files back into `private/`. Everything recorded in the shop's app since that backup is "
+                     "replaced. A backup of what is there now is saved first.")
+            if st.button("Yes, restore it", type="primary"):
+                run_steps(ops.restore_backup(chosen), "Restore")
+
     if "ops_last" in st.session_state and not st.session_state.pop("ops_ran_now", False):
         title, ok, lines = st.session_state["ops_last"]
         with st.expander(f"Last output — {title} ({'ok' if ok else 'failed'})", expanded=False):

@@ -4,7 +4,7 @@ number-sections: false
 ---
 
 This manual covers the technical systems behind the shop's app: running it,
-the database and its tests, the automatic checks on GitHub, publishing, and
+the database and its tests, backups, the automatic checks on GitHub, publishing, and
 the AI that reads vaccine paperwork. It is written for the person
 responsible for keeping them running. Groomers and managers do not need
 these procedures.
@@ -24,3 +24,4 @@ pages, such as SYS-01, explain how to use them instead.
 | SYS-05 | [Read the automatic checks on GitHub](github-checks.qmd) |
 | SYS-06 | [Publish the demo and the manual](publishing.qmd) |
 | SYS-07 | [Reset the test or demo database](reset-databases.qmd) |
+| SYS-08 | [Back up and restore the shop's data](backup-and-restore.qmd) |

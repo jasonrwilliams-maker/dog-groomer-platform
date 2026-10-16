@@ -76,6 +76,28 @@ def setup_demo_database() -> list[Step]:
     return steps
 
 
+BACKUP_TOOL = Path(__file__).resolve().parent / "shop_backup.py"
+
+
+def save_backup() -> list[Step]:
+    """shop_backup.py save: both databases and private/, as one zip in backups/."""
+    return [Step("python shop_backup.py save", [sys.executable, str(BACKUP_TOOL), "save"], BACKUP_TOOL.parent)]
+
+
+def restore_backup(name: str) -> list[Step]:
+    """shop_backup.py restore --yes: the screen has already asked."""
+    return [Step(f"python shop_backup.py restore {name}",
+                 [sys.executable, str(BACKUP_TOOL), "restore", name, "--yes"], BACKUP_TOOL.parent)]
+
+
+def backup_files() -> list[str]:
+    """Newest first, as shop_backup.py lists them."""
+    folder = REPO / "backups"
+    if not folder.exists():
+        return []
+    return sorted((p.name for p in folder.glob("shop-backup-*.zip")), reverse=True)
+
+
 def run_tests() -> list[Step]:
     tests = sorted(p.relative_to(REPO).as_posix() for p in (REPO / "tests").glob("*.sql"))
     return [Step("pg_prove tests/*.sql", ["pg_prove", *tests], REPO)]
