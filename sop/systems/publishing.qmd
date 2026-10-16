@@ -1,0 +1,84 @@
+---
+title: "Publish the demo and the manual"
+subtitle: "SOP SYS-06 · Technical systems manual"
+---
+
+## Purpose
+
+Publish the online demo of the app and this manual to the web, and preview
+the manual on this computer while editing it.
+
+## Applies to
+
+The person responsible for the shop's systems, and anyone who edits the
+manual.
+
+## Before you begin
+
+- GitHub Pages is switched on for the project. This is set once: on GitHub,
+  **Settings** → **Pages** → **Build and deployment** → **Source**: **GitHub
+  Actions**.
+
+## Where they are published
+
+| What | Address |
+|---|---|
+| The online demo | <https://jasonrwilliams-maker.github.io/dog-groomer-platform/> |
+| This manual | <https://jasonrwilliams-maker.github.io/dog-groomer-platform/sop/> |
+
+The demo runs the real database in the visitor's browser, with made-up dogs.
+It has no Admin, no photos and no AI. Nothing a visitor does is saved.
+
+## Procedure
+
+### Publish
+
+1. Merge the pull request into `master` on GitHub. See [SYS-05 Read the
+   automatic checks on GitHub](github-checks.qmd) first.
+
+   Publishing starts by itself. GitHub builds the demo and the manual
+   together and puts them up, usually within two minutes.
+
+2. To watch it, click the **Actions** tab on GitHub and click the newest run
+   named **browser demo**. A green check mark means it is published.
+3. Open the addresses above and reload the page. The changes show.
+
+### Preview the manual while editing
+
+4. Open a new terminal in the `dog-groomer-platform` folder.
+5. Type these commands, pressing Enter after each:
+
+   ```bash
+   cd sop
+   ```
+
+   ```bash
+   quarto preview
+   ```
+
+   The manual opens in the browser and reloads each time a page is saved.
+   Keep the terminal open while editing. To stop, click in the terminal and
+   press **Ctrl+C**.
+
+### Retake the screenshots
+
+6. When the app's screens change, retake every picture in the manual with
+   one command. The instructions are in `sop/screenshots/README.md`.
+
+## Result
+
+The demo and the manual at the addresses above show the latest merged
+version.
+
+## If something goes wrong
+
+### The term 'quarto' is not recognized
+
+The terminal was opened before Quarto was installed, or Quarto is not
+installed. Close the terminal and open a new one. If it still fails, install
+Quarto from [quarto.org](https://quarto.org/docs/get-started/).
+
+### The browser demo run failed
+
+Click the run on the **Actions** tab and read the step with the red ✕. The
+published site stays as it was until a run succeeds.

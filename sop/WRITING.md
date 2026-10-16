@@ -57,7 +57,7 @@ inside them. Do not number headings by hand.
 ## Module numbers
 
 Each module has a number in its subtitle: **GRM** for the groomer manual,
-**MGR** for the manager manual, **SYS** for the systems manual, then two
+**MGR** for the manager manual, **SYS** for the technical systems manual, then two
 digits (GRM-01, GRM-02, …). A number is never reused, even if its module is
 removed.
 

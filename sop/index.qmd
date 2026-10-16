@@ -24,10 +24,10 @@ changes.
 :::
 
 ::: {.manual-card}
-### [Systems manual](systems/index.qmd){.stretched-link}
+### [Technical systems manual](systems/index.qmd){.stretched-link}
 
-For the person responsible for the database and the AI that reads paperwork.
-The shop's rules, backups, and checking the AI's accuracy.
+For the person responsible for the app's technical systems. Running the app,
+the database and its tests, GitHub's checks, publishing, and the AI.
 :::
 
 :::

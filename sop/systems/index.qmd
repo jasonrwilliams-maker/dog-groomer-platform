@@ -1,11 +1,13 @@
 ---
-title: "Systems manual"
+title: "Technical systems manual"
 number-sections: false
 ---
 
-This manual covers the shop's database and the AI that reads vaccine
-paperwork. It is written for the person responsible for keeping them
-running. Groomers and managers do not need these procedures.
+This manual covers the technical systems behind the shop's app: running it,
+the database and its tests, the automatic checks on GitHub, publishing, and
+the AI that reads vaccine paperwork. It is written for the person
+responsible for keeping them running. Groomers and managers do not need
+these procedures.
 
 Each procedure is numbered and follows the same order: Purpose, Applies to,
 Before you begin, Procedure, Result, and If something goes wrong. Reference
@@ -17,3 +19,8 @@ pages, such as SYS-01, explain how to use them instead.
 |---|---|
 | SYS-01 | [Shop rules reference](shop-rules.qmd) |
 | SYS-02 | [Set up the AI's API key](ai-key.qmd) |
+| SYS-03 | [Start, stop and check the shop's app](start-the-app.qmd) |
+| SYS-04 | [Run the database tests](database-tests.qmd) |
+| SYS-05 | [Read the automatic checks on GitHub](github-checks.qmd) |
+| SYS-06 | [Publish the demo and the manual](publishing.qmd) |
+| SYS-07 | [Reset the test or demo database](reset-databases.qmd) |

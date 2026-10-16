@@ -62,11 +62,16 @@ website:
           - manager/second-look.qmd
           - manager/allergy-reviews.qmd
           - manager/passkeys-and-pin.qmd
-      - section: "Systems manual"
+      - section: "Technical systems manual"
         href: systems/index.qmd
         contents:
           - systems/shop-rules.qmd
           - systems/ai-key.qmd
+          - systems/start-the-app.qmd
+          - systems/database-tests.qmd
+          - systems/github-checks.qmd
+          - systems/publishing.qmd
+          - systems/reset-databases.qmd
 
 format:
   html:

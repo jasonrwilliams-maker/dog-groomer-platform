@@ -1,0 +1,66 @@
+---
+title: "Read the automatic checks on GitHub"
+subtitle: "SOP SYS-05 · Technical systems manual"
+---
+
+## Purpose
+
+Read the results of the checks GitHub runs on every change, and decide
+whether a change is safe to merge.
+
+## Applies to
+
+The person responsible for the shop's database, before merging any pull
+request.
+
+## Before you begin
+
+- You can sign in to the project on GitHub:
+  [github.com/jasonrwilliams-maker/dog-groomer-platform](https://github.com/jasonrwilliams-maker/dog-groomer-platform).
+
+## What GitHub checks
+
+Every time a change is pushed, and on every pull request, GitHub builds the
+project from scratch on its own computers and runs four checks. They use only
+the made-up test dogs. They never see real paperwork or the AI's API key.
+
+| Check | What it proves |
+|---|---|
+| **pgTAP suite** | Every database rule still refuses what it should. The same tests as [SYS-04](database-tests.qmd) |
+| **Groomer API tests** | The shop screens' connection to the database still works |
+| **Groomer interface type-check and build** | The shop's screens still build without errors |
+| **Extraction harness self-check** | The scoring of the AI's readings is still correct |
+
+The project's front page on GitHub shows a **tests** badge at the top of the
+README. **passing** in green means the latest checks on `master` passed.
+
+## Procedure
+
+1. Open the pull request on GitHub.
+2. Scroll down to the box above the **Merge pull request** button. It shows
+   the checks:
+   - **All checks have passed**, with a green check mark: go to step 5.
+   - A yellow dot: the checks are still running. Wait a few minutes and
+     reload the page.
+   - **Some checks were not successful**, with a red ✕: go to step 3.
+3. Click **Details** beside the check with the red ✕. The check's log opens.
+   The step that failed is marked with a red ✕. Click it to read its output.
+4. Do not merge. Fix the problem on the same branch and push again. The
+   checks run again by themselves.
+
+   If the failure looks unrelated to the change, for example a download that
+   timed out, click **Re-run jobs** at the top right of the log, then
+   **Re-run failed jobs**.
+
+5. Merge the pull request.
+
+### See every run
+
+The **Actions** tab at the top of the project on GitHub lists every run.
+Runs named **tests** are these checks. Runs named **browser demo** publish
+the demo and the manual; see [SYS-06](publishing.qmd).
+
+## Result
+
+The pull request shows **All checks have passed** before it is merged, and the
+**tests** badge on the README says **passing**.
