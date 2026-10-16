@@ -1,0 +1,156 @@
+---
+title: "Back up and restore the shop's data"
+subtitle: "SOP SYS-08 · Technical systems manual"
+---
+
+## Purpose
+
+Save a copy of everything the shop has recorded, so it can be put back if the
+computer fails, the database storage is deleted, or a change goes wrong.
+
+## Applies to
+
+The person responsible for the shop's database: at the end of each day the
+shop is open, before any change to the app or to Docker, and whenever the
+shop's data must be put back.
+
+## Before you begin
+
+- The shop's app is running. See [SYS-03 Start, stop and check the shop's
+  app](start-the-app.qmd).
+
+## What a backup holds
+
+A backup is one file, named with the date and time it was made, such as
+`shop-backup-2026-10-16_20-50-55.zip`. The time is in UTC (Greenwich time),
+so it can differ from the shop's clock by several hours. Every backup is
+kept in the `backups` folder inside the `dog-groomer-platform` folder.
+
+| Part | What it is |
+|---|---|
+| `grooming_demo` | The shop app's database: every client, dog, booking, haircut, allergy and paperwork record entered in the shop's screens |
+| `grooming_test` | The test database. See [SYS-07](reset-databases.qmd) |
+| `private/` | Every file in the `private` folder: the copies of paperwork and the dog photos that the records point to |
+
+::: {.callout-important}
+## A backup holds real clients' details
+The file holds names, phone numbers, vaccine paperwork and photos. Keep
+every copy of it as carefully as the paperwork itself. The `backups` folder
+is never published to GitHub.
+:::
+
+## Procedure
+
+### Make a backup
+
+1. Open the records tool at <http://localhost:8501>.
+2. In the left menu, click **Run & test**.
+3. Click the **Database** tab.
+4. Scroll down to **Backups**, at the bottom of the tab.
+5. Click **Back up now**. The output appears below the button. It finishes
+   with **Backup saved:** and the name of the new file. Nothing in the shop's
+   data is changed.
+
+### Keep a copy away from this computer
+
+A backup on this computer is lost if the computer is lost. Once a week, and
+after any large change:
+
+6. Open File Explorer.
+7. Open the `dog-groomer-platform` folder, then the `backups` folder.
+8. Copy the newest file to a USB drive kept away from the computer. The
+   newest file is the one with the latest date and time in its name.
+
+### Restore a backup
+
+Restoring replaces the shop's data with the copy in the backup. Everything
+recorded in the shop's screens since that backup was made is replaced.
+Before it replaces anything, the restore saves a backup of what is there
+now, so a restore can itself be undone.
+
+9. Open the records tool at <http://localhost:8501>.
+10. In the left menu, click **Run & test**.
+11. Click the **Database** tab.
+12. Scroll down to **Backups**, at the bottom of the tab.
+13. Click the **Backup to restore** list, below the **Back up now** button.
+    The backups appear, newest first.
+14. Click the backup to restore.
+15. Click **Restore this backup…**. A box opens that says what will be
+    replaced.
+16. Click **Yes, restore it**. The output appears below. It finishes with
+    **Restored from** and the name of the backup.
+17. Open <http://localhost:3000>, or reload it if it is already open. The
+    shop's screens show the data as it was when the backup was made.
+
+To restore a backup from a USB drive, first copy the file into the
+`backups` folder, then follow steps 9 to 17.
+
+### Do the same from a terminal instead
+
+The same commands, without the records tool. Open a terminal in the
+`dog-groomer-platform` folder.
+
+- To make a backup, type this command and press Enter:
+
+  ```bash
+  docker compose exec review python shop_backup.py save
+  ```
+
+- To see the backups, newest first, type this command and press Enter:
+
+  ```bash
+  docker compose exec review python shop_backup.py list
+  ```
+
+- To restore the newest backup, type this command and press Enter:
+
+  ```bash
+  docker compose exec review python shop_backup.py restore
+  ```
+
+  The command says what it will replace, then asks **Type yes to restore**.
+  Type `yes` and press Enter to restore. Type anything else to stop without
+  changing anything.
+
+- To restore an older backup, type its name after `restore`, for example:
+
+  ```bash
+  docker compose exec review python shop_backup.py restore shop-backup-2026-10-16_20-50-55.zip
+  ```
+
+## Result
+
+After a backup, the `backups` folder holds a new file with the date and time
+in its name. After a restore, the shop's screens show the clients, dogs,
+bookings and photos exactly as they were when that backup was made.
+
+## If something goes wrong
+
+### Stopped: cannot reach the database
+
+The app is not running. Start it (see [SYS-03](start-the-app.qmd)), then
+repeat the procedure.
+
+### Stopped: the backup's grooming_demo would not load. The shop's data was not changed.
+
+The backup file is damaged or incomplete. The shop's data is exactly as it
+was before the restore. Choose an older backup and restore that instead.
+
+### Stopped: there are no backups in backups/ to restore.
+
+The `backups` folder is empty. If a backup is on a USB drive, copy it into
+the `backups` folder first.
+
+### The wrong backup was restored
+
+Every restore first saves what was there, in a file whose name ends in
+`before-restore`. Restore that file to undo the restore: in step 14, click
+the newest file ending in `before-restore`.
+
+### The database storage was deleted
+
+This happens after `docker compose down -v`. Start the app (see
+[SYS-03](start-the-app.qmd)). On the first start it builds a fresh demo
+database holding only the made-up demo dogs. Then restore the newest backup, following steps 9 to 17. If the
+`backups` folder was lost with the computer, copy the newest backup from the
+USB drive into it first.
