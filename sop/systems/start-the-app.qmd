@@ -1,0 +1,105 @@
+---
+title: "Start, stop and check the shop's app"
+subtitle: "SOP SYS-03 · Technical systems manual"
+---
+
+## Purpose
+
+Start the shop's app on this computer, check that every part of it is
+running, and stop it.
+
+## Applies to
+
+The person responsible for the shop's database, at the start of the day,
+after the computer restarts, and whenever a screen will not open.
+
+## Before you begin
+
+- **Docker Desktop** is installed and running. Its whale icon appears in the
+  Windows taskbar, near the clock. If it is not there, open **Docker Desktop**
+  from the Start menu and wait until it says **Engine running**.
+- The `.env` file exists in the `dog-groomer-platform` folder. See [SYS-02 Set
+  up the AI's API key](ai-key.qmd), steps 8 and 9.
+
+## What the app is made of
+
+Docker runs four parts. Each one is reached at its own address on this
+computer only.
+
+| Part | Address | What it is |
+|---|---|---|
+| **web** | <http://localhost:3000> | The shop's screens: Welcome, Check-in, Calendar and Admin |
+| **api** | <http://localhost:8000/docs> | The shop screens' connection to the database |
+| **review** | <http://localhost:8501> | The records tool: labelling, AI runs, and the database tests |
+| **db** | (none) | The database itself |
+
+The manual is not one of them. It is published on the web; see [SYS-06
+Publish the demo and the manual](publishing.qmd).
+
+## Procedure
+
+### Start the app
+
+1. Open a terminal in the `dog-groomer-platform` folder.
+2. Type this command and press Enter:
+
+   ```bash
+   docker compose up -d --build --wait
+   ```
+
+   The first start takes several minutes. Later starts take under a minute.
+   The command finishes when every part is running.
+
+### Check that it is running
+
+3. Type this command and press Enter:
+
+   ```bash
+   docker compose ps
+   ```
+
+   Each of **api**, **review**, **web** and **db** shows **Up** in the
+   **STATUS** column. **db** also shows **(healthy)**.
+
+4. Open <http://localhost:3000> in a browser. The Welcome screen opens. The
+   first time after a start, it can take up to a minute to appear.
+
+### Stop the app
+
+5. Type this command and press Enter:
+
+   ```bash
+   docker compose stop
+   ```
+
+   Every part stops. Nothing is lost: the next start picks up where it left
+   off.
+
+## Result
+
+The shop's screens open at <http://localhost:3000>, and the records tool at
+<http://localhost:8501>.
+
+## If something goes wrong
+
+### localhost refused to connect
+
+That part of the app is not running. Check Docker Desktop is running, then
+repeat steps 2 and 3. If one part does not show **Up**, see what it says
+with this command, replacing `web` with the part's name:
+
+```bash
+docker compose logs web --tail 50
+```
+
+### failed to connect to the docker API
+
+Docker Desktop is not running. Open it from the Start menu, wait for
+**Engine running**, and repeat step 2.
+
+::: {.callout-warning}
+## Never add -v to docker compose down
+`docker compose down -v` deletes the database's storage: every dog, booking,
+haircut and copy of paperwork recorded in the shop's app. Use it only when
+starting over on purpose.
+:::

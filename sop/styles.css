@@ -136,3 +136,83 @@
 #TOC ul ul .nav-link {
   font-size: 0.9rem;
 }
+
+/* Where you are in your manual, and what you have read (_progress.html). */
+.sop-progress {
+  margin: 2.5rem 0 1.5rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid #d9d0d4;
+  border-radius: 0.5rem;
+  background: #fff;
+}
+
+.sop-progress p {
+  margin: 0 0 0.5rem;
+}
+
+.sop-where {
+  font-weight: 600;
+  color: #231d2c;
+}
+
+.sop-note {
+  font-size: 0.9rem;
+  color: #66545d;
+}
+
+.sop-bar {
+  height: 0.5rem;
+  border-radius: 999px;
+  background: #e3dde0;
+  overflow: hidden;
+  margin-bottom: 0.75rem;
+}
+
+.sop-bar span {
+  display: block;
+  height: 100%;
+  background: #6f4f5c;
+}
+
+.sop-row {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.sop-mark {
+  padding: 0.5rem 1rem;
+  border: 2px solid #6f4f5c;
+  border-radius: 0.5rem;
+  background: #fff;
+  color: #6f4f5c;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sop-mark:hover {
+  background: #fff5e3;
+}
+
+.sop-mark.sop-done {
+  border-color: #1f7a3d;
+  background: #e6f4ea;
+  color: #1f7a3d;
+}
+
+.sop-count {
+  font-size: 0.95rem;
+  color: #66545d;
+}
+
+/* A check after each page already read, in the side menu. */
+.sidebar-navigation a.sidebar-link.sop-read .menu-text::after {
+  content: " ✓";
+  color: #1f7a3d;
+  font-weight: 700;
+}
+
+.sidebar-navigation a.sidebar-link.active.sop-read .menu-text::after {
+  color: #fbfafa;
+}

@@ -1,6 +1,6 @@
 ---
 title: "Shop rules reference"
-subtitle: "SOP SYS-01 · Systems manual"
+subtitle: "SOP SYS-01 · Technical systems manual"
 ---
 
 ## Purpose

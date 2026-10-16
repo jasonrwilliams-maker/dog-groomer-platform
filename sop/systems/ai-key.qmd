@@ -1,6 +1,6 @@
 ---
 title: "Set up the AI's API key"
-subtitle: "SOP SYS-02 · Systems manual"
+subtitle: "SOP SYS-02 · Technical systems manual"
 ---
 
 ## Purpose
