@@ -97,6 +97,12 @@ docker compose logs web --tail 50
 Docker Desktop is not running. Open it from the Start menu, wait for
 **Engine running**, and repeat step 2.
 
+### The backend answered 500 after a merge
+
+A merged change added a file to `sql/`, and the app has not restarted since,
+so the shop's database does not have it yet. Restart the app and check the
+update. See [SYS-09 When the app updates its database](database-updates.qmd).
+
 ::: {.callout-warning}
 ## Never add -v to docker compose down
 `docker compose down -v` deletes the database's storage: every dog, booking,

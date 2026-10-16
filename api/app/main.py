@@ -24,6 +24,11 @@ from pydantic import BaseModel
 import json
 import logging
 import os
+import re
+import subprocess
+import sys
+import zipfile
+from pathlib import Path
 
 from starlette.concurrency import run_in_threadpool
 
@@ -265,6 +270,82 @@ def check_in_card(dog_id: UUID):
         "photo": db.row("""SELECT photo_group_id AS id, uploaded_at FROM dog_photo
                             WHERE dog_id = %s AND rendition = 'display'""", (dog_id,)),
     }
+
+
+@app.get("/admin/database-update")
+def database_update():
+    """How the last start's database update went (api/update_database.py):
+    a failed section, and the backup taken before it, for Admin to show."""
+    if db.row("SELECT to_regclass('upkeep.update_status') IS NOT NULL AS ok")["ok"] is not True:
+        return {"ok": True, "checked_at": None, "applied": [], "failed_file": None, "message": None, "backup": None}
+    found = db.row("""SELECT ok, checked_at, applied, failed_file, message, backup
+                        FROM upkeep.update_status WHERE id = 1""")
+    return found or {"ok": True, "checked_at": None, "applied": [], "failed_file": None, "message": None, "backup": None}
+
+
+# ------------------------------------------------- database and backups (Admin)
+
+REPO = Path(__file__).resolve().parents[2]
+BACKUPS = REPO / "backups"
+BACKUP_NAME = re.compile(r"^shop-backup-(\d{4}-\d{2}-\d{2})_(\d{2})-(\d{2})-(\d{2})(?:-(.+))?\.zip$")
+
+
+def _backup_row(path: Path) -> dict:
+    """One backup in backups/, as Admin lists it: when, why, how big, what is in it."""
+    m = BACKUP_NAME.match(path.name)
+    made = f"{m.group(1)}T{m.group(2)}:{m.group(3)}:{m.group(4)}+00:00" if m else None
+    label = (m.group(5) if m else None) or ""
+    why = ("before an update" if label == "before-update" else
+           "before a restore" if label == "before-restore" else
+           f"from Admin, by {label[3:].replace('-', ' ').title()}" if label.startswith("by-") else
+           "by hand")
+    row = {"name": path.name, "made_utc": made, "why": why, "bytes": path.stat().st_size,
+           "databases": [], "private_files": None, "readable": False}
+    try:
+        with zipfile.ZipFile(path) as z:
+            manifest = json.loads(z.read("manifest.json"))
+        row.update(databases=manifest.get("databases", []), private_files=manifest.get("private_files"),
+                   made_utc=manifest.get("made_utc", made), readable=True)
+    except (zipfile.BadZipFile, KeyError, ValueError, OSError):
+        pass
+    return row
+
+
+@app.get("/admin/system")
+def system_status():
+    """Database and backups, for Admin: the last start's update, every section
+    the shop's database holds, any in sql/ it doesn't yet (waiting for a
+    restart), and every backup, newest first."""
+    if str(REPO / "api") not in sys.path:
+        sys.path.append(str(REPO / "api"))
+    import update_database   # api/update_database.py: the same list of section files
+    files = update_database.section_files(REPO / "sql")
+    listed = db.row("SELECT to_regclass('upkeep.applied_section') IS NOT NULL AS ok")["ok"] is True
+    sections = db.rows("""SELECT file, how, applied_at FROM upkeep.applied_section
+                           ORDER BY applied_at DESC, file DESC""") if listed else []
+    held = {s["file"] for s in sections}
+    backups = sorted(BACKUPS.glob("shop-backup-*.zip"), key=lambda p: p.name, reverse=True) if BACKUPS.exists() else []
+    return {
+        "update": database_update(),
+        "sections": sections,
+        "waiting": [f for f in files if f not in held] if listed else [],
+        "section_files": len(files),
+        "backups": [_backup_row(p) for p in backups],
+    }
+
+
+@app.post("/admin/system/backup")
+def back_up_now(request: Request):
+    """A backup now, from Admin, named for the manager who took it (shop_backup.py)."""
+    who = db.row("SELECT display_name FROM groomer WHERE id = %s", (request.state.admin_id,))
+    label = "by-" + re.sub(r"[^a-z0-9]+", "-", (who["display_name"] if who else "manager").lower()).strip("-")
+    out = subprocess.run([sys.executable, str(REPO / "extraction" / "review" / "shop_backup.py"), "save",
+                          "--label", label], capture_output=True, text=True, cwd=REPO, timeout=600)
+    said = (out.stdout + out.stderr).strip()
+    found = re.search(r"Backup saved: backups/(\S+)", said)
+    if out.returncode != 0 or not found:
+        raise HTTPException(500, "The backup did not work: " + (said.splitlines()[-1] if said else "no output"))
+    return _backup_row(BACKUPS / found.group(1))
 
 
 @app.get("/admin/compliance")

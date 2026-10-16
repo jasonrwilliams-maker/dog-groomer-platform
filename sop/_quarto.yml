@@ -64,6 +64,7 @@ website:
           - manager/passkeys-and-pin.qmd
           - manager/staff.qmd
           - manager/reset-admin-access.qmd
+          - manager/database-and-backups.qmd
       - section: "Technical systems manual"
         href: systems/index.qmd
         contents:
@@ -75,6 +76,7 @@ website:
           - systems/publishing.qmd
           - systems/reset-databases.qmd
           - systems/backup-and-restore.qmd
+          - systems/database-updates.qmd
 
 format:
   html:

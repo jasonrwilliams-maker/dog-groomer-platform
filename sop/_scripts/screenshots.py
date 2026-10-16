@@ -109,6 +109,8 @@ SHOTS = [
     # The first other manager's Reset Admin access: it needs a second manager on the staff list.
     Shot("manager/staff-reset.png", site="local", unlocked=True,
          steps=[("tap", "Staff working here"), ("tap", "Reset Admin access")], ready="Yes, reset Admin access"),
+    Shot("manager/system.png", site="local", unlocked=True, steps=[("tap", "Database and backups")],
+         ready="Sections in the database", whole_page=True),
     # Last: its box stays open in the green bar until Done.
     Shot("manager/passkeys-and-pin.png", site="local", unlocked=True, steps=[("tap", "Passkeys and PIN")],
          ready="Your passkeys"),

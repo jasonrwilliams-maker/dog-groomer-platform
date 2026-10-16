@@ -1,0 +1,113 @@
+---
+title: "When the app updates its database"
+subtitle: "SOP SYS-09 · Technical systems manual"
+---
+
+## Purpose
+
+Know what the app does to the shop's database when it starts after a change
+is merged, check that it worked, and put things right if it did not.
+
+## Applies to
+
+The person responsible for the shop's database, after merging any change
+that adds a file to the `sql/` folder, and whenever Admin shows **The shop's
+database could not be brought up to date**.
+
+## Before you begin
+
+- The shop's app is running. See [SYS-03 Start, stop and check the shop's
+  app](start-the-app.qmd).
+
+## What happens when the app starts
+
+The shop's rules arrive as numbered files in the `sql/` folder, one per
+feature, for example `34_staff.sql`. The shop's database keeps its own list of
+the files already in it.
+
+Each time the app starts, it compares that list with the `sql/` folder:
+
+1. **Nothing new:** it does nothing.
+2. **A new file:** it first takes a backup, named with **before-update**, in
+   the `backups/` folder. See [SYS-08 Back up and restore the shop's
+   data](backup-and-restore.qmd).
+3. It adds each new file in number order. Each file goes in completely, or
+   not at all.
+4. **If a file cannot be added,** it stops there. The database is exactly as
+   it was before that file. The app still starts, and Admin shows a red box
+   naming the file and the backup.
+
+It never adds a file twice, and it never rebuilds the database or deletes
+anything.
+
+## Procedure
+
+### Check an update after merging
+
+1. Restart the app so it picks up the merged files. In a terminal in the
+   `dog-groomer-platform` folder, type this command and press Enter:
+
+   ```bash
+   docker compose restart api
+   ```
+
+2. Wait about 30 seconds, then type this command and press Enter:
+
+   ```bash
+   docker compose logs api --tail 20
+   ```
+
+   Or, without a terminal: open Admin and click **Database and backups**. It
+   shows the same thing, with every section and every backup. See [MGR-11
+   Check the database and backups](../manager/database-and-backups.qmd).
+
+3. Read the lines that start with **[database update]**:
+   - **grooming_demo is up to date** followed by **added** and the file
+     names: the new files went in. You are finished.
+   - **grooming_demo is up to date** followed by a number of sections, and
+     nothing added: there was nothing new.
+   - **could not be added, so the update stopped there:** go to [Put a
+     failed update right](#put-a-failed-update-right).
+
+### Put a failed update right
+
+4. Open Admin. The red box **The shop's database could not be brought up to
+   date** names the file that failed and the backup taken first. Click **What
+   the database said** to see the error.
+5. Do not restore the backup yet. The database is still as it was before the
+   failed file, so nothing has been lost. Only the new feature is missing.
+6. Send the file's name and the error to whoever wrote the change. The fix is
+   a corrected file, merged like any other change.
+7. When the corrected file is merged, repeat steps 1 to 3. The update tries
+   again, and the red box goes away when it succeeds.
+
+Restore the backup (see [SYS-08](backup-and-restore.qmd)) only if the shop's
+records look wrong after an update that said it succeeded.
+
+## Result
+
+The log says **grooming_demo is up to date**, and Admin shows no red box.
+
+## If something goes wrong
+
+### The backup before the update did not work, so nothing was added.
+
+The update stopped before changing anything, because it could not take a
+backup first. The most common reason is a full disk. Free some space, or move
+old backups from `backups/` to a USB drive, then repeat steps 1 to 3.
+
+### The backend answered 500 after a merge
+
+The app has not restarted since the merge, so the new files are not in the
+database yet. Repeat steps 1 to 3.
+
+## For whoever writes a new section file
+
+- Give it the next free number, and start it with
+  `SET search_path = groom, public;` like the others.
+- It runs once, in one transaction, on a database that already has data in
+  it. It must work on that database, not only on an empty one.
+- `ALTER TYPE … ADD VALUE` works, but the new value cannot be used later in
+  the same file. Put any use of it in the next file.
+- Never edit a file that has already been merged: the shop's database will
+  not run it again. Make a new file instead.

@@ -280,14 +280,15 @@ def restore(name: str | None, yes: bool) -> None:
 def main() -> None:
     ap = argparse.ArgumentParser(description="Back up and restore the shop's data.")
     sub = ap.add_subparsers(dest="command", required=True)
-    sub.add_parser("save", help="Make a new backup in backups/.")
+    sv = sub.add_parser("save", help="Make a new backup in backups/.")
+    sv.add_argument("--label", default="", help="Added to the file name, e.g. before-update.")
     sub.add_parser("list", help="List the backups, newest first.")
     r = sub.add_parser("restore", help="Put a backup back. Asks first.")
     r.add_argument("backup", nargs="?", help="The backup's file name. Leave out for the newest.")
     r.add_argument("--yes", action="store_true", help="Do not ask (the records tool asks on its own screen).")
     a = ap.parse_args()
     if a.command == "save":
-        save()
+        save(a.label)
     elif a.command == "list":
         list_backups()
     else:
