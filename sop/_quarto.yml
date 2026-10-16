@@ -91,3 +91,5 @@ format:
     anchor-sections: true
     # Pictures open larger when tapped.
     lightbox: true
+    # "Procedure 4 of 13", and Mark as read, at the bottom of each page.
+    include-after-body: _progress.html

@@ -1,0 +1,112 @@
+<!--
+  Where you are in your manual, and what you have read.
+
+  Every page in a manual shows "Procedure 4 of 13 · Groomer manual" with a
+  bar, and a Mark as read button. Pages marked read get a check in the side
+  menu, and each manual's front page says how many you have read. It reads
+  the manual's pages from the side menu, so a new module counts as soon as it
+  is in _quarto.yml.
+
+  What you have read is remembered by this browser only (localStorage): on a
+  shared tablet, everyone who uses it shares one record. Nothing is sent
+  anywhere.
+-->
+<script>
+(function () {
+  var KEY = "sop-read";
+
+  function load() {
+    try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) { return {}; }
+  }
+  function store(read) {
+    try { localStorage.setItem(KEY, JSON.stringify(read)); } catch (e) { /* not remembered */ }
+  }
+  // One name per page, the same on every page that links to it.
+  function pageId(href) {
+    return new URL(href, location.href).pathname.replace(/index\.html$/, "");
+  }
+
+  var here = pageId(location.href);
+  var read = load();
+
+  // The manual this page belongs to: the side menu section holding it.
+  var sections = document.querySelectorAll("#quarto-sidebar .sidebar-item-section");
+  var manual = null, front = null, pages = [];
+  sections.forEach(function (s) {
+    var head = s.querySelector(":scope > .sidebar-item-container a.sidebar-link");
+    var links = Array.prototype.slice.call(s.querySelectorAll("ul.sidebar-section a.sidebar-link"));
+    var ids = links.map(function (a) { return pageId(a.href); });
+    if (head && (pageId(head.href) === here || ids.indexOf(here) !== -1)) {
+      manual = head.textContent.trim();
+      front = pageId(head.href) === here;
+      pages = ids;
+    }
+  });
+
+  // A check beside every page already read, in every manual.
+  function markMenu() {
+    document.querySelectorAll("#quarto-sidebar ul.sidebar-section a.sidebar-link").forEach(function (a) {
+      a.classList.toggle("sop-read", !!read[pageId(a.href)]);
+    });
+  }
+  markMenu();
+
+  if (!manual) return;
+  var main = document.querySelector("main");
+  var nav = document.querySelector("nav.page-navigation");
+  if (!main) return;
+
+  function countRead() {
+    return pages.filter(function (p) { return read[p]; }).length;
+  }
+
+  var box = document.createElement("div");
+  box.className = "sop-progress";
+
+  if (front) {
+    // The manual's front page: how far through it you are.
+    var bar = '<div class="sop-bar"><span style="width:' + (100 * countRead() / pages.length) + '%"></span></div>';
+    box.innerHTML = '<p><strong>You have read ' + countRead() + ' of ' + pages.length +
+      ' procedures</strong> in the ' + manual + '.</p>' + bar +
+      '<p class="sop-note">Remembered on this device only. Mark each procedure as read at the bottom of its page.</p>';
+    main.querySelector("header, #title-block-header")
+      ? main.querySelector("header, #title-block-header").insertAdjacentElement("afterend", box)
+      : main.prepend(box);
+    return;
+  }
+
+  // A procedure: its number in the manual, and the button.
+  var n = pages.indexOf(here) + 1;
+  var button = document.createElement("button");
+  button.type = "button";
+  button.className = "sop-mark";
+  function show() {
+    var done = !!read[here];
+    button.textContent = done ? "✓ Read" : "Mark as read";
+    button.classList.toggle("sop-done", done);
+    button.setAttribute("aria-pressed", done ? "true" : "false");
+  }
+  button.addEventListener("click", function () {
+    if (read[here]) delete read[here]; else read[here] = true;
+    store(read);
+    show();
+    markMenu();
+    counter.textContent = countRead() + " of " + pages.length + " read";
+  });
+  show();
+
+  var counter = document.createElement("span");
+  counter.className = "sop-count";
+  counter.textContent = countRead() + " of " + pages.length + " read";
+
+  box.innerHTML = '<p class="sop-where">Procedure ' + n + ' of ' + pages.length + ' · ' + manual + '</p>' +
+    '<div class="sop-bar"><span style="width:' + (100 * n / pages.length) + '%"></span></div>';
+  var row = document.createElement("div");
+  row.className = "sop-row";
+  row.appendChild(button);
+  row.appendChild(counter);
+  box.appendChild(row);
+
+  if (nav) nav.insertAdjacentElement("beforebegin", box); else main.appendChild(box);
+})();
+</script>
