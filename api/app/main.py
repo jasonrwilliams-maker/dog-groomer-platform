@@ -1358,3 +1358,62 @@ def remove_passkey(passkey_id: UUID, request: Request):
     _write("SELECT remove_manager_passkey(%s, %s) AS ok",
            (passkey_id, passkeys.token_hash(request.headers.get(ADMIN_HEADER))))
     return {"removed": True}
+
+
+# --------------------------------------------------------------- staff (section 34)
+
+@app.get("/admin/staff")
+def staff():
+    """Everyone who works here, then everyone who used to."""
+    return db.rows("SELECT * FROM v_staff ORDER BY working_here DESC, lower(name)")
+
+
+class StaffMember(BaseModel):
+    name: str
+    email: str
+    role: Literal["groomer", "manager"]
+
+
+def _staff_write(sql: str, params: tuple, request: Request):
+    """A change to the staff list, as the manager whose Admin is open."""
+    try:
+        with db.connect() as conn:
+            return conn.execute(sql, (*params, passkeys.token_hash(request.headers.get(ADMIN_HEADER)))).fetchone()
+    except psycopg.Error as e:
+        if e.sqlstate == "P0002":                       # no such staff member
+            raise HTTPException(404, "No such staff member.") from None
+        _db_refusal(e)
+
+
+@app.post("/admin/staff", status_code=201)
+def add_staff(body: StaffMember, request: Request):
+    row = _staff_write("SELECT add_staff_member(%s, %s, %s, %s) AS id", (body.name, body.email, body.role), request)
+    return {"id": row["id"]}
+
+
+@app.put("/admin/staff/{staff_id}")
+def change_staff(staff_id: UUID, body: StaffMember, request: Request):
+    row = _staff_write("SELECT update_staff_member(%s, %s, %s, %s, %s) AS changed",
+                       (staff_id, body.name, body.email, body.role), request)
+    return {"changed": row["changed"]}
+
+
+@app.post("/admin/staff/{staff_id}/left")
+def staff_left(staff_id: UUID, request: Request):
+    """No longer working here: off the Welcome screen and the booking list, still on past records."""
+    row = _staff_write("SELECT set_staff_working(%s, false, %s) AS changed", (staff_id,), request)
+    return {"changed": row["changed"]}
+
+
+@app.post("/admin/staff/{staff_id}/back")
+def staff_back(staff_id: UUID, request: Request):
+    row = _staff_write("SELECT set_staff_working(%s, true, %s) AS changed", (staff_id,), request)
+    return {"changed": row["changed"]}
+
+
+@app.post("/admin/staff/{staff_id}/reset-admin")
+def reset_staff_admin(staff_id: UUID, request: Request):
+    """Another manager's lost phone: their passkeys and PIN go, and they set
+    Admin up again themselves next time they open it."""
+    _staff_write("SELECT reset_admin_access(%s, %s) AS ok", (staff_id,), request)
+    return {"reset": True}

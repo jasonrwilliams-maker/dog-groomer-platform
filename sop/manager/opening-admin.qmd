@@ -53,6 +53,9 @@ This is the first time this profile has opened Admin. Click **Set up a
 passkey**, or type a PIN of 4 to 8 digits in **Set a PIN** and again in
 **Again**, then click **Set PIN**. After this, only you can change them.
 
+You also see this after another manager resets your Admin access. See
+[MGR-10 Reset a manager's Admin access](reset-admin-access.qmd).
+
 ### The two PINs don't match.
 
 The PIN typed in **Again** is different from the first one. Type both

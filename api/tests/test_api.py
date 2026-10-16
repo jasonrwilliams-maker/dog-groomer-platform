@@ -114,7 +114,7 @@ def test_unknown_dog_and_unknown_groomer_are_plain_errors(client):
 
 def test_staff_list_says_who_is_a_manager(client):
     roles = {g["name"]: g["role"] for g in client.get("/groomers").json()}
-    assert roles == {"Nadia": "manager", "Tanya": "groomer"}
+    assert roles == {"Nadia": "manager", "Mia": "manager", "Tanya": "groomer"}
 
 
 def test_search_can_look_at_only_the_dog_or_only_the_owner(client):
@@ -752,3 +752,57 @@ def test_a_passkey_added_opens_admin_again_and_again(client):
     replay = client.post("/admin/access/passkey", json={"groomer_id": nadia, "credential": device.sign(options)},
                          headers={"X-Admin-Session": ""})
     assert replay.status_code == 409, "a challenge opens Admin once at most"
+
+
+def test_a_manager_keeps_the_staff_list_and_nobody_is_deleted(client):
+    assert client.get("/admin/staff", headers={"X-Admin-Session": ""}).status_code == 401
+
+    added = client.post("/admin/staff", json={"name": "Robin", "email": "Robin@pawsandpolish.example", "role": "groomer"})
+    assert added.status_code == 201, added.text
+    robin = added.json()["id"]
+    assert "Robin" in [g["name"] for g in client.get("/groomers").json()]
+    twice = client.post("/admin/staff", json={"name": "Robin B", "email": "robin@pawsandpolish.example", "role": "groomer"})
+    assert twice.status_code == 409 and twice.json()["message"] == "Someone on the staff list already has that email"
+
+    renamed = client.put(f"/admin/staff/{robin}", json={"name": "Robin Hale", "email": "robin@pawsandpolish.example",
+                                                         "role": "groomer"})
+    assert renamed.json() == {"changed": True}
+    row = next(s for s in client.get("/admin/staff").json() if s["id"] == robin)
+    assert row["name"] == "Robin Hale" and row["working_here"] is True and row["admin_set_up"] is None
+
+    assert client.post(f"/admin/staff/{robin}/left").json() == {"changed": True}
+    assert "Robin Hale" not in [g["name"] for g in client.get("/groomers").json()]
+    gone = next(s for s in client.get("/admin/staff").json() if s["id"] == robin)
+    assert gone["working_here"] is False and gone["left_at"] is not None
+    assert client.post(f"/admin/staff/{robin}/back").json() == {"changed": True}
+    assert "Robin Hale" in [g["name"] for g in client.get("/groomers").json()]
+    assert client.post(f"/admin/staff/{robin}/left").status_code == 200
+    assert client.post("/admin/staff/00000000-0000-0000-0000-000000000000/left").status_code == 404
+
+
+def test_a_manager_resets_another_managers_admin_but_never_sets_it_up_for_them(client):
+    nadia, mia = groomer(client, "Nadia"), groomer(client, "Mia")
+    # With Nadia's Admin open, Mia can't be set up: she does it herself, from a locked Admin.
+    for_her = client.post("/admin/access/set-pin", json={"groomer_id": mia, "pin": "1357"})
+    assert for_her.status_code == 409 and for_her.json()["code"] == "GR037"
+    herself = client.post("/admin/access/set-pin", json={"groomer_id": mia, "pin": "1357"},
+                          headers={"X-Admin-Session": ""}).json()["session"]
+    hers = {"X-Admin-Session": herself["token"]}
+    assert client.get("/admin/staff", headers=hers).status_code == 200
+
+    own = client.post(f"/admin/staff/{mia}/reset-admin", headers=hers)
+    assert own.status_code == 409 and own.json()["code"] == "GR041"
+    assert client.post(f"/admin/staff/{mia}/reset-admin").json() == {"reset": True}
+    assert client.get("/admin/staff", headers=hers).status_code == 401, "her Admin is locked"
+    assert client.get(f"/admin/access/{mia}", headers={"X-Admin-Session": ""}).json()["set_up"] is False
+    again = client.post("/admin/access/set-pin", json={"groomer_id": mia, "pin": "8642"}, headers={"X-Admin-Session": ""})
+    assert again.status_code == 200 and again.json()["session"]["name"] == "Mia"
+
+    # Mia back to a groomer: Nadia is the only manager, and can't step down.
+    assert client.put(f"/admin/staff/{mia}", json={"name": "Mia", "email": "mia@pawsandpolish.example",
+                                                   "role": "groomer"}).status_code == 200
+    last = client.put(f"/admin/staff/{nadia}", json={"name": "Nadia", "email": "nadia@pawsandpolish.example",
+                                                     "role": "groomer"})
+    assert last.status_code == 409 and last.json()["code"] == "GR039"
+    leave = client.post(f"/admin/staff/{nadia}/left")
+    assert leave.status_code == 409 and leave.json()["code"] == "GR039"

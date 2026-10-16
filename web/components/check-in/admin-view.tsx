@@ -6,9 +6,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { CopyPages, PaperworkIntake } from "@/components/check-in/paperwork-intake";
 import { RecordFixForm } from "@/components/check-in/record-fix-form";
+import { StaffList } from "@/components/check-in/staff-list";
 import {
   api, paperworkUrl, type AiAccuracy, type DogSummary, type ComplianceLine, type ComplianceSummary, type HandChecked, type Review,
-  type WaitingCopy, type WaitingShot,
+  type StaffMember, type WaitingCopy, type WaitingShot,
 } from "@/lib/api";
 import { cn, formatDate } from "@/lib/utils";
 import { GoodStanding } from "@/components/ui/good-standing";
@@ -80,6 +81,7 @@ export function AdminView({ groomerId, onOpenDog, list, onList }: {
   const [book, setBook] = useState<DogSummary[]>([]);
   // The one record whose form is open: verifying a typed-in shot, or fixing a hand-checked one.
   const [fixing, setFixing] = useState<string | null>(null);
+  const [staff, setStaff] = useState<StaffMember[]>([]);
 
   const fail = (e: { message?: string }) => setProblem(String(e.message ?? e));
   const loadReviews = () => api.reviews().then(setReviews).catch(fail);
@@ -90,6 +92,7 @@ export function AdminView({ groomerId, onOpenDog, list, onList }: {
     api.aiAccuracy().then(setAiScore).catch(fail);
     api.compliance().then(setSummary).catch(fail);
     api.findDogs("").then(setBook).catch(fail);
+    api.staff().then(setStaff).catch(fail);
   };
   useEffect(() => {
     loadPaperwork();
@@ -310,6 +313,7 @@ export function AdminView({ groomerId, onOpenDog, list, onList }: {
         </CardContent>
       </Card>
     ) },
+    staff: { empty: "", node: <StaffList groomerId={groomerId} onChanged={() => api.staff().then(setStaff).catch(fail)} /> },
     ...Object.fromEntries([...grouped.filter((g) => g.id !== "waiting"), { ...OTHER, lines: other }].map((g) => [g.id, {
       empty: "Nothing on this list now.",
       node: g.lines.length > 0 && (
@@ -358,6 +362,12 @@ export function AdminView({ groomerId, onOpenDog, list, onList }: {
           {stat("Paperwork to check", waiting.length, "info", "paperwork")}
           {stat("Checked by hand, to look over", handChecked.length, "info", "hand-checked")}
           {stat("Allergy changes to review", reviews.length, "info", "reviews")}
+        </div>
+      </section>
+      <section className="flex flex-col gap-2">
+        <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">The shop</h2>
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {stat("Staff working here", staff.filter((s) => s.working_here).length, undefined, "staff")}
         </div>
       </section>
       {other.length > 0 && (

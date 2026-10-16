@@ -21,7 +21,9 @@ SET search_path = groom, public;
 -- --- People ------------------------------------------------------------------
 INSERT INTO groomer (id, display_name, email, role) VALUES
   ('00000000-0000-0000-0000-0000000d0b01', 'Nadia', 'nadia@pawsandpolish.example', 'manager'),
-  ('00000000-0000-0000-0000-0000000d0b02', 'Tanya', 'tanya@pawsandpolish.example', 'groomer');
+  ('00000000-0000-0000-0000-0000000d0b02', 'Tanya', 'tanya@pawsandpolish.example', 'groomer'),
+  -- A second manager, so a manager has someone whose Admin access they can reset (MGR-10).
+  ('00000000-0000-0000-0000-0000000d0b03', 'Mia',   'mia@pawsandpolish.example',   'manager');
 
 INSERT INTO owner (id, first_name, last_name, email, phone) VALUES
   ('00000000-0000-0000-0000-0000000d0a01', 'Jason',  'Williams', 'jason@example.test',  '410-555-0100'),
