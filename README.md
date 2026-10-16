@@ -151,6 +151,13 @@ The groomer interface runs on its own database, `grooming_demo`: the schema and
 eleven demo dogs (`sql/seed/demo.sql`), built on first start. Jaddi is the real
 one. The pgTAP suite never sees it.
 
+After that it is never rebuilt. On every start, [`api/update_database.py`](api/update_database.py)
+compares the section files in `sql/` with the list the database keeps of the
+ones already in it, backs up, and adds any new section, each in one
+transaction; a section that fails stops the update, leaves the database as it
+was, and shows in Admin. Never edit a merged section: add a new one. The SOP's
+SYS-09 has the steps.
+
 The labelling and review tool has everything else on one page:
 
 - **Instructions** — the whole workflow, step by step.

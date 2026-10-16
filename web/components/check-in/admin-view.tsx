@@ -9,7 +9,7 @@ import { RecordFixForm } from "@/components/check-in/record-fix-form";
 import { StaffList } from "@/components/check-in/staff-list";
 import {
   api, paperworkUrl, type AiAccuracy, type DogSummary, type ComplianceLine, type ComplianceSummary, type HandChecked, type Review,
-  type StaffMember, type WaitingCopy, type WaitingShot,
+  type DatabaseUpdate, type StaffMember, type WaitingCopy, type WaitingShot,
 } from "@/lib/api";
 import { cn, formatDate } from "@/lib/utils";
 import { GoodStanding } from "@/components/ui/good-standing";
@@ -64,7 +64,45 @@ const TODO_SURFACE = "border-todo-border bg-todo";
  * the overview); the page keeps it, so a manager who opens a dog from a list
  * comes back to the same list.
  */
-export function AdminView({ groomerId, onOpenDog, list, onList }: {
+export function AdminView(props: {
+  groomerId: string; onOpenDog: (dogId: string) => void;
+  list: string | null; onList: (list: string | null) => void;
+}) {
+  // Above everything, so it still shows when a missing section breaks a list below.
+  return (
+    <div className="flex flex-col gap-4">
+      <DatabaseUpdateNotice />
+      <AdminScreens {...props} />
+    </div>
+  );
+}
+
+/** A section of sql/ that the last start could not add to the shop's database. */
+function DatabaseUpdateNotice() {
+  const [status, setStatus] = useState<DatabaseUpdate | null>(null);
+  useEffect(() => { api.databaseUpdate().then(setStatus).catch(() => setStatus(null)); }, []);
+  if (!status || status.ok) return null;
+  return (
+    <div role="alert" className="rounded-[var(--radius)] border border-stop/30 bg-stop-soft p-4 text-sm text-stop">
+      <p className="text-base font-semibold">The shop&apos;s database could not be brought up to date</p>
+      <p className="mt-1">
+        When the app last started, <span className="font-mono">{status.failed_file}</span> could not be added, so the
+        update stopped there. The database is as it was before that section. Some lists here may not work until
+        it is fixed.
+      </p>
+      {status.backup && <p className="mt-1">A backup was taken first: <span className="font-mono">{status.backup}</span>.</p>}
+      <p className="mt-1">Tell the person responsible for the database. The Technical systems manual, SYS-09, says what to do.</p>
+      {status.message && (
+        <details className="mt-2">
+          <summary className="cursor-pointer font-medium">What the database said</summary>
+          <pre className="mt-1 whitespace-pre-wrap text-xs">{status.message}</pre>
+        </details>
+      )}
+    </div>
+  );
+}
+
+function AdminScreens({ groomerId, onOpenDog, list, onList }: {
   groomerId: string; onOpenDog: (dogId: string) => void;
   list: string | null; onList: (list: string | null) => void;
 }) {

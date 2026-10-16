@@ -25,3 +25,4 @@ pages, such as SYS-01, explain how to use them instead.
 | SYS-06 | [Publish the demo and the manual](publishing.qmd) |
 | SYS-07 | [Reset the test or demo database](reset-databases.qmd) |
 | SYS-08 | [Back up and restore the shop's data](backup-and-restore.qmd) |
+| SYS-09 | [When the app updates its database](database-updates.qmd) |

@@ -267,6 +267,17 @@ def check_in_card(dog_id: UUID):
     }
 
 
+@app.get("/admin/database-update")
+def database_update():
+    """How the last start's database update went (api/update_database.py):
+    a failed section, and the backup taken before it, for Admin to show."""
+    if db.row("SELECT to_regclass('upkeep.update_status') IS NOT NULL AS ok")["ok"] is not True:
+        return {"ok": True, "checked_at": None, "applied": [], "failed_file": None, "message": None, "backup": None}
+    found = db.row("""SELECT ok, checked_at, applied, failed_file, message, backup
+                        FROM upkeep.update_status WHERE id = 1""")
+    return found or {"ok": True, "checked_at": None, "applied": [], "failed_file": None, "message": None, "backup": None}
+
+
 @app.get("/admin/compliance")
 def compliance():
     """The manager's view of the whole book: how many dogs are cleared, and
