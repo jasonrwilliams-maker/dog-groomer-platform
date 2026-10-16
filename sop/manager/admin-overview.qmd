@@ -48,6 +48,7 @@ attention.
    | Card | What it counts | Procedure |
    |---|---|---|
    | **Staff working here** | Everyone who can sign in at the counter. The list behind it is where staff are added and changed, and where another manager's Admin access is reset | [MGR-09](staff.qmd), [MGR-10](reset-admin-access.qmd) |
+   | **Database and backups** | In words, not a number: whether the shop's database is up to date, and how old the newest backup is. Green when all is well | [MGR-11](database-and-backups.qmd) |
 
    **Under the cards**
 

@@ -57,6 +57,10 @@ anything.
    docker compose logs api --tail 20
    ```
 
+   Or, without a terminal: open Admin and click **Database and backups**. It
+   shows the same thing, with every section and every backup. See [MGR-11
+   Check the database and backups](../manager/database-and-backups.qmd).
+
 3. Read the lines that start with **[database update]**:
    - **grooming_demo is up to date** followed by **added** and the file
      names: the new files went in. You are finished.

@@ -7,9 +7,10 @@ import { Button } from "@/components/ui/button";
 import { CopyPages, PaperworkIntake } from "@/components/check-in/paperwork-intake";
 import { RecordFixForm } from "@/components/check-in/record-fix-form";
 import { StaffList } from "@/components/check-in/staff-list";
+import { SystemScreen, systemHeadline } from "@/components/check-in/system-status";
 import {
   api, paperworkUrl, type AiAccuracy, type DogSummary, type ComplianceLine, type ComplianceSummary, type HandChecked, type Review,
-  type DatabaseUpdate, type StaffMember, type WaitingCopy, type WaitingShot,
+  type DatabaseUpdate, type StaffMember, type SystemStatus, type WaitingCopy, type WaitingShot,
 } from "@/lib/api";
 import { cn, formatDate } from "@/lib/utils";
 import { GoodStanding } from "@/components/ui/good-standing";
@@ -120,6 +121,9 @@ function AdminScreens({ groomerId, onOpenDog, list, onList }: {
   // The one record whose form is open: verifying a typed-in shot, or fixing a hand-checked one.
   const [fixing, setFixing] = useState<string | null>(null);
   const [staff, setStaff] = useState<StaffMember[]>([]);
+  const [system, setSystem] = useState<SystemStatus | null>(null);
+  // Not through fail(): a problem here must not hide the rest of Admin.
+  const loadSystem = () => api.systemStatus().then(setSystem).catch(() => setSystem(null));
 
   const fail = (e: { message?: string }) => setProblem(String(e.message ?? e));
   const loadReviews = () => api.reviews().then(setReviews).catch(fail);
@@ -131,6 +135,7 @@ function AdminScreens({ groomerId, onOpenDog, list, onList }: {
     api.compliance().then(setSummary).catch(fail);
     api.findDogs("").then(setBook).catch(fail);
     api.staff().then(setStaff).catch(fail);
+    loadSystem();
   };
   useEffect(() => {
     loadPaperwork();
@@ -352,6 +357,7 @@ function AdminScreens({ groomerId, onOpenDog, list, onList }: {
       </Card>
     ) },
     staff: { empty: "", node: <StaffList groomerId={groomerId} onChanged={() => api.staff().then(setStaff).catch(fail)} /> },
+    system: { empty: "", node: <SystemScreen onChanged={loadSystem} /> },
     ...Object.fromEntries([...grouped.filter((g) => g.id !== "waiting"), { ...OTHER, lines: other }].map((g) => [g.id, {
       empty: "Nothing on this list now.",
       node: g.lines.length > 0 && (
@@ -406,6 +412,7 @@ function AdminScreens({ groomerId, onOpenDog, list, onList }: {
         <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">The shop</h2>
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
           {stat("Staff working here", staff.filter((s) => s.working_here).length, undefined, "staff")}
+          <SystemCard status={system} onOpen={() => onList("system")} />
         </div>
       </section>
       {other.length > 0 && (
@@ -493,6 +500,19 @@ const when = (at: string) =>
   new Date(at).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 
 const TONE: Record<Tone, string> = { ok: "text-ok", stop: "text-stop", warn: "text-warn", info: "text-primary" };
+
+/** The overview's card for the database and backups: in words, not a count. */
+function SystemCard({ status, onOpen }: { status: SystemStatus | null; onOpen: () => void }) {
+  const { text, tone } = systemHeadline(status);
+  return (
+    <button onClick={onOpen}
+            className="group col-span-2 flex flex-col items-start justify-start rounded-[var(--radius)] border border-border bg-card p-5 text-left shadow-sm transition-colors hover:border-primary hover:bg-muted">
+      <p className={cn("text-lg font-semibold", TONE[tone])}>{text}</p>
+      <p className="text-sm text-muted-foreground">Database and backups</p>
+      <p className="mt-1 text-xs font-medium text-primary group-hover:underline">Open →</p>
+    </button>
+  );
+}
 
 function Stat({ label, value, tone, todo, onOpen }: {
   label: string; value: number; tone?: Tone; todo?: boolean; onOpen?: () => void;

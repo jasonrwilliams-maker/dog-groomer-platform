@@ -173,6 +173,19 @@ export type DatabaseUpdate = {
   ok: boolean; checked_at: string | null; applied: string[];
   failed_file: string | null; message: string | null; backup: string | null;
 };
+/** One backup in backups/, as Admin lists it. */
+export type BackupInfo = {
+  name: string; made_utc: string | null; why: string; bytes: number;
+  databases: string[]; private_files: number | null; readable: boolean;
+};
+/** Database and backups, for Admin: the last update, the sections held, and the backups. */
+export type SystemStatus = {
+  update: DatabaseUpdate;
+  sections: { file: string; how: "built" | "baseline" | "update"; applied_at: string }[];
+  waiting: string[];
+  section_files: number;
+  backups: BackupInfo[];
+};
 export type ComplianceSummary = { dogs: number; cleared: number; blocked: number; lines: ComplianceLine[] };
 
 export type AllergyType = "contact" | "flea" | "environmental" | "food";
@@ -367,6 +380,8 @@ export const api = {
   findDogs: (q: string, by: SearchBy = "any") => get<DogSummary[]>(`/dogs?q=${encodeURIComponent(q)}&by=${by}`),
   compliance: () => get<ComplianceSummary>("/admin/compliance"),
   databaseUpdate: () => get<DatabaseUpdate>("/admin/database-update"),
+  systemStatus: () => get<SystemStatus>("/admin/system"),
+  backUpNow: () => post<BackupInfo>("/admin/system/backup", {}),
   card: (id: string) => get<CheckInCard>(`/dogs/${id}`),
   startGroom: (dogId: string, groomerId: string) =>
     post<{ id: string; visit_date: string; check_in: string; groomer: string }>(

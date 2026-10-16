@@ -33,3 +33,4 @@ This manual says **click**. On a tablet, tap wherever it says click.
 | MGR-08 | [Manage your passkeys and PIN](passkeys-and-pin.qmd) |
 | MGR-09 | [Add or change a staff member](staff.qmd) |
 | MGR-10 | [Reset a manager's Admin access](reset-admin-access.qmd) |
+| MGR-11 | [Check the database and backups](database-and-backups.qmd) |

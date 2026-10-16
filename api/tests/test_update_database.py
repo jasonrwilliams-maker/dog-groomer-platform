@@ -118,3 +118,19 @@ def test_admin_shows_a_failed_update(env):
         if old is not None:
             os.environ["DATABASE_URL"] = old
     assert got["ok"] is False and got["failed_file"] == "99_x.sql" and got["backup"] == "backups/b.zip"
+
+
+def test_admin_lists_sections_and_what_waits_for_a_restart(env):
+    old = os.environ.get("DATABASE_URL")
+    os.environ["DATABASE_URL"] = f"postgresql://{env['PGUSER']}:{env['PGPASSWORD']}@{env['PGHOST']}:{env['PGPORT']}/{DB}"
+    try:
+        from app.main import system_status
+        sql(env, "DELETE FROM upkeep.applied_section WHERE file = '34_staff.sql'")
+        got = system_status()
+    finally:
+        if old is not None:
+            os.environ["DATABASE_URL"] = old
+    files = {s["file"] for s in got["sections"]}
+    assert "grooming_platform_schema.sql" in files and "34_staff.sql" not in files
+    assert got["waiting"] == ["34_staff.sql"]
+    assert isinstance(got["backups"], list)
