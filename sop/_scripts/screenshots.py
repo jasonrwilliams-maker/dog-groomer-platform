@@ -101,6 +101,15 @@ SHOTS = [
     # Admin lock and waits for a manager to unlock it with their own passkey
     # or PIN, then takes these in that window.
     Shot("manager/admin-overview.png", site="local", unlocked=True, ready="Your to-do list"),
+    # The staff list. Nothing is saved: each picture stops at the form or the question.
+    Shot("manager/staff-list.png", site="local", unlocked=True, steps=[("tap", "Staff working here")],
+         ready="Add a staff member"),
+    Shot("manager/staff-add.png", site="local", unlocked=True,
+         steps=[("tap", "Staff working here"), ("tap", "Add a staff member")], ready="Add to the staff list"),
+    # The first other manager's Reset Admin access: it needs a second manager on the staff list.
+    Shot("manager/staff-reset.png", site="local", unlocked=True,
+         steps=[("tap", "Staff working here"), ("tap", "Reset Admin access")], ready="Yes, reset Admin access"),
+    # Last: its box stays open in the green bar until Done.
     Shot("manager/passkeys-and-pin.png", site="local", unlocked=True, steps=[("tap", "Passkeys and PIN")],
          ready="Your passkeys"),
 ]

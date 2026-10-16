@@ -1,4 +1,4 @@
-37 rules.
+42 rules.
 
 | Code | What it refuses | Added in |
 |---|---|---|
@@ -39,3 +39,8 @@
 | GR035 | A haircut override OK'd by someone who is not a manager | `32_record_the_haircut.sql` |
 | GR036 | Admin opened by someone who isn't a manager, with a wrong PIN, too many tries, or a passkey that isn't theirs | `33_admin_access.sql` |
 | GR037 | A manager's PIN or passkeys changed by anyone but that manager, verified, or the last way in removed | `33_admin_access.sql` |
+| GR038 | Staff changed by someone who isn't a manager with Admin open | `34_staff.sql` |
+| GR039 | The shop left without an active manager | `34_staff.sql` |
+| GR040 | A staff member deleted instead of marked as no longer working here | `34_staff.sql` |
+| GR041 | Admin access reset for yourself, or for someone who isn't a manager | `34_staff.sql` |
+| GR042 | Someone marked as gone while they still have grooms booked ahead | `34_staff.sql` |

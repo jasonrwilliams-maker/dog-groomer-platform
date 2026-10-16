@@ -43,7 +43,13 @@ attention.
    | **Checked by hand, to look over** | Shots a groomer checked against a photo, for your second look | [MGR-06](second-look.qmd) |
    | **Allergy changes to review** | Allergies taken off or made less severe | [MGR-07](allergy-reviews.qmd) |
 
-   **Under the to-do list**
+   **The shop**
+
+   | Card | What it counts | Procedure |
+   |---|---|---|
+   | **Staff working here** | Everyone who can sign in at the counter. The list behind it is where staff are added and changed, and where another manager's Admin access is reset | [MGR-09](staff.qmd), [MGR-10](reset-admin-access.qmd) |
+
+   **Under the cards**
 
    | Box | What it is for |
    |---|---|

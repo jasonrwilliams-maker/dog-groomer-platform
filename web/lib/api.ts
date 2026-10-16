@@ -267,6 +267,17 @@ export type AdminAccess = {
 };
 export type Passkey = { id: string; label: string; added_at: string; last_used_at: string | null };
 
+/** Someone on the staff list (section 34): working here now, or kept on past records. */
+export type StaffMember = {
+  id: string; name: string; email: string; role: "groomer" | "manager";
+  working_here: boolean; left_at: string | null; added_at: string;
+  /** For a manager who works here: whether they have a PIN or passkey yet. */
+  admin_set_up: boolean | null;
+  /** Grooms booked with them from now on. */
+  booked_ahead: number;
+};
+export type StaffForm = { name: string; email: string; role: "groomer" | "manager" };
+
 /** A refusal from the database, passed through by the backend as a 409. */
 export class Refusal extends Error {
   constructor(public code: string, message: string, public hint: string | null) {
@@ -464,6 +475,14 @@ export const api = {
   lockAdmin: () => post<{ locked: boolean }>("/admin/access/lock", {}),
   myPasskeys: () => get<Passkey[]>("/admin/passkeys"),
   removePasskey: (id: string) => post<{ removed: boolean }>(`/admin/passkeys/${id}/remove`, {}),
+  staff: () => get<StaffMember[]>("/admin/staff"),
+  addStaff: (f: StaffForm) => post<{ id: string }>("/admin/staff", f),
+  changeStaff: (id: string, f: StaffForm) => send<{ changed: boolean }>("PUT", `/admin/staff/${id}`, f),
+  /** No longer working here: off the Welcome screen and the booking list, still on past records. */
+  staffLeft: (id: string) => post<{ changed: boolean }>(`/admin/staff/${id}/left`, {}),
+  staffBack: (id: string) => post<{ changed: boolean }>(`/admin/staff/${id}/back`, {}),
+  /** Another manager's passkeys and PIN go; they set Admin up again themselves. */
+  resetAdminAccess: (id: string) => post<{ reset: boolean }>(`/admin/staff/${id}/reset-admin`, {}),
   haircutOptions: () => get<HaircutOptions>("/haircut/options"),
   haircutStart: (dogId: string) => get<HaircutStart>(`/dogs/${dogId}/haircut`),
   /** A style and length on this dog, zone by zone; a shave-down by the coat's level. */

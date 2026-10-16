@@ -11,7 +11,9 @@ Admin PIN.
 ## Applies to
 
 Every manager, for their own profile only. Nobody can change another
-manager's passkeys or PIN.
+manager's passkeys or PIN. If you lose the phone that holds your passkey, or
+forget your PIN, another manager resets your Admin access, and you set it up
+again. See [MGR-10 Reset a manager's Admin access](reset-admin-access.qmd).
 
 ## Before you begin
 

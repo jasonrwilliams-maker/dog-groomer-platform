@@ -62,6 +62,8 @@ website:
           - manager/second-look.qmd
           - manager/allergy-reviews.qmd
           - manager/passkeys-and-pin.qmd
+          - manager/staff.qmd
+          - manager/reset-admin-access.qmd
       - section: "Technical systems manual"
         href: systems/index.qmd
         contents:

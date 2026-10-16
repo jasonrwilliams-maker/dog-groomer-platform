@@ -4,8 +4,8 @@ number-sections: false
 ---
 
 This manual covers Admin, the part of the shop app that only managers can
-open: verifying paperwork, second looks at hand checks, and reviewing
-changes. It is written for every manager.
+open: verifying paperwork, second looks at hand checks, reviewing
+changes, and keeping the staff list. It is written for every manager.
 
 Managers use the same everyday screens as groomers. The [Groomer
 manual](../groomer/index.qmd) applies to managers as well.
@@ -31,3 +31,5 @@ This manual says **click**. On a tablet, tap wherever it says click.
 | MGR-06 | [Give a second look to hand checks](second-look.qmd) |
 | MGR-07 | [Review allergy changes](allergy-reviews.qmd) |
 | MGR-08 | [Manage your passkeys and PIN](passkeys-and-pin.qmd) |
+| MGR-09 | [Add or change a staff member](staff.qmd) |
+| MGR-10 | [Reset a manager's Admin access](reset-admin-access.qmd) |

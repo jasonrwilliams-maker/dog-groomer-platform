@@ -5,8 +5,8 @@
 A system of record for a small grooming practice, with the business rules
 enforced **in the database** rather than in the application.
 
-Thirty-seven numbered rules, each with a dedicated error code, each proven by a test
-that asserts the *refusal* — not the happy path. 483 assertions, all passing.
+Forty-two numbered rules, each with a dedicated error code, each proven by a test
+that asserts the *refusal* — not the happy path. 517 assertions, all passing.
 How strictly each groom-time rule is enforced (block, warn, or off) is itself a
 row of data, changed by `UPDATE` and recorded in the audit log — not a migration.
 
@@ -100,9 +100,9 @@ for a better copy instead of recording a guess.
 
 | Component | State |
 |---|---|
-| Schema | Sections 0–14 stable, in one file; later sections appended as separate files (15–31) |
-| Business rules | 37, codes `GR001`–`GR037` |
-| Test suite | 29 files, 483 pgTAP assertions, passing; 31 API tests |
+| Schema | Sections 0–14 stable, in one file; later sections appended as separate files (15–34) |
+| Business rules | 42, codes `GR001`–`GR042` |
+| Test suite | 30 files, 517 pgTAP assertions, passing; 33 API tests |
 | Document vocabulary (§15) | 29 rulings seeded from the labelled corpus; `resolve_term()` fails closed |
 | Extraction line items (§16) | One row per printed line; review views; the shape the harness loads |
 | Confirmation — Layer 3 (§18) | `confirm_extraction()` turns a fully reviewed page into verified records, records every line's outcome, and asks the owner for what the page is missing |
@@ -122,6 +122,7 @@ for a better copy instead of recording a guess.
 | Dog photos (§31) | Each dog can have one profile photo, added from its card (**Add photo**: take one with the tablet camera or webcam, or choose one), changed or removed. Turned upright, stripped of the camera's details and GPS, and kept in three sizes under `private/dogs/` (`set_dog_photo()`, `remove_dog_photo()`); a new photo replaces the old and its files are deleted. Shown on the card, the booking form, the dog list and the dog pickers; a drawn placeholder until one is added |
 | Record the haircut (§32) | A groom in progress has **Record the haircut** on its card: what was done (full groom, bath, nails…), the coat's condition and thickness, the style and length, then the cut zone by zone (`haircut_plan()`), starting from the dog's **usual style**. The groomer changes only what she did differently; each change is marked "today", and one that breaks the style's identity (a fluffy Poodle face) is flagged, never refused. A cut different from the usual says why in a line (GR034). A shave-down follows the coat: matted all over (level 4) is a #7F with a warning to tell the owner; pelted (level 5) is a #10, saved only once the groomer ticks that the owner was told what it can do to the skin (GR033). A shave-down the coat doesn't call for, or a puppy under the shop's grooming age, goes ahead with a reason and a manager's OK, and only a manager's (GR035). Ticking **Keep as the usual style** makes today's cut the start of the next groom; the change is in the audit log, before and after. Saving finishes the groom: services, coat, haircut and a note for next time, all or nothing (`finish_visit()`), and the card's Last visit shows the haircut |
 | Opening Admin (§33) | Everyday screens need only a tap on your name; **Admin** needs proof. It opens for a manager who verifies with a **passkey** (their fingerprint, face or device PIN, or their own phone scanned from the counter tablet) or their **Admin PIN**, and locks again after 30 minutes, on **Lock Admin**, or when someone taps Switch. The shop never sees a fingerprint: the device signs a one-time challenge, checked by the standard WebAuthn library against the public key kept in `manager_passkey`. PINs are kept hashed (bcrypt); five wrong in a row lock PIN entry for 15 minutes, while a passkey still works. A manager sets up Admin the first time they open it; after that only they, with Admin open, add or remove passkeys or change the PIN, and the last way in can't be removed (GR037). Only a manager's own passkey or PIN opens it (GR036), and every Admin job is done as the manager who opened it. Passkeys belong to `localhost`; put online, they are set up again for the shop's https address (`PASSKEY_RP_ID`, `PASSKEY_ORIGINS`). The records tool on port 8501 is not behind this door |
+| Staff (§34) | Admin's **Staff working here** card opens the staff list. A manager adds someone (name, email, groomer or manager), changes their name, email or role, and marks someone as no longer working here, or back again. Nobody is deleted (GR040): someone who left is off the Welcome screen and the booking list and still named on every past record. Only a manager with Admin open makes these changes, judged by the session, not a name on screen (GR038); the shop always keeps an active manager, so the last one can't step down or leave (GR039); someone with grooms booked ahead can't be marked as gone until they are moved (GR042). Every change is in the audit log, before and after. A manager can **reset another manager's Admin access** for a lost phone: their passkeys and PIN are removed and their Admin locks, and they set it up again themselves next time. The reset only takes away; it is never your own, and never a groomer's (GR041). So that a reset can't become a way in, a first setup is refused while another manager's Admin is open (GR037, tightened). Becoming a groomer or leaving removes a manager's passkeys and PIN the same way |
 | Groomer interface | `web/` (Next.js + Tailwind, shadcn-style components) on a thin FastAPI backend (`api/`), on its own demo database, `grooming_demo`. Three tabs. **Check-in**: pick who's grooming, find a dog by its name or its owner's (photo, green check when every vaccine is current), see whether today's groom can start and why not, allergies and handling notes; start the groom and record the haircut when it is done; book one; sign up a walk-in and photograph the paperwork they brought, then check it now (with **Have the AI read it**) or leave it for a manager; add the dog's photo; put right a typo. **Calendar** (everyone): grooms, bookings and vaccine expiries by month, a day's timeline by groomer, focus on one dog, book, change or cancel. **Admin** (managers, behind a passkey or PIN): an overview of count cards, each opening its own screen: dogs on the books, cleared to groom, can't groom, expired, no paperwork, expiring soon; and the to-do list in the shop's amber: shots waiting to be verified, paperwork to check, shots checked by hand to look over, allergy changes to review. Also how the AI is doing, and the way into the records tool |
 | Extraction harness | Built — scores a model run against the answer keys; self-check passing |
 | Photo preparation | Built — a photo is turned upright, stripped of EXIF and GPS, and downscaled before it is sent |
@@ -174,7 +175,7 @@ docker compose exec db psql -U postgres -d grooming_test -f sql/seed/fixture.sql
 docker compose exec db pg_prove -U postgres -d grooming_test tests/*.sql
 ```
 
-Expected: `Files=29, Tests=483, Result: PASS`. The backend's tests build their own copy of the demo database:
+Expected: `Files=30, Tests=517, Result: PASS`. The backend's tests build their own copy of the demo database:
 
 ```bash
 docker compose exec -w /repo/api api python -m pytest -q
@@ -323,7 +324,12 @@ Lamb ones.
 | `GR034` | A haircut different from the dog's usual style says why |
 | `GR035` | A haircut the rules would stop (a shave-down the coat doesn't justify, a puppy under age) is OK'd by a manager |
 | `GR036` | Admin opens only with a manager's own passkey or PIN, and not after too many wrong PINs |
-| `GR037` | Only that manager, with Admin open, changes how they open it, and the last way in stays |
+| `GR037` | Only that manager, with Admin open, changes how they open it, and the last way in stays; nobody sets it up for them while their own Admin is open |
+| `GR038` | Only a manager with Admin open changes the staff list |
+| `GR039` | The shop always keeps at least one active manager |
+| `GR040` | Nobody is deleted from the staff list; they are marked as no longer working here |
+| `GR041` | A manager resets another manager's Admin access: never their own, never a groomer's |
+| `GR042` | Nobody is marked as gone while grooms are booked with them ahead |
 
 Each raises its own SQLSTATE so tests assert on a stable identifier rather than on
 error prose, and the API layer can map codes to user-facing messages without
@@ -380,6 +386,7 @@ stopped. Every rejection test is paired with the valid case — a rule that reje
 | `27` | Dog photos: kept in three sizes, replaced, removed, all or nothing |
 | `28` | Recording the haircut: what is planned is what is recorded; today's changes flagged, never refused; the usual style kept, audited, and the next plan starts from it; a different cut says why (GR034); a pelted shave needs the owner told (GR033); a manager's OK, and only a manager's (GR035); finishing once |
 | `29` | Opening Admin: first setup with nobody to vouch, then only that manager (GR037); the PIN kept hashed; a wrong PIN counted, five lock it (GR036); a passkey only for its owner; locking on time or by hand; the last way in stays |
+| `30` | Staff: only a manager with Admin open changes the list (GR038); adding, with a blank name or a taken email refused; changes audited before and after; never without a manager (GR039); leaving and coming back, off the Welcome screen and booking list, still on past grooms; not with grooms ahead (GR042); never deleted (GR040); resetting another manager's Admin, never your own or a groomer's (GR041), and the reset sets nothing for them; a manager made a groomer loses their PIN |
 
 ---
 
