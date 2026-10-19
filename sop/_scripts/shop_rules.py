@@ -1,4 +1,4 @@
-"""Write the systems manual's list of shop rules, read out of sql/.
+"""Write the Technical systems manual's list of shop rules, read out of sql/.
 
 Each rule is registered in a comment where it is added, in this shape:
 

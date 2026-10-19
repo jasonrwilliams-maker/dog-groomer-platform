@@ -3,7 +3,7 @@ title: "Groomer manual"
 number-sections: false
 ---
 
-This manual covers the shop app's everyday screens: the Welcome screen, the
+This manual covers the everyday screens of the shop's app: the Welcome screen, the
 Check-in screen, each dog's card, and the Calendar screen. It is written for
 every groomer.
 

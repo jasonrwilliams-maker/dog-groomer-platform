@@ -7,7 +7,7 @@ subtitle: "SOP SYS-02 · Technical systems manual"
 
 Create the API key that lets the shop's app send paperwork to the AI
 (Anthropic's Claude), and put it where the app reads it, so that **Have the
-AI read it** works on the check screen and the Technical workbench can run the AI.
+AI read it** works when someone checks a copy of paperwork (GRM-06) and the Technical workbench can run the AI.
 
 ## Applies to
 
@@ -35,7 +35,7 @@ is never saved to GitHub.
 ::: {.callout-note}
 ## What the AI is sent
 When someone clicks **Have the AI read it**, the pages of that copy are sent
-to Anthropic's API. The check screen says so beside the button.
+to Anthropic's API. The screen says so beside the button.
 :::
 
 ## Procedure

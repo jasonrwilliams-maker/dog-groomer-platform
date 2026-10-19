@@ -30,7 +30,7 @@ The tests live in the `tests/` folder, one file per family of rules. They are
 written with **pgTAP**, a testing tool for Postgres databases, and run by
 **pg_prove**. Each test runs on its own **test database**
 (`grooming_test`), filled with made-up dogs from `sql/seed/fixture.sql`. The
-tests never touch the shop's app database or any real paperwork.
+tests never touch the shop's database or any real paperwork.
 
 The README's **Testing** section lists what each test file proves.
 
@@ -104,4 +104,4 @@ demo database](reset-databases.qmd)) and run the tests again.
 Resetting deletes the test database's made-up dogs and any AI runs loaded
 into it with the Technical workbench. The runs themselves stay on disk: load them
 again on the **Run & test** screen, **Scoring** tab, with **Load into the
-database**. The shop's app database is not touched.
+database**. The shop's database is not touched.

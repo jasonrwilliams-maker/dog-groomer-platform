@@ -28,7 +28,7 @@ kept in the `backups` folder inside the `dog-groomer-platform` folder.
 
 | Part | What it is |
 |---|---|
-| `grooming_demo` | The shop app's database: every client, dog, booking, haircut, allergy and paperwork record entered in the shop's screens |
+| `grooming_demo` | The shop's database: every client, dog, booking, haircut, allergy and paperwork record entered in the shop's screens |
 | `grooming_test` | The test database. See [SYS-07](reset-databases.qmd) |
 | `private/` | Every file in the `private` folder: the copies of paperwork and the dog photos that the records point to |
 

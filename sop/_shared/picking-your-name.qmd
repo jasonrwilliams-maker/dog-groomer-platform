@@ -1,6 +1,6 @@
 ## Before you begin
 
-- The shop app is open on the shop tablet or computer.
+- The shop's app is open on the shop tablet or computer.
 
 ## Procedure
 

@@ -5,7 +5,7 @@ subtitle: "SOP SYS-07 · Technical systems manual"
 
 ## Purpose
 
-Rebuild the test database, or the shop app's demo database, from the files in
+Rebuild the test database, or the shop's database (which the Technical workbench calls the demo database), from the files in
 `sql/`, so it holds the latest rules and a fresh set of made-up dogs.
 
 ## Applies to
