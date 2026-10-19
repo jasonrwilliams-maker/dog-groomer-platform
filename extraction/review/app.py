@@ -1,4 +1,4 @@
-"""The labelling and review tool.
+"""The Technical workbench (the folder is still called review/).
 
     Documents   what has been submitted, and where each one stands
     Label       write a document's answer key by looking at the page — never at the model
@@ -27,7 +27,7 @@ from pathlib import Path
 
 import streamlit as st
 
-st.set_page_config(page_title="Vaccination records — labelling & review", page_icon="🐕", layout="wide")
+st.set_page_config(page_title="Technical workbench", page_icon="🐕", layout="wide")
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))       # this folder, however the app was started
@@ -67,7 +67,7 @@ def screen_instructions():
 def main():
     items = inventory()
     with st.sidebar:
-        st.title("🐕 Records")
+        st.title("🛠️ Technical workbench")
         screen = st.radio("Screen", ["Instructions", "Documents", "Label", "Run & test", "Review", "Confirm", "Outreach"],
                           index=1, key="screen")
         item = None

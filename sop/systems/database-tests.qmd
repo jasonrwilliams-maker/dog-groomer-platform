@@ -30,7 +30,7 @@ The tests live in the `tests/` folder, one file per family of rules. They are
 written with **pgTAP**, a testing tool for Postgres databases, and run by
 **pg_prove**. Each test runs on its own **test database**
 (`grooming_test`), filled with made-up dogs from `sql/seed/fixture.sql`. The
-tests never touch the shop's app database or any real paperwork.
+tests never touch the shop's database or any real paperwork.
 
 The README's **Testing** section lists what each test file proves.
 
@@ -38,7 +38,7 @@ The README's **Testing** section lists what each test file proves.
 
 ### Set up the test database (first time only)
 
-1. Open the records tool at <http://localhost:8501>.
+1. Open the Technical workbench at <http://localhost:8501>.
 2. In the left menu, click **Run & test**.
 3. Click the **Database** tab.
 4. Click **Set up the database**. If the button cannot be clicked, the test
@@ -56,7 +56,7 @@ The README's **Testing** section lists what each test file proves.
 
 ### Run them from a terminal instead
 
-The same tests, without the records tool. In a terminal in the
+The same tests, without the Technical workbench. In a terminal in the
 `dog-groomer-platform` folder:
 
 ```bash
@@ -102,6 +102,6 @@ changes to `sql/`. Reset the test database (see [SYS-07 Reset the test or
 demo database](reset-databases.qmd)) and run the tests again.
 
 Resetting deletes the test database's made-up dogs and any AI runs loaded
-into it with the records tool. The runs themselves stay on disk: load them
+into it with the Technical workbench. The runs themselves stay on disk: load them
 again on the **Run & test** screen, **Scoring** tab, with **Load into the
-database**. The shop's app database is not touched.
+database**. The shop's database is not touched.

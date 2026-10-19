@@ -43,8 +43,8 @@ export function systemHeadline(s: SystemStatus | null): { text: string; tone: "o
 /**
  * Database and backups, from Admin: how the last start's update went, every
  * section of the shop's rules the database holds, and every backup. A manager
- * can take a backup here; restoring is done from the records tool (SOP
- * SYS-08), since it replaces the shop's data.
+ * can take a backup here; restoring is done from the Technical workbench
+ * (SOP SYS-08), since it replaces the shop's data.
  */
 export function SystemScreen({ onChanged }: { onChanged?: () => void }) {
   const [status, setStatus] = useState<SystemStatus | null>(null);
@@ -144,7 +144,7 @@ export function SystemScreen({ onChanged }: { onChanged?: () => void }) {
           <CardTitle>Backups · {status.backups.length}</CardTitle>
           <p className="text-sm text-muted-foreground">
             Each holds the shop&apos;s database and the copies of paperwork and dog photos, in the backups folder on
-            this computer. Keep a copy somewhere else too. Restoring one is done from the records tool.
+            this computer. Keep a copy somewhere else too. Restoring one is done from the Technical workbench, by the person responsible for the database.
           </p>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">

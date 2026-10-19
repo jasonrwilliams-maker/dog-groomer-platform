@@ -5,7 +5,7 @@ subtitle: "SOP SYS-07 · Technical systems manual"
 
 ## Purpose
 
-Rebuild the test database, or the shop app's demo database, from the files in
+Rebuild the test database, or the shop's database (which the Technical workbench calls the demo database), from the files in
 `sql/`, so it holds the latest rules and a fresh set of made-up dogs.
 
 ## Applies to
@@ -21,7 +21,7 @@ The person responsible for the shop's database, after pulling changes to
 
 | Database | Used by | Holds |
 |---|---|---|
-| `grooming_test` | The database tests ([SYS-04](database-tests.qmd)) and the records tool | Made-up test dogs from `sql/seed/fixture.sql`, and any AI runs loaded with the records tool |
+| `grooming_test` | The database tests ([SYS-04](database-tests.qmd)) and the Technical workbench | Made-up test dogs from `sql/seed/fixture.sql`, and any AI runs loaded with the Technical workbench |
 | `grooming_demo` | The shop's screens at <http://localhost:3000> | Demo dogs from `sql/seed/demo.sql`, and everything recorded in the shop's screens since |
 
 ::: {.callout-warning}
@@ -34,7 +34,7 @@ shop's data](backup-and-restore.qmd).
 
 ## Procedure
 
-1. Open the records tool at <http://localhost:8501>.
+1. Open the Technical workbench at <http://localhost:8501>.
 2. In the left menu, click **Run & test**.
 3. Click the **Database** tab.
 4. Choose the database:

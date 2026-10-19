@@ -28,7 +28,7 @@ kept in the `backups` folder inside the `dog-groomer-platform` folder.
 
 | Part | What it is |
 |---|---|
-| `grooming_demo` | The shop app's database: every client, dog, booking, haircut, allergy and paperwork record entered in the shop's screens |
+| `grooming_demo` | The shop's database: every client, dog, booking, haircut, allergy and paperwork record entered in the shop's screens |
 | `grooming_test` | The test database. See [SYS-07](reset-databases.qmd) |
 | `private/` | Every file in the `private` folder: the copies of paperwork and the dog photos that the records point to |
 
@@ -43,7 +43,7 @@ is never published to GitHub.
 
 ### Make a backup
 
-1. Open the records tool at <http://localhost:8501>.
+1. Open the Technical workbench at <http://localhost:8501>.
 2. In the left menu, click **Run & test**.
 3. Click the **Database** tab.
 4. Scroll down to **Backups**, at the bottom of the tab.
@@ -68,7 +68,7 @@ recorded in the shop's screens since that backup was made is replaced.
 Before it replaces anything, the restore saves a backup of what is there
 now, so a restore can itself be undone.
 
-9. Open the records tool at <http://localhost:8501>.
+9. Open the Technical workbench at <http://localhost:8501>.
 10. In the left menu, click **Run & test**.
 11. Click the **Database** tab.
 12. Scroll down to **Backups**, at the bottom of the tab.
@@ -87,7 +87,7 @@ To restore a backup from a USB drive, first copy the file into the
 
 ### Do the same from a terminal instead
 
-The same commands, without the records tool. Open a terminal in the
+The same commands, without the Technical workbench. Open a terminal in the
 `dog-groomer-platform` folder.
 
 - To make a backup, type this command and press Enter:

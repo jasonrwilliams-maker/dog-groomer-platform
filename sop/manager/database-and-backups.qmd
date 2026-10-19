@@ -53,8 +53,8 @@ and whenever the **Database and backups** card is not green.
    |---|---|
    | **from Admin, by** a name | With **Back up now**, by that manager |
    | **before an update** | By the app, before it added new sections |
-   | **before a restore** | By the records tool, before it put an older backup back |
-   | **by hand** | From the records tool or a terminal |
+   | **before a restore** | By the Technical workbench, before it put an older backup back |
+   | **by hand** | From the Technical workbench or a terminal |
 
    A backup marked **Can't be read** is damaged. Do not rely on it. Take a
    new backup.
@@ -68,7 +68,7 @@ The **Database and backups** card is green, and the newest backup is recent.
 ::: {.callout-note}
 ## Restoring is not done here
 Putting a backup back replaces the shop's records, so it is done from the
-records tool, by the person responsible for the database. See [SYS-08 Back
+Technical workbench, by the person responsible for the database. See [SYS-08 Back
 up and restore the shop's data](../systems/backup-and-restore.qmd).
 :::
 

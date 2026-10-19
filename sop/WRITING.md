@@ -54,6 +54,23 @@ Sections are numbered automatically (4 Procedure, 6.1 …) and appear in **On
 this page**. Use `##` for the six sections above and `###` for anything
 inside them. Do not number headings by hand.
 
+## Names to use
+
+Call each thing by one name, the same on every page.
+
+| Say | Not |
+|---|---|
+| the shop's app | the shop app, the system, the software |
+| the Welcome screen, the Check-in screen, the Calendar screen | the home page, the dog list page |
+| the dog's card | the dog card, the profile page |
+| Admin | the Admin panel, the Admin view |
+| the Technical workbench | the records tool, the review tool, the labelling tool |
+| the shop's database | the demo database (except in SYS-07, where both databases are named) |
+| the Groomer manual, the Manager manual, the Technical systems manual | the systems manual |
+
+The names of buttons and screens follow the app exactly, in bold. If the app
+renames something, rename it here too.
+
 ## Module numbers
 
 Each module has a number in its subtitle: **GRM** for the groomer manual,

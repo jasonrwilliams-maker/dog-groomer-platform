@@ -11,7 +11,7 @@
 --   4. Only a manager fixes dates (GR030), and fixed dates keep the counter's
 --      rules: no expiry, no record; nothing in the future (GR021).
 --   5. A fix that makes it the same shot as another record is refused (GR022).
---   6. A record read in the records tool is fixed there, not here.
+--   6. A record read in the Technical workbench is fixed there, not here.
 --   7. When the AI read the copy and the groomer kept its wrong date, the fix
 --      regrades the AI: that date was read wrong, the other still right.
 --   8. A shot verified some other way goes back to waiting when its dates are
@@ -116,7 +116,7 @@ SELECT record_counter_shot((SELECT id FROM t_dog), 'bordetella', CURRENT_DATE - 
 SELECT throws_ok(
   $$ SELECT correct_counter_shot((SELECT id FROM t_typed), CURRENT_DATE - 381, CURRENT_DATE + 345,
                                  '00000000-0000-0000-0000-00000000b001') $$,
-  'GR022', NULL, 'A fix that makes it the same shot as another record goes to the records tool');
+  'GR022', NULL, 'A fix that makes it the same shot as another record goes to the Technical workbench');
 
 -- --- 6. Records-tool records ----------------------------------------------------------------------------
 UPDATE vaccination_record SET entry_method = 'extracted', document_id = (SELECT id FROM t_doc)
@@ -124,7 +124,7 @@ UPDATE vaccination_record SET entry_method = 'extracted', document_id = (SELECT 
 SELECT throws_ok(
   $$ SELECT correct_counter_shot((SELECT id FROM t_typed), CURRENT_DATE - 21, CURRENT_DATE + 344,
                                  '00000000-0000-0000-0000-00000000b001') $$,
-  '23514', NULL, 'A record read in the records tool is fixed there');
+  '23514', NULL, 'A record read in the Technical workbench is fixed there');
 
 -- --- 7. The AI's grade, put right -----------------------------------------------------------------------
 -- The AI reads DHPP's expiry a year late; the groomer keeps it; the manager fixes it.

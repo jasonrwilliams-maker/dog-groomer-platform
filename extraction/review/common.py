@@ -1,4 +1,4 @@
-"""What every screen of the review tool shares: the harness and database
+"""What every screen of the Technical workbench shares: the harness and database
 modules, the document inventory, the page viewer, and small helpers.
 
 The screens are one module each (screen_*.py); app.py is the sidebar and

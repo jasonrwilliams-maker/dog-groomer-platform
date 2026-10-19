@@ -108,7 +108,7 @@ household it belongs to.
 ## Adding a document
 
 1. Put the file in `private/`.
-2. Label it on the **Label** screen of the review tool (`../review/`) — before
+2. Label it on the **Label** screen of the Technical workbench (`../review/`) — before
    any run, so it is a real test. The tool writes the key per
    `../answer_key_contract.md` and the `../corpus.json` entry, and refuses to
    publish a key that does not score perfectly against itself. Writing the

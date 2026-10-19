@@ -1,4 +1,4 @@
-# The labelling and review tool — and, from its Run & test screen, every
+# The Technical workbench — and, from its Run & test screen, every
 # command the READMEs give: the harness (selfcheck / run / score / load), the
 # schema load, and the pgTAP suite. Started with the rest of the stack:
 #

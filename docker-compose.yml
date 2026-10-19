@@ -10,7 +10,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: grooming_test
     ports:
-      # This machine only, like the review tool: once a run is loaded, the
+      # This machine only, like the Technical workbench: once a run is loaded, the
       # database holds the model's raw responses, which carry real details.
       - "127.0.0.1:5432:5432"
     volumes:
@@ -39,7 +39,8 @@ services:
       db:
         condition: service_healthy
 
-  # The labelling and review tool (extraction/review/), and the web front for
+  # The Technical workbench (extraction/review/; the service keeps the name
+  # `review` so commands and backups keep working), and the web front for
   # every command above: its Run & test screen runs the harness, the schema
   # load and the pgTAP suite. Starts with `docker compose up -d`; open
   # http://localhost:8501. It shows the real pages in private/, so it listens

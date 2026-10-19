@@ -4,7 +4,7 @@ toc: false
 number-sections: false
 ---
 
-These are the shop's standard operating procedures for the grooming shop app.
+These are the shop's standard operating procedures for the shop's app.
 There is one manual for each role. Open the manual for your role.
 
 ::: {.manual-cards}
